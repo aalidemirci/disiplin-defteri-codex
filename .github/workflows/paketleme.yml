@@ -203,6 +203,10 @@ jobs:
         working-directory: yayin
         run: |
           rm -f pdf-duman.pdf
+          for paket in *~*.deb; do
+            [ -e "${paket}" ] || continue
+            mv -- "${paket}" "${paket//~/.}"
+          done
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Release
