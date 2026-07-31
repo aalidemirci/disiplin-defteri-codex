@@ -1,0 +1,8 @@
+#!/bin/sh
+# Disiplin Defteri - kaldirma oncesi.
+# KULLANICI VERISI SILINMEZ: veritabani, yedekler ve gunlukler
+# ~/.local/share/disiplin-defteri altindadir; paket yalnizca program
+# dosyalarini kaldirir. (ASCII: bkz. postinst basindaki not.)
+set -e
+
+exit 0

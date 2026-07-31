@@ -1,0 +1,118 @@
+{% extends "documents/base.html" %}
+{% comment %}Üst Kurul Kararı Tebliği — ÖĞRENCİ sürümü (Tur 220, talep 3; türetilmiş
+form — resmî MEB örneği yok, içerik md. 169/2-4 + 197 + 200/202'den kurgulandı).
+İki senaryo (notice_kind):
+- approval (S1): onay mercii (ilçe/il) kararının tebliği — md. 169/2-b/c; müdürün
+  md. 197 ısrar-sevki sonucu ilçe kararı dahil. İTİRAZ HAKKI paragrafı basılır
+  (md. 169/3; itirazı BİR ÜST kurul değerlendirir — md. 169/4).
+- appeal_result (S2): itiraz sonucunun tebliği — onandı/değiştirildi/kaldırıldı
+  (md. 200/1-Ç emsali). KESİNLİK paragrafı basılır (md. 169/4); itiraz hakkı ASLA.
+Üst kurul karar no/tarihi + sonuç özeti GEÇİCİ üretim alanlarıdır (DB'de tutulmaz,
+E4). OVERTURNED e-Okul cümlesi temkinli: md. 171/2'deki "5 iş günü içinde silinir"
+hükmü kanonik metinde iyi-hâl kaldırması bağlamında olduğundan fıkra iddiası
+basılmaz. Veli sürümü ayrı şablon.{% endcomment %}
+{% block content %}
+<div class="doc-title">ÖĞRENCİYE ÜST KURUL KARARI TEBLİĞİ</div>
+<div class="doc-subtitle">{% if notice_kind == 'approval' %}MEB Ortaöğretim Kurumları Yönetmeliği md. 169/2{% else %}MEB Ortaöğretim Kurumları Yönetmeliği md. 169/3-4{% endif %}</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Okul Kurulu Karar No / Tarihi</td><td>{{ decision.decision_no|default:'………' }} / {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Kararı Veren Merci</td><td>{{ board_label }}</td></tr>
+  <tr><td class="label">Merci Karar No / Tarihi</td><td>{{ board_decision_no|default:'………' }} / {% if board_decision_date %}{{ board_decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Tebliğ Tarihi</td><td>…/…/202…</td></tr>
+  <tr><td class="label">Konu</td><td>Üst kurul kararı tebliği ({{ student.full_name }})</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ student.full_name }}</strong><br>
+  ({{ student.class_label }} Sınıfı {{ student.student_number }} Numaralı Öğrencisi)
+</p>
+
+{% if notice_kind == 'approval' %}
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı ile Millî Eğitim Bakanlığı
+  Ortaöğretim Kurumları Yönetmeliği'nin {{ statute_label }} hükmü uyarınca tarafınıza verilen
+  "<strong>{% if decision %}{{ decision.get_penalty_type_display }}{% endif %}</strong>" cezası,
+  <strong>{{ board_label }}</strong>nun
+  {% if board_decision_date %}{{ board_decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ board_decision_no|default:'………' }} sayılı kararı ile
+  {% if board_outcome == 'MODIFIED' %}gerekçeleri belirtilmek suretiyle
+  <strong>değiştirilerek onaylanmıştır</strong>{% else %}<strong>onaylanmıştır</strong>{% endif %}
+  ({% if decision.penalty_type == 'SCHOOL_CHANGE' %}md. 169/2-b{% elif decision.penalty_type == 'EXPULSION' %}md. 169/2-c{% else %}md. 197{% endif %}).
+  İşbu belge ile tarafınıza tebliğ edilmektedir.
+</p>
+{% else %}
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı ile tarafınıza verilen
+  "<strong>{% if decision %}{{ decision.get_penalty_type_display }}{% endif %}</strong>" cezasına
+  karşı yapılan itiraz, <strong>{{ board_label }}</strong> tarafından incelenmiş olup kurulun
+  {% if board_decision_date %}{{ board_decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ board_decision_no|default:'………' }} sayılı kararı ile itiraza konu karar;
+  {% if board_outcome == 'UPHELD' %}<strong>onanmış, itiraz reddedilmiştir</strong>{% elif board_outcome == 'REDUCED' %}gerekçeleri
+  belirtilmek suretiyle <strong>değiştirilmiştir</strong>{% else %}<strong>kaldırılmıştır</strong>{% endif %}.
+  İşbu belge ile tarafınıza tebliğ edilmektedir.
+</p>
+{% endif %}
+
+{% if result_summary %}
+<div class="section flow">
+  <div class="section-title">KURUL KARARININ ÖZETİ</div>
+  <div class="field-box">{{ result_summary }}</div>
+</div>
+{% endif %}
+
+{% if notice_kind == 'approval' %}
+<p class="para">
+  Bu karara karşı, kararın tebliğini izleyen <strong>5 (beş) iş günü</strong> içinde itiraz
+  hakkı bulunmaktadır; itiraz, 18 yaşını tamamlamış öğrenci veya öğrenci velisi tarafından
+  okul müdürlüğü kanalıyla yazılı olarak yapılır (md. 169/3). Kararı onaylayan kurul aynı
+  karara yönelik itirazı görüşemez; itiraz <strong>{{ appeal_board_label }}</strong>
+  tarafından değerlendirilir (md. 169/4).
+</p>
+<p class="para">
+  Verilen disiplin cezası, kararın kesinleşmesinden sonra e-Okul sistemine işlenecektir.
+</p>
+{% else %}
+<p class="para">
+  İtiraz sonucu verilen karar <strong>kesindir</strong>; aynı karara karşı yeniden itiraz
+  edilemez (md. 169/4).
+</p>
+<p class="para">
+  {% if board_outcome == 'OVERTURNED' %}Ceza kaldırıldığından e-Okul sistemine
+  işlenmeyecektir; işlenmiş bir kayıt bulunması hâlinde kayıt e-Okul dosyasından çıkarılır
+  ve indirilen davranış puanı iade edilir (md. 171).{% else %}Kesinleşen disiplin cezası
+  e-Okul sistemine işlenir (md. 171).{% endif %}
+</p>
+{% endif %}
+
+<p class="para">Bilgilerinize tebliğ olunur.</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="name">{% if committee %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% endif %}</div>
+      <div class="line"></div>
+      <div class="role">Tebliğ Eden — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">Tebellüğ Eden (Öğrenci) — Adı Soyadı · İmza · Tarih</div>
+    </td>
+  </tr>
+</table>
+<p class="muted">
+  Açıklama: Yukarıdaki üst kurul kararı tebliğ yazısını okudum, içeriğini anladım ve bir
+  suretini elden teslim aldım.
+</p>
+{% endblock %}

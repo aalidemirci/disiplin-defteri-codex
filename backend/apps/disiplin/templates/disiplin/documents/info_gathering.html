@@ -1,0 +1,141 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-7/8 Bilgi Toplama Formu — kanonik metin
+data/sablonlar/disiplin-kurulu/form-07a (öğrenciden) + form-08 (öğretmenden); md. 193.
+variant='student' → Form-7, variant='teacher' → Form-8. "Hakkında bilgi toplanan"
+= suçlanan katılımcı (ön-doldurulur); değerlendirme elle işaretlenir (içerik saklanmaz).
+Antet shared; unit = kurul.{% endcomment %}
+{% block extra_style %}
+<style>
+  .info-writing-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .info-writing-area-teacher { min-height: 9cm; }
+  .info-writing-area-short { min-height: 2.8cm; }
+  .info-writing-area-medium { min-height: 3.8cm; }
+  .info-writing-area-long { min-height: 7cm; }
+  .info-signature-table td { height: 1.3cm; vertical-align: middle; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="doc-title">BİLGİ TOPLAMA FORMU</div>
+<div class="doc-subtitle">
+  {% if variant == 'teacher' %}Form-8 · Öğretmenden{% else %}Form-7 · Öğrenciden{% endif %}
+  · MEB Ortaöğretim Kurumları Yönetmeliği md. 193
+</div>
+
+<div class="section">
+  <div class="section-title">HAKKINDA BİLGİ TOPLANAN ÖĞRENCİ</div>
+</div>
+<table class="info flush">
+  <tr><td class="label">Adı Soyadı</td><td>{{ participant.name|default:'…………………………' }}</td></tr>
+  <tr><td class="label">Sınıf ve No</td><td>{{ participant.class_label|default:'……' }} / {{ participant.student_number|default:'……' }}</td></tr>
+  <tr><td class="label">Disiplin Konusu</td><td>&nbsp;</td></tr>
+</table>
+
+{% if variant == 'teacher' %}
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunda görüşülmesi için gönderilen yukarıda kimliği belirtilen
+  öğrenciye ait dosya ile ilgili olarak, adı geçen öğrenci hakkında sizden bilgi almamız
+  gerekmektedir. Öğrenci hakkındaki görüşlerinizi aşağıdaki ölçütlere göre değerlendirmenizi
+  rica ederim.
+</p>
+{% else %}
+<p class="para">
+  Bu form, öğrenciyi suçlamak amacıyla değil; <strong>olayın doğru değerlendirilmesi ve adil karar
+  verilmesine yardımcı olmak amacıyla</strong> hazırlanmıştır. Verilen bilgiler gizlilik esasına
+  göre değerlendirilir.
+</p>
+{% endif %}
+
+<div class="signature" style="margin-top: 8pt;">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</div>
+  <div class="role">Disiplin Kurulu Başkanı</div>
+</div>
+
+{% if variant == 'teacher' %}
+{# ---------------- Form-8 (öğretmenden) ---------------- #}
+<div class="section">
+  <div class="section-title">DEĞERLENDİRME (Evet / Hayır / Bazen)</div>
+</div>
+<table class="doc-table">
+  <tr><th style="width: 78%;">Ölçüt</th><th>Evet / Hayır / Bazen</th></tr>
+  <tr><td>Derse hazırlıklı gelir, ödev ve sorumluluklarını yerine getirir</td><td>&nbsp;</td></tr>
+  <tr><td>Derse aktif katılır; akademik motivasyonu yüksektir</td><td>&nbsp;</td></tr>
+  <tr><td>Derse düzenli devam eder; geç kalma/izinsiz ayrılma yoktur</td><td>&nbsp;</td></tr>
+  <tr><td>Sınıf kurallarına uyar; öğretmen ve arkadaşlarına saygılıdır</td><td>&nbsp;</td></tr>
+  <tr><td>Ders düzenini bozucu davranışlar (gürültü, telefon, dersi bölme) sergiler</td><td>&nbsp;</td></tr>
+  <tr><td>Yapılan uyarılara olumlu yanıt verir</td><td>&nbsp;</td></tr>
+  <tr><td>Okul kurallarına genel olarak uyar (kıyafet, alan kullanımı, etkinlik)</td><td>&nbsp;</td></tr>
+  <tr><td>Olumsuz yönlendirici/lider tutum sergiler</td><td>&nbsp;</td></tr>
+  <tr><td>Disiplin açısından sorun oluşturan davranışları vardır</td><td>&nbsp;</td></tr>
+  <tr><td>Olay, öğrencinin genel davranış yapısıyla örtüşmekte / örüntü oluşturmaktadır</td><td>&nbsp;</td></tr>
+</table>
+
+<div class="info-writing-block">
+  <div class="section">
+    <div class="section-title">OLAYA İLİŞKİN EK GÖRÜŞ; ÖĞRENCİNİN GÜÇLÜ VE GELİŞTİRMESİ GEREKEN YÖNLERİ</div>
+    <div class="field-box info-writing-area-teacher"></div>
+  </div>
+
+  <div class="signature">
+    <div class="date">…/…/202…</div>
+    <div class="sig-line"></div>
+    <div class="name">…………………………………………</div>
+    <div class="role">Öğretmenin Adı Soyadı – İmza</div>
+  </div>
+</div>
+
+{% else %}
+{# ---------------- Form-7 (öğrenciden) ---------------- #}
+<div class="section">
+  <div class="section-title">A. ÖĞRENCİNİN GENEL DAVRANIŞ VE TUTUMLARI</div>
+</div>
+<table class="doc-table">
+  <tr>
+    <th style="width: 40%;">Davranış Alanı</th>
+    <th>Her Zaman Olumlu</th><th>Genellikle Olumlu</th><th>Bazen Olumsuz</th>
+    <th>Sıklıkla Olumsuz</th><th>Fikrim Yok</th>
+  </tr>
+  <tr><td>Ders içi davranışları</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Öğretmenlere karşı tutumu</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Arkadaş ilişkileri</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Uyarılara yaklaşımı</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Sorumluluk alma durumu</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Sınıf/okul kurallarına uymaya özen gösterir</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Tartışmaları sözlü/fiziksel şiddetle çözmeye çalışır</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Öfkesini kontrol edemez, ani tepkiler verir</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<div class="section">
+  <div class="section-title">B. DAVRANIŞLARIN SÜREKLİLİĞİ VE GEÇMİŞ DURUM</div>
+  <div class="field-box info-writing-area-short" style="white-space: normal;">
+    <p style="margin: 0 0 4pt;">Bu tür davranışların daha önce de yaşandığını düşünüyor musunuz?
+    &nbsp;☐ Hayır&nbsp;&nbsp;☐ Evet, ara sıra&nbsp;&nbsp;☐ Evet, sık sık</p>
+    <p style="margin: 0;">Daha önce benzer olaylara tanık olduysanız kısaca açıklayınız:</p>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">C. DİSİPLİN OLAYINA İLİŞKİN AYRINTILI GÖZLEM</div>
+  <div class="field-box info-writing-area-medium" style="white-space: normal;">
+    <p style="margin: 0 0 4pt;">• Olayın gerçekleşme şekli / öğrencinin tutumu (sakin, öfkeli, kışkırtıcı, pişman):</p>
+    <p style="margin: 0 0 4pt;">• Olayın kasıtlı olduğunu düşünüyor musunuz?&nbsp;☐ Evet&nbsp;☐ Hayır&nbsp;☐ Emin değilim</p>
+    <p style="margin: 0;">• Olayda başka öğrencilerin etkisi oldu mu?&nbsp;☐ Hayır&nbsp;☐ Evet (açıklayınız):</p>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">D. GÖRÜŞ VE ÖNERİLER</div>
+  <div class="field-box info-writing-area-long"></div>
+</div>
+
+<table class="info info-signature-table" style="margin-top: 10pt;">
+  <tr><td class="label">Dolduran Öğrenci — Adı Soyadı ve İmzası</td><td>………………………………………………………………</td></tr>
+  <tr><td class="label">Dolduran Öğrenci — Sınıfı</td><td>……………</td></tr>
+  <tr><td class="label">Numarası (isteğe bağlı)</td><td>……………</td></tr>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-12 Disiplin Kurulu Süre Uzatma Karar Tutanağı (ara karar) — kanonik metin
+data/sablonlar/disiplin-kurulu/form-12-sure-uzatma-ara-karar.md; md. 192/3. Kurulun süre
+uzatma ara kararı; üye + başkan imzalı (EK-1 deseni). Veri DisciplineDeadlineExtension'dan
+(dosya başına tek). Öğrenci künyesi dosyanın ilk öğrencisinden. Antet shared; unit = kurul.{% endcomment %}
+{% block content %}
+<div class="doc-title">DİSİPLİN KURULU SÜRE UZATMA KARAR TUTANAĞI</div>
+<div class="doc-subtitle">Form-12 · MEB Ortaöğretim Kurumları Yönetmeliği md. 192/3</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr>
+    <td class="label">Karar Tarihi</td>
+    <td>{% if extension.decided_on %}{{ extension.decided_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 12pt;">
+  Okulumuz Öğrenci Ödül ve Disiplin Kurulu,
+  {% if extension.decided_on %}{{ extension.decided_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarihinde Disiplin Kurulu Başkanı
+  <strong>{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</strong>
+  başkanlığında toplanarak aşağıdaki gündem maddesini görüşmüştür.
+</p>
+
+<div class="section">
+  <div class="section-title">GÜNDEM</div>
+  <div class="field-box" style="white-space: normal;">
+    {{ student.class_label|default:'……' }} sınıfı {{ student.student_number|default:'……' }} numaralı
+    öğrenci <strong>{{ student.full_name|default:'…………………………' }}</strong> hakkında yürütülmekte olan
+    disiplin soruşturmasında süre uzatımı talebinin görüşülmesi.
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">GÖRÜŞMELER VE GEREKÇE</div>
+  <div class="field-box" style="white-space: pre-wrap;">{{ extension.reason|default:'' }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">KARAR</div>
+  <div class="field-box" style="white-space: normal;">
+    Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği md. 192/3 doğrultusunda, yürütülmekte
+    olan disiplin soruşturmasının <strong>{{ extension.requested_days|default:'……' }} iş günü</strong>
+    süre ile uzatılmasına{% if extension.new_deadline %} (uzatma sonrası kurul karar son günü:
+    <strong>{{ extension.new_deadline|date:'d.m.Y' }}</strong>){% endif %}, kararın Okul Müdürlüğü
+    makamına onaya sunulmasına oy birliği ile karar verilmiştir.
+  </div>
+</div>
+
+{% if committee %}
+<table class="sig-grid">
+  <tr>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td><div class="space"></div><div class="line"></div></td>
+    {% endif %}{% endfor %}
+    <td><div class="space"></div><div class="line"></div></td>
+  </tr>
+  <tr>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td>
+        <div class="name">{{ m.member_name }}</div>
+        <div class="role">{{ m.title|default:m.get_member_type_display }}</div>
+      </td>
+    {% endif %}{% endfor %}
+    <td>
+      <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
+      <div class="role">Disiplin Kurulu Başkanı (Müdür Yrd.)</div>
+    </td>
+  </tr>
+</table>
+{% else %}
+<p class="muted">Disiplin kurulu tanımlı değil; üye ve başkan imza alanları boştur.</p>
+{% endif %}
+{% endblock %}

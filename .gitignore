@@ -1,0 +1,40 @@
+# =============================================================================
+# .gitignore — Disiplin Defteri
+# =============================================================================
+
+# ---------- Ortam Değişkenleri ----------
+.env
+.env.local
+.env.*.local
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ---------- Node ----------
+node_modules/
+.pnpm-store/
+dist/
+
+# ---------- SQLite ----------
+*.sqlite
+*.sqlite3*
+
+# ---------- Claude / Superpowers ----------
+.superpowers/
+
+# ---------- Veri / Medya (KVKK — kişisel veri repoya girmez) ----------
+data/
+media/
+backups/
+logs/
+
+# ---------- Excel/Fixture (KVKK — gerçek e-Okul ihracı repoya girmez) ----------
+*.xlsx
+*.xls

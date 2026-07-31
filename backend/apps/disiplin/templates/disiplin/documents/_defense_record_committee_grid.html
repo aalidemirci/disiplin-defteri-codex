@@ -1,0 +1,26 @@
+{% comment %}Form-11 "Savunmayı Alanlar" kurul imza ızgarası (Tur 219) — dolu/boş
+modun ortak parçası (EK-1 deseni: başkan + asıl üyeler; yedekler hariç).{% endcomment %}
+{% if committee %}
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td><div class="space"></div><div class="line"></div></td>
+    {% endif %}{% endfor %}
+  </tr>
+  <tr>
+    <td>
+      <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
+      <div class="role">Başkan (Müdür Yrd.)</div>
+    </td>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td>
+        <div class="name">{{ m.member_name }}</div>
+        <div class="role">{{ m.title|default:m.get_member_type_display }}</div>
+      </td>
+    {% endif %}{% endfor %}
+  </tr>
+</table>
+{% else %}
+<p class="muted">Disiplin kurulu tanımlı değil; üye imza alanları boştur.</p>
+{% endif %}

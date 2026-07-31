@@ -1,0 +1,86 @@
+{% extends "documents/base.html" %}
+{% comment %}Onur Kurulu Teklif Tutanağı (md. 161 + 183/b) — uygun görülen öğrencileri
+gerekçeleriyle listeler; Okul Öğrenci Ödül ve Disiplin Kurulu'na sunulur. index_sheet
+aggregate (tablo) + sig-grid (başkan + asıl üyeler) desenini izler.{% endcomment %}
+{% block content %}
+<div class="doc-title">ONUR KURULU TEKLİF TUTANAĞI</div>
+<div class="doc-subtitle">Okul Öğrenci Ödül ve Disiplin Kuruluna sunulmak üzere (md. 161, md. 183/b)</div>
+
+<table class="info">
+  <tr><td class="label">Teklif Dönemi</td><td>{{ term_name|default:'—' }}</td></tr>
+  <tr><td class="label">Düzenlenme Tarihi</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+</table>
+
+<p class="para">Onur Kurulumuzca incelenen, aşağıda sınıfı ve adı-soyadı ile teklif gerekçeleri
+yazılı öğrencilerin MEB Ortaöğretim Kurumları Yönetmeliği md. 161 kapsamında &ldquo;Onur
+Belgesi&rdquo; ile ödüllendirilmeleri <strong>uygun görülmüştür</strong>. Gereği için Okul
+Öğrenci Ödül ve Disiplin Kuruluna arz olunur.</p>
+
+<table class="doc-table">
+  <tr>
+    <th style="width: 5%; text-align: center;">Sıra</th>
+    <th style="width: 9%;">Sınıfı</th>
+    <th style="width: 10%;">Numarası</th>
+    <th style="width: 24%;">Adı Soyadı</th>
+    <th style="width: 22%;">Teklif Eden (Ad Soyad &middot; Rol)</th>
+    <th style="width: 30%;">Gerekçe (İlgili yönetmelik maddesi)</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td style="text-align: center;">{{ forloop.counter }}</td>
+    <td>{{ row.class_label }}</td>
+    <td>{{ row.student_number }}</td>
+    <td>{{ row.full_name }}</td>
+    <td>{{ row.proposer }}</td>
+    <td>{{ row.justification }}{% if row.regulation %}<br><span class="muted">{{ row.regulation }}</span>{% endif %}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="6" class="muted" style="text-align: center;">Uygun görülen öğrenci bulunmuyor.</td></tr>
+  {% endfor %}
+</table>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ chair_name|default:'……………………' }}</div>
+      <div class="role">Onur Kurulu Başkanı</div>
+    </td>
+    {% for m in members %}
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ m.member_name }}</div>
+      <div class="role">Üye{% if m.is_second_chair %} (İkinci Başkan){% endif %}</div>
+    </td>
+    {% endfor %}
+  </tr>
+</table>
+
+{% comment %}Teslim-tesellüm (talep i): tutanak Onur Kurulu Başkanı'nca Ödül-Disiplin Kurulu
+Başkanı'na teslim edilir (md. 161, md. 183/b). Teslim tarihi elle doldurulur.{% endcomment %}
+<div class="section-title" style="margin-top: 24pt;">TESLİM-TESELLÜM</div>
+<p class="para">İşbu Onur Kurulu Teklif Tutanağı, Onur Kurulu Başkanı tarafından Okul Öğrenci
+Ödül ve Disiplin Kurulu Başkanına teslim edilmiş; adı geçen Başkanca tesellüm edilmiştir
+(md. 161, md. 183/b).</p>
+<table class="info">
+  <tr><td class="label">Teslim Tarihi</td><td>……… / ……… / 20………</td></tr>
+</table>
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ chair_name|default:'……………………' }}</div>
+      <div class="role">Teslim Eden — Onur Kurulu Başkanı</div>
+    </td>
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ committee_chair_name|default:'……………………' }}</div>
+      <div class="role">Tesellüm Eden — Ödül-Disiplin Kurulu Başkanı</div>
+    </td>
+  </tr>
+</table>
+{% endblock %}

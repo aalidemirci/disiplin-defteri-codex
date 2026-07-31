@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - esbuild@0.24.3
+  - vite@6.4.2 || 6.4.3
+  - react-router@8.3.0
+  - brace-expansion@1.1.17 || 2.1.3

@@ -1,0 +1,83 @@
+{% extends "documents/base.html" %}
+{% comment %}Veliye Yazılı Uyarı Bilgilendirme Yazısı (Tur 213, talep 3b) — türetilmiş
+form (resmî MEB karşılığı yok; kanonik metin data/sablonlar/mudur-uyarisi/
+form-02-veli-bilgilendirme-yazisi.md). Müdür uyarısı CEZA DEĞİLDİR (md. 157/7) —
+ton bilgilendirme; tebliğ değil. Sorumlu veli (PRIMARY) ön-doldurulur; adres modelde
+tutulmaz → elle. Davranış özeti `behavior_summary` (Form-02 ile aynı kaynak).
+Antet shared; unit boş (kurul belgesi değil — müdür işlemi).{% endcomment %}
+{% block content %}
+<div class="doc-title">VELİYE YAZILI UYARI BİLGİLENDİRMESİ</div>
+<div class="doc-subtitle">Form-02 (Veli) · MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7 — bilgilendirme yazısı</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr>
+    <td class="label">Tarih</td>
+    <td>{% if warning %}{{ warning.warning_date|date:'d.m.Y' }}{% else %}{{ generated_at|date:'d.m.Y' }}{% endif %}</td>
+  </tr>
+  <tr><td class="label">Konu</td><td>Öğrencinize yapılan yazılı uyarı hakkında bilgilendirme</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ parent.full_name|default:'……………………………' }}</strong>{% if parent.kinship_display %}<br>
+  ({{ parent.kinship_display }}){% endif %}
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong>'in sergilediği
+  "<strong>{{ behavior_summary }}</strong>" davranışının, Millî Eğitim Bakanlığı Ortaöğretim
+  Kurumları Yönetmeliği'nin kınama cezasını gerektiren davranışlar kapsamında olduğu tespit
+  edilmiştir.
+</p>
+
+<p class="para">
+  Öğrencinizin daha önce herhangi bir disiplin cezası almamış olması göz önünde
+  bulundurularak, ilgili yönetmeliğin <strong>157. maddesinin 7. fıkrası (a) bendi</strong>
+  uyarınca kendisine okul müdürlüğünce <strong>yazılı uyarı</strong> yapılmıştır. Bu işlem
+  bir <strong>disiplin cezası değildir</strong> ve e-Okul sistemine işlenmez (md. 157/7-ç);
+  bu yazı sizi bilgilendirme amacıyla düzenlenmiştir.
+</p>
+
+<div class="section">
+  <div class="section-title">BİLGİNİZE SUNULAN HUSUSLAR</div>
+  <div class="field-box" style="white-space: normal;">
+    <p style="margin: 0 0 5pt;">• Söz konusu olumsuz davranışın devam etmesi hâlinde okul
+    yönetimince veli olarak okula davet edilerek görüşme yapılacaktır (md. 157/7-b).</p>
+    <p style="margin: 0;">• Kınama gerektiren ikinci bir davranışta öğrenciniz hakkında
+    doğrudan <strong>Okul Öğrenci Ödül ve Disiplin Kurulu</strong> tarafından işlem
+    başlatılacaktır (md. 157/7-e).</p>
+  </div>
+</div>
+
+<p class="para">
+  Öğrencimizin eğitim hayatının sağlıklı bir şekilde devam edebilmesi adına okul ile iş
+  birliğinizin önem arz ettiğini bilgilerinize sunar, gereğini rica ederim.
+</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">
+        Bilgilendirilen Veli — Adı Soyadı · Öğrenci ile Yakınlığı · Tarih · İmza
+      </div>
+    </td>
+  </tr>
+</table>
+<p class="muted">
+  Açıklama: Velisi bulunduğum öğrenciye md. 157/7-(a) kapsamında yapılan yazılı uyarıya
+  ilişkin yukarıdaki bilgilendirme yazısını okudum ve bir suretini teslim aldım.
+</p>
+
+<p class="muted" style="margin-top: 10pt;">
+  Not: (1) Yazılı uyarı bir disiplin cezası değildir ve e-Okul sistemine işlenmez
+  (md. 157/7-ç). (2) Uyarı belgesi ders yılı sonunda veya nakil hâlinde nakil tarihinden
+  itibaren 5 iş günü içinde imha edilir (md. 157/7-d).
+</p>
+{% endblock %}

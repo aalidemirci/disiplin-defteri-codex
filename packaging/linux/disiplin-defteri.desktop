@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Disiplin Defteri
+GenericName=Okul Disiplin Programı
+GenericName[tr]=Okul Disiplin Programı
+Comment=Okul disiplin süreçlerini yürütür ve resmi evrakı üretir
+Comment[tr]=Okul disiplin süreçlerini yürütür ve resmi evrakı üretir
+Exec=/usr/bin/disiplin-defteri
+Icon=disiplin-defteri
+Terminal=false
+Categories=Office;Education;
+Keywords=disiplin;okul;kurul;evrak;
+Keywords[tr]=disiplin;okul;kurul;evrak;
+StartupNotify=true
+StartupWMClass=disiplin-defteri

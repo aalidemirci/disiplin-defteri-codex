@@ -1,0 +1,82 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-3 İfadeye Çağrı Pusulası (mağdur/suçlanan/tanık) — kanonik metin
+data/sablonlar/disiplin-kurulu/form-03-ifadeye-cagri-pusulasi.md; md. 194-195.
+Katılımcıdan ön-doldurulur (ad + sınıf/no); ifadenin alınacağı tarih/saat/yer
+arayüzden GEÇİCİ olarak gelir (DB'ye yazılmaz). Tebliğ-tebellüğ imza bloğu içerir.
+Kanonik metin öğrenciye yazılmıştır; personel/dış kişi katılımcıda (Tur 216) hitap
+ve gövde kişi tipine göre uyarlanır (kanonik dışı türetme). Antet shared;
+unit = kurul (varsayılan).{% endcomment %}
+{% block content %}
+<div class="doc-title">İFADEYE ÇAĞRI PUSULASI</div>
+<div class="doc-subtitle">Form-3 · MEB Ortaöğretim Kurumları Yönetmeliği md. 193-195</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">Konu</td><td>{% if participant.person_type == 'STUDENT' %}Öğrencinin İfadesinin Alınması{% else %}İfade Alınması{% endif %} ({{ participant.role_display }})</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ participant.name|default:'…………………………' }}</strong>
+  {% if participant.person_type == 'STUDENT' %}<br>
+  (Okulumuz {{ participant.class_label|default:'……' }} Sınıfı
+  {{ participant.student_number|default:'……' }} Numaralı Öğrencisi)
+  {% elif participant.external_title %}<br>({{ participant.external_title }})
+  {% elif participant.person_type == 'STAFF' %}<br>(Okulumuz Personeli){% endif %}
+</p>
+
+<p class="para">
+  {% if participant.person_type != 'STUDENT' %}Okulumuzda yürütülmekte olan bir
+  disiplin soruşturması kapsamında, olayla ilgili görgü ve bilginize başvurulmak üzere
+  {% elif participant.role == 'ACCUSED' %}Okulumuz öğrencisi olarak hakkınızda
+  yürütülen disiplin soruşturması kapsamında
+  {% else %}Okulumuz öğrencisi olarak, okulumuzda yürütülmekte olan disiplin
+  soruşturması kapsamında olayla ilgili ifadenize başvurulmak üzere{% endif %}
+  <strong>Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği Madde 193, Madde 194
+  ve Madde 195 gereği</strong>; yazılı ya da sözlü ifade vermek için Okul Öğrenci Ödül ve
+  Disiplin Kuruluna aşağıda belirtilen tarih, saatte ve yerde bulunmanız gerekmektedir.
+</p>
+
+<table class="info">
+  <tr>
+    <td class="label">İfadenin Alınacağı Tarih</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+  <tr><td class="label">Saat</td><td>{{ statement_time|default:'……' }}</td></tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Müdür Yardımcısı Odası' }}</td></tr>
+</table>
+
+<table class="info" style="margin-top: 14pt;">
+  <tr>
+    <td class="label">Tebliğ Eden</td>
+    <td>
+      …/…/202…<br>
+      <strong>{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</strong><br>
+      Disiplin Kurulu Başkanı
+    </td>
+  </tr>
+  <tr>
+    <td class="label">Tebellüğ Eden{% if participant.person_type == 'STUDENT' %} (Öğrenci){% endif %}</td>
+    <td>…/…/202…<br>…………………………………………<br>Adı Soyadı – İmza</td>
+  </tr>
+</table>
+
+<div class="section">
+  <div class="section-title">İLGİLİ MEVZUAT</div>
+  <div class="field-box" style="white-space: normal;">
+    <p style="margin: 0 0 5pt;"><strong>İfadelerin alınması ve delillerin toplanması — MADDE 193 —</strong>
+    (1) Okul öğrenci ödül ve disiplin kuruluna sevk edilen öğrencilerin ve olayla ilgili
+    tanıkların, önce okul öğrenci ödül ve disiplin kurulu başkanı tarafından yazılı ifadeleri
+    alınır.</p>
+    <p style="margin: 0 0 5pt;"><strong>Kurula çağrılma ve savunma alınması — MADDE 194 —</strong>
+    (1) Okul öğrenci ödül ve disiplin kuruluna sevk edilen öğrencilerin kurul tarafından yazılı
+    ve gerektiğinde sözlü olarak savunmaları alınır ve sözlü savunmalar tutanağa geçirilir. Çağrı
+    duyurusu yazılı olarak ve imza karşılığında yapılır. (3) Bu öğrenciler, çağrıya uyarak kurulca
+    belirlenen gün ve saatte kurulda bulunmak zorundadır. Çağrıya özürsüz gelinmemesi durumunda
+    dosyada bulunan bilgi ve belgelere göre karar verilir.</p>
+    <p style="margin: 0;"><strong>İfade ve savunma vermek istemeyenler — MADDE 195 —</strong>
+    (1) İfade vermeyen, savunmada bulunmayan veya çağrıldığı hâlde gelmeyen öğrencilerin durumu
+    bir tutanakla tespit edilir.</p>
+  </div>
+</div>
+{% endblock %}

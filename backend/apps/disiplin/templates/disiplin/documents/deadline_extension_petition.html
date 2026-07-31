@@ -1,0 +1,46 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-13 Süre Uzatma İsteği Dilekçesi — kanonik metin
+data/sablonlar/disiplin-kurulu/form-13-sure-uzatma-dilekcesi.md; md. 192/3. Disiplin
+Kurulu Başkanından Okul Müdürlüğüne süre uzatma talebi; EK: F-12 ara karar tutanağı.
+Veri DisciplineDeadlineExtension'dan. Antet shared; unit = kurul.{% endcomment %}
+{% block content %}
+<div class="doc-title">SÜRE UZATMA İSTEĞİ DİLEKÇESİ</div>
+<div class="doc-subtitle">Form-13 · MEB Ortaöğretim Kurumları Yönetmeliği md. 192/3</div>
+
+<p class="para" style="margin-top: 14pt;"><strong>{{ school_name }} MÜDÜRLÜĞÜNE</strong></p>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Konu</td><td>Disiplin İşlemlerinde Süre Uzatma Talebi</td></tr>
+  <tr><td class="label">İlgi</td><td>Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği md. 192/3</td></tr>
+</table>
+
+<p class="para">
+  Okulumuz {{ student.class_label|default:'……' }} sınıfı {{ student.student_number|default:'……' }}
+  numaralı öğrencisi <strong>{{ student.full_name|default:'…………………………' }}</strong> hakkında, ilgi
+  yönetmelik gereğince başlatılan ve Disiplin Kurulu Başkanlığım tarafından yürütülen disiplin
+  soruşturması kapsamındaki iş ve işlemler, Yönetmelikte belirtilen yasal süre içerisinde
+  tamamlanamayacağı anlaşıldığından; soruşturmanın eksiksiz, adil ve sağlıklı bir şekilde
+  sonuçlandırılabilmesi, Disiplin Kurulu Kararına esas teşkil edecek raporun hazırlanabilmesi
+  amacıyla tarafıma <strong>{{ extension.requested_days|default:'……' }} (……) iş günü</strong> ek süre
+  verilmesini arz ederim.
+</p>
+
+{% if extension.reason %}
+<div class="section">
+  <div class="section-title">GEREKÇE</div>
+  <div class="field-box" style="white-space: pre-wrap;">{{ extension.reason }}</div>
+</div>
+{% endif %}
+
+<div class="signature">
+  <div class="date">{% if extension.decided_on %}{{ extension.decided_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</div>
+  <div class="sig-line"></div>
+  <div class="name">{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</div>
+  <div class="role">Disiplin Kurulu Başkanı (Müdür Yrd.)</div>
+</div>
+
+<table class="info" style="margin-top: 18pt;">
+  <tr><td class="label">EK</td><td>Disiplin kurulu süre uzatma karar tutanağı (Form-12)</td></tr>
+</table>
+{% endblock %}

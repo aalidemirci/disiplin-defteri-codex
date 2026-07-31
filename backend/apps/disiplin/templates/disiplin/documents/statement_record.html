@@ -1,0 +1,50 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-4/5/6 İfade Tutanağı (mağdur/hakkında işlem yapılan/tanık) — kanonik
+metin data/sablonlar/disiplin-kurulu/form-04..06; md. 193 (ifadelerin alınması —
+örnek formdaki md. 194 atfı savunmaya aittir; Tur 217'de düzeltildi). Tek şablon: katılımcının
+ROLÜ (Mağdur/Hakkında İşlem Yapılan/Tanık) başlığı belirler. Künye katılımcıdan
+ön-doldurulur; ifade gövdesi elle yazılır (içerik DB'de saklanmaz). Kanonik metin
+öğrenciye yazılmıştır; personel/dış kişi katılımcıda (Tur 216) başlık "KİŞİNİN" olur,
+sınıf/numara yerine görev/sıfat satırı basılır (kanonik dışı türetme). Antet shared;
+unit = kurul.{% endcomment %}
+{% block content %}
+<div class="doc-title">İFADE TUTANAĞI</div>
+<div class="doc-subtitle">Form-4/5/6 · MEB Ortaöğretim Kurumları Yönetmeliği md. 193 · {{ participant.role_display }}</div>
+
+<div class="section">
+  <div class="section-title">DİSİPLİN OLAYI İLE İLGİLİ {{ participant.role_display }} {% if participant.person_type == 'STUDENT' %}ÖĞRENCİNİN{% else %}KİŞİNİN{% endif %}</div>
+</div>
+<table class="info flush">
+  <tr><td class="label">Adı Soyadı</td><td>{{ participant.name|default:'…………………………' }}</td></tr>
+  {% if participant.person_type == 'STUDENT' %}
+  <tr><td class="label">Sınıfı</td><td>{{ participant.class_label|default:'……' }}</td></tr>
+  <tr><td class="label">Numarası</td><td>{{ participant.student_number|default:'……' }}</td></tr>
+  {% else %}
+  <tr><td class="label">Görevi / Sıfatı</td><td>{{ participant.external_title|default:participant.person_type_display }}</td></tr>
+  {% endif %}
+</table>
+
+<div class="section flow">
+  <div class="section-title">DİSİPLİN KONUSU / SORULAR</div>
+  <div class="field-box tall">{{ statement_subject }}</div>
+</div>
+
+<div class="signature">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</div>
+  <div class="role">Disiplin Kurulu Başkanı</div>
+</div>
+
+<div class="section flow" style="margin-top: 18pt;">
+  <div class="section-title">İFADE{% if not statement_body %} <span style="font-weight: normal; font-size: 8.5pt; color: #64748b;">(İfadenizi aşağıya yazınız — kâğıdın arkasına devam edebilirsiniz.)</span>{% endif %}</div>
+  <div class="field-box" style="min-height: 7cm;">{{ statement_body }}</div>
+</div>
+
+<div class="signature">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">…………………………………………</div>
+  <div class="role">İfade Veren — Adı Soyadı ve İmza</div>
+</div>
+{% endblock %}

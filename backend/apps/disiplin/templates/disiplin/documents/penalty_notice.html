@@ -1,0 +1,92 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-14 Öğrenciye Disiplin Cezası Tebliği — kanonik form-14
+(data/sablonlar/disiplin-kurulu/form-14-...md) temel alınır; OYS uyarlamaları:
+itiraz hakkı + hesaplanan son gün (md. 169/3) + tebellüğ beyanı basılı (Tur 142);
+kapanış Form-15 üslubuna ("…gereğini rica ederim") uyarlandı (Tur 143, okul tercihi).
+Antet shared (Kaymakamlık). Form-15 (veliye) ayrı belge.{% endcomment %}
+{% block content %}
+<div class="doc-title">{% if decision.penalty_type == 'NO_PENALTY' %}ÖĞRENCİYE DİSİPLİN KURULU KARARI TEBLİĞİ{% else %}ÖĞRENCİYE DİSİPLİN CEZASI TEBLİĞİ{% endif %}</div>
+<div class="doc-subtitle">Form-14 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169</div>
+
+{% comment %}Başlık Tebliğ Tarihi ELLE doldurulur (Tur 181, Talep 1d): form üretildiği gün
+tebligat yapılamamış olabilir (veli elden almazsa PTT ile tebliğe çıkılır). Karar no +
+karar tarihi sistemden basılır. "İtiraz için son gün" çıkarıldı (tebliğ tarihi belirsiz).{% endcomment %}
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Karar No</td><td>{{ decision.decision_no|default:'………' }}</td></tr>
+  <tr><td class="label">Karar Tarihi</td><td>{% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Tebliğ Tarihi</td><td>…/…/202…</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Disiplin kurulu kararı tebliği ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ student.full_name }}</strong><br>
+  ({{ student.class_label }} Sınıfı {{ student.student_number }} Numaralı Öğrencisi)
+</p>
+
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı ile
+  {% if decision.penalty_type == 'NO_PENALTY' %}hakkınızda
+  "<strong>Ceza verilmesine yer olmadığına</strong>" karar verilmiştir
+  ({{ statute_label }}). İşbu belge ile tarafınıza tebliğ edilmektedir.{% else %}Millî Eğitim
+  Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin {{ statute_label }} hükmü uyarınca tarafınıza
+  "<strong>{% if decision %}{{ decision.get_penalty_type_display }}{% endif %}{% if decision.suspension_days %}
+  ({{ decision.suspension_days }} gün){% endif %}</strong>" cezası verilmiştir. Verilen disiplin
+  cezası, kararın kesinleşmesinden sonra e-Okul sistemine işlenecek olup işbu belge ile
+  tarafınıza tebliğ edilmektedir.{% endif %}
+</p>
+
+{% if decision and decision.penalty_type != 'NO_PENALTY' %}
+<p class="para">
+  Disiplin cezası verilmesine sebep olmuş bir fiil veya davranışın bir öğretim yılı
+  içerisinde tekrarında veya aynı cezayı gerektiren farklı bir fiil veya davranışın
+  gerçekleşmesinde aynı yönetmeliğin <strong>MADDE 166</strong> gereği, bir derece ağır
+  ceza uygulanacaktır.
+</p>
+{% endif %}
+
+{% if decision and decision.penalty_type != 'NO_PENALTY' %}
+{% comment %}md. 169/3 itiraz CEZALARA karşıdır; "ceza verilmesine yer olmadığı"
+kararında (Tur 181) basılmaz.{% endcomment %}
+<p class="para">
+  Bu karara karşı, cezanın tebliğini izleyen <strong>5 (beş) iş günü</strong> içinde itiraz
+  hakkı bulunmaktadır; itiraz, 18 yaşını tamamlamış öğrenci veya öğrenci velisi tarafından
+  okul müdürlüğü kanalıyla yazılı olarak yapılır (md. 169/3).
+</p>
+{% endif %}
+
+<p class="para">
+  Bundan sonraki süreçte okul disiplin kurallarına ve Ortaöğretim Kurumları
+  Yönetmeliği'ne uygun hareket etmeniz hususunda bilgilerinizi ve gereğini rica ederim.
+</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="name">{% if committee %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% endif %}</div>
+      <div class="line"></div>
+      <div class="role">Tebliğ Eden — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">Tebellüğ Eden (Öğrenci) — Adı Soyadı · İmza · Tarih</div>
+    </td>
+  </tr>
+</table>
+<p class="muted">
+  Açıklama: Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği uyarınca şahsıma verilen
+  disiplin cezasına ilişkin yukarıdaki tebliğ yazısını okudum, içeriğini anladım ve bir suretini
+  elden teslim aldım.
+</p>
+{% endblock %}

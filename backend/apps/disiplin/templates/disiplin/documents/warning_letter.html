@@ -1,0 +1,74 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-02 Öğrenciye Kusurlu Davranışa Yönelik Yazılı Uyarı — kanonik
+metinle birebir (data/sablonlar/mudur-uyarisi/form-02-...md); müdür uyarısı (CEZA
+DEĞİL), modern tasarım (Tur 100, md. 157/7-a). Davranış özeti `behavior_summary`
+bağlamından gelir (Tur 213: üretim formu girdisi → yoksa DisciplineWarning.summary;
+ikisi de boşsa backend üretimi reddeder — placeholder asla basılmaz). Antet shared;
+unit boş (kurul belgesi değil — müdür işlemi).{% endcomment %}
+{% block content %}
+<div class="doc-title">KUSURLU DAVRANIŞA YÖNELİK YAZILI UYARI</div>
+<div class="doc-subtitle">Form-02 · MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-(a)</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr>
+    <td class="label">Tarih</td>
+    <td>{% if warning %}{{ warning.warning_date|date:'d.m.Y' }}{% else %}{{ generated_at|date:'d.m.Y' }}{% endif %}</td>
+  </tr>
+  <tr><td class="label">Konu</td><td>Kusurlu Davranışa Yönelik Yazılı Uyarı</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ student.full_name }}</strong><br>
+  ({{ student.class_label }} Sınıfı {{ student.student_number }} Numaralı Öğrencisi)
+</p>
+
+<p class="para">
+  Sergilemiş olduğunuz
+  "<strong>{{ behavior_summary }}</strong>" eyleminizin,
+  Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin kınama cezasını gerektiren
+  davranışlar kapsamında olduğu tespit edilmiştir.
+</p>
+
+<p class="para">
+  Yapılan değerlendirmeler sonucunda, daha önce herhangi bir disiplin cezası almamış olmanız göz
+  önünde bulundurularak, ilgili yönetmeliğin <strong>157. maddesinin 7. fıkrası (a) bendi</strong>
+  uyarınca tarafınıza bu <strong>yazılı uyarı</strong> yapılmıştır.
+</p>
+
+<div class="section">
+  <div class="section-title">DİKKAT EDİLMESİ GEREKEN HUSUSLAR</div>
+  <div class="field-box" style="white-space: normal;">
+    <p style="margin: 0 0 5pt;">• Bu yazı, davranışlarınızdaki kusura dikkatinizi çekmek ve bu
+    tutumun tekrarlanmaması konusunda sizi bilgilendirmek amacıyla hazırlanmıştır.</p>
+    <p style="margin: 0;">• Söz konusu olumsuz davranışların devam etmesi veya bir başka kınama
+    gerektiren fiilin işlenmesi durumunda, hakkınızda doğrudan <strong>Okul Öğrenci Ödül ve
+    Disiplin Kurulu</strong> tarafından işlem yapılacaktır.</p>
+  </div>
+</div>
+
+<p class="para">
+  Eğitim hayatınızın başarıyla devam etmesi için okul kurallarına ve genel ahlak ilkelerine
+  uygun hareket etmeniz hususunda gereğini rica ederim.
+</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="info" style="margin-top: 18pt;">
+  <tr><td class="label">Bilgi İçin</td><td>Rehberlik Servisi · Okul Öğrenci Ödül ve Disiplin Kurulu</td></tr>
+  <tr>
+    <td class="label">Tebellüğ Eden (Öğrenci)</td>
+    <td>Adı Soyadı: ………………………… · İmza: ………… · Tarih: …/…/202…</td>
+  </tr>
+</table>
+
+<p class="muted" style="margin-top: 10pt;">
+  Not: (1) Bu yazılı uyarı md. 157/7-(a) kapsamında düzenlenmiştir. (2) Bu belge e-Okul sistemine
+  işlenmez (md. 157/7-ç). (3) Ders yılı sonunda veya nakil hâlinde nakil tarihinden itibaren 5 iş
+  günü içinde imha edilir (md. 157/7-d). (4) Kınama gerektiren ikinci davranışta doğrudan Okul
+  Öğrenci Ödül ve Disiplin Kuruluna sevk edilir (md. 157/7-e).
+</p>
+{% endblock %}

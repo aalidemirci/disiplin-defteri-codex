@@ -1,0 +1,62 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-10 Disiplin Kurulunu Toplantıya Çağrı — md. 190 (kurul başkanının
+yazılı çağrısıyla toplanır). Örnek okul formundaki "193. maddesi" atfı Tur 217'de
+md. 190'a düzeltildi. Tur 218 (talep 1): okul müdürü imzası KALDIRILDI — md. 190
+çağrıyı yalnız kurul başkanına verir, müdür onayı gerekmez (TEK İMZA). Üye tablosu
+YALNIZ asıl üyeleri listeler (başkan imza bloğunda — Tur 109). Toplantı
+tarih/saat/yer arayüzden GEÇİCİ gelir (DB'ye yazılmaz). Antet shared; unit = kurul.{% endcomment %}
+{% block content %}
+<div class="doc-title">DİSİPLİN KURULUNU TOPLANTIYA ÇAĞRI</div>
+<div class="doc-subtitle">Form-10 · MEB Ortaöğretim Kurumları Yönetmeliği md. 190-191</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">Konu</td><td>Disiplin Kurulu Toplantısı</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;"><strong>OKUL ÖĞRENCİ ÖDÜL VE DİSİPLİN KURULU ÜYELERİNE</strong></p>
+
+<p class="para">
+  Bir disiplin soruşturmasına esas olarak Millî Eğitim Bakanlığı Ortaöğretim Kurumları
+  Yönetmeliğinin <strong>190. maddesi</strong> gereğince Okul Öğrenci Ödül ve Disiplin
+  Kurulumuz aşağıda belirtilen tarih, saat ve yerde toplanacaktır. Toplantıda hazır
+  bulunmanızı rica ederim.
+</p>
+
+<div class="signature">
+  <div class="date">{{ generated_at|date:'d.m.Y' }}</div>
+  <div class="sig-line"></div>
+  <div class="name">{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</div>
+  <div class="role">Disiplin Kurulu Başkanı (Müdür Yrd.)</div>
+</div>
+
+<p class="para" style="margin-top: 14pt;"><strong>Toplantının</strong></p>
+<table class="info">
+  <tr>
+    <td class="label">Tarihi</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+  <tr><td class="label">Saat</td><td>{{ statement_time|default:'……' }}</td></tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Müdür Yardımcısı Odası' }}</td></tr>
+</table>
+
+<div class="section">
+  <div class="section-title">KURUL ÜYELERİ</div>
+</div>
+<table class="doc-table">
+  <tr><th style="width: 8%;">Sn</th><th style="width: 42%;">Adı ve Soyadı</th><th>Görevi</th><th style="width: 18%;">İmza</th></tr>
+  {% if committee %}
+    {% for m in members %}{% if not m.is_substitute %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ m.member_name|default:'…………………………' }}</td>
+      <td>{{ m.title|default:m.get_member_type_display }}</td>
+      <td>&nbsp;</td>
+    </tr>
+    {% endif %}{% endfor %}
+  {% else %}
+    <tr><td colspan="4" class="muted">Aktif disiplin kurulu tanımlı değil.</td></tr>
+  {% endif %}
+</table>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-11 Savunma Tutanağı (hakkında işlem yapılan) — md. 194. Künye
+katılımcıdan ön-doldurulur (ad/sınıf/no); veli/telefon/adres elle. Savunmanın
+alındığı yer/tarih/saat arayüzden GEÇİCİ gelir. Kurul üyeleri imza ızgarası (EK-1
+deseni).
+
+Tur 219 (talep 2) — iki mod (statement_record deseni; içerik DB'de SAKLANMAZ):
+- DOLU MOD (statement_body verilmiş): savunma metni akışkan basılır (.section.flow,
+  uzun metin sonraki sayfaya akar), sabit ikinci sayfa YOK; imza blokları metni izler.
+- BOŞ MOD (elle dolum): iki-kutu düzeni — ilk kutu 8.5cm (İLK sayfaya sığar; eski
+  12.5cm kutu künyeden sonra sığmayıp bütün hâlde 2. sayfaya itiliyordu — taşma
+  şikâyetinin kökü), devam kutusu 2. sayfada 14cm. Boş kutuda .flow KULLANILMAZ:
+  WeasyPrint içeriksiz bloğu güvenilir bölmez (kırılma fırsatı satır kutularında).
+`statement_subject` her iki modda künyedeki "Olay" satırına basılır.{% endcomment %}
+{% block content %}
+<div class="doc-title">SAVUNMA TUTANAĞI</div>
+<div class="doc-subtitle">Form-11 · MEB Ortaöğretim Kurumları Yönetmeliği md. 194</div>
+
+<table class="info">
+  <tr><td class="label">Adı Soyadı</td><td>{{ participant.name|default:'…………………………' }}</td></tr>
+  <tr><td class="label">Sınıfı ve No</td><td>{{ participant.class_label|default:'……' }} / {{ participant.student_number|default:'……' }}</td></tr>
+  <tr><td class="label">Veli Adı Soyadı</td><td>…………………………</td></tr>
+  <tr><td class="label">Telefon</td><td>…………………………</td></tr>
+  <tr><td class="label">Adresi</td><td>…………………………</td></tr>
+  <tr>
+    <td class="label">Savunmanın Alındığı Tarih</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+  <tr><td class="label">Saat</td><td>{{ statement_time|default:'……' }}</td></tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Müdür Yardımcısı Odası' }}</td></tr>
+  <tr><td class="label">Olay</td><td class="narr">{% if statement_subject %}{{ statement_subject }}{% else %}&nbsp;{% endif %}</td></tr>
+</table>
+
+<p class="para">
+  Ödül ve Disiplin Kurulumuzca değerlendirme yapmak üzere yukarıda belirtilen olayla ilgili olarak
+  savunmanızı aşağıya tam ve doğru yazmanızı rica ederim.
+</p>
+
+{% if statement_body %}
+{% comment %}DOLU MOD — metin akışkan; uzun savunma sonraki sayfaya kesilmeden sürer.{% endcomment %}
+<div class="section flow">
+  <div class="section-title">SAVUNMAM</div>
+  <div class="field-box" style="min-height: 7cm;">{{ statement_body }}</div>
+</div>
+
+<div class="signature">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ participant.name|default:'…………………………………………' }}</div>
+  <div class="role">Savunma Veren — Adı Soyadı ve İmza</div>
+</div>
+
+<div class="section" style="margin-top: 8pt;">
+  <div class="section-title">SAVUNMAYI ALANLAR</div>
+</div>
+{% include "disiplin/documents/_defense_record_committee_grid.html" %}
+{% else %}
+{% comment %}BOŞ MOD — elle yazım: sayfa 1 künye + 8.5cm kutu; sayfa 2 devam + imzalar.{% endcomment %}
+<div class="section">
+  <div class="section-title">SAVUNMAM <span style="font-weight: normal; font-size: 8.5pt; color: #64748b;">(İkinci sayfada devam ediniz.)</span></div>
+  <div class="field-box" style="min-height: 8.5cm;"></div>
+</div>
+
+<div style="page-break-before: always;">
+  <div class="section">
+    <div class="section-title">SAVUNMAM (devamı)</div>
+    <div class="field-box" style="min-height: 14cm;"></div>
+  </div>
+
+  <div class="signature">
+    <div class="date">…/…/202…</div>
+    <div class="sig-line"></div>
+    <div class="name">…………………………………………</div>
+    <div class="role">Savunma Veren — Adı Soyadı ve İmza</div>
+  </div>
+
+  <div class="section" style="margin-top: 8pt;">
+    <div class="section-title">SAVUNMAYI ALANLAR</div>
+  </div>
+{% include "disiplin/documents/_defense_record_committee_grid.html" %}
+</div>
+{% endif %}
+{% endblock %}

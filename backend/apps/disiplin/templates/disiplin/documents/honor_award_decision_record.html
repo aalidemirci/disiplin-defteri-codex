@@ -1,0 +1,61 @@
+{% extends "documents/base.html" %}
+{% comment %}Ödül-Disiplin Kurulu Kararı — Onur Belgesi Verilenler Listesi (talep 3; md. 161 +
+183/b). Onur kurulunca uygun görülüp sevk edilen ve kurulca belge verilmesine karar verilen
+(AWARDED) öğrencilerin nihai listesi; Okul Müdürlüğüne sunulur. recommendation_record tablo +
+sig-grid desenini izler.{% endcomment %}
+{% block content %}
+<div class="doc-title">ÖDÜL VE DİSİPLİN KURULU KARARI</div>
+<div class="doc-subtitle">Onur Belgesi Verilmesi Kararı — Okul Müdürü Onayına (md. 161, md. 183/b)</div>
+
+<table class="info">
+  <tr><td class="label">Teklif Dönemi</td><td>{{ term_name|default:'—' }}</td></tr>
+  <tr><td class="label">Karar Tarihi</td><td>{% if decision_date %}{{ decision_date|date:'d.m.Y' }}{% else %}—{% endif %}</td></tr>
+</table>
+
+<p class="para">Okul Öğrenci Ödül ve Disiplin Kurulumuzca, Onur Kurulunca uygun görülerek
+kurulumuza sevk edilen ve aşağıda sınıfı, numarası ve adı-soyadı yazılı öğrencilere MEB
+Ortaöğretim Kurumları Yönetmeliği md. 161 kapsamında &ldquo;Onur Belgesi&rdquo;
+<strong>verilmesine</strong> karar verilmiştir. Onayları için Okul Müdürlüğüne arz olunur.</p>
+
+<table class="doc-table">
+  <tr>
+    <th style="width: 5%; text-align: center;">Sıra</th>
+    <th style="width: 10%;">Sınıfı</th>
+    <th style="width: 11%;">Numarası</th>
+    <th style="width: 30%;">Adı Soyadı</th>
+    <th style="width: 26%;">İlgili Yönetmelik Maddesi</th>
+    <th style="width: 18%;">Kurul Karar Tarihi</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td style="text-align: center;">{{ forloop.counter }}</td>
+    <td>{{ row.class_label }}</td>
+    <td>{{ row.student_number }}</td>
+    <td>{{ row.full_name }}</td>
+    <td>{{ row.regulation|default:'md. 161' }}</td>
+    <td>{% if row.awarded_at %}{{ row.awarded_at|date:'d.m.Y' }}{% else %}—{% endif %}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="6" class="muted" style="text-align: center;">Belge verilen öğrenci bulunmuyor.</td></tr>
+  {% endfor %}
+</table>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ committee_chair_name|default:'……………………' }}</div>
+      <div class="role">Ödül-Disiplin Kurulu Başkanı</div>
+    </td>
+    {% for m in members %}
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ m.member_name }}</div>
+      <div class="role">Üye{% if m.title %} ({{ m.title }}){% endif %}</div>
+    </td>
+    {% endfor %}
+  </tr>
+</table>
+{% endblock %}

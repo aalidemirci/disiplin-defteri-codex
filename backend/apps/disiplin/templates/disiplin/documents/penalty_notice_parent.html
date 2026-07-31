@@ -1,0 +1,100 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-15 Veliye Disiplin Cezası Tebliği — kanonik metinle birebir
+(data/sablonlar/disiplin-kurulu/form-15-...md); ön-doldurulmuş resmî yazı, modern
+tasarım (Tur 100, md. 169/5). Sorumlu veli (PRIMARY) ön-doldurulur; adres modelde
+tutulmaz → elle. Antet shared (Kaymakamlık ev stili). Form-14 (öğrenci) ayrı belge.{% endcomment %}
+{% block content %}
+<div class="doc-title">{% if decision.penalty_type == 'NO_PENALTY' %}VELİYE DİSİPLİN KURULU KARARI TEBLİĞİ{% else %}VELİYE DİSİPLİN CEZASI TEBLİĞİ{% endif %}</div>
+<div class="doc-subtitle">Form-15 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169/5</div>
+
+{% comment %}Tebliğ Tarihi ELLE (Tur 181, Talep 1d) — PTT/elden tebligat günü belirsiz.
+Karar no/tarih sistemden. "İtiraz için son gün" çıkarıldı.{% endcomment %}
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Karar No</td><td>{{ decision.decision_no|default:'………' }}</td></tr>
+  <tr><td class="label">Karar Tarihi</td><td>{% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Tebliğ Tarihi</td><td>…/…/202…</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Disiplin kurulu kararı tebliği ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ parent.full_name|default:'……………………………' }}</strong>{% if parent.kinship_display %}<br>
+  ({{ parent.kinship_display }}){% endif %}
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong> hakkında …/…/202… tarihinde meydana gelen ve tutanak
+  altına alınan disiplin olayı ile ilgili olarak yapılan inceleme ve değerlendirme sonucunda;
+  öğrencinin savunması alınmış, olayla ilgili bilgi ve belgeler incelenmiştir.
+</p>
+
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı ile
+  {% if decision.penalty_type == 'NO_PENALTY' %}öğrenciniz hakkında
+  "<strong>Ceza verilmesine yer olmadığına</strong>" karar verilmiştir
+  ({{ statute_label }}). İşbu yazı ile tarafınıza resmî olarak tebliğ edilmektedir.{% else %}Millî
+  Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin {{ statute_label }} hükmü uyarınca öğrencinize
+  "<strong>{% if decision %}{{ decision.get_penalty_type_display }}{% endif %}{% if decision.suspension_days %}
+  ({{ decision.suspension_days }} gün){% endif %}</strong>" cezası verilmiştir. Verilen disiplin
+  cezası, kararın kesinleşmesinden sonra e-Okul sistemine işlenecek olup işbu yazı ile
+  tarafınıza resmî olarak tebliğ edilmektedir.{% endif %}
+</p>
+
+{% if decision and decision.penalty_type != 'NO_PENALTY' %}
+<p class="para">
+  Disiplin cezası verilmesine sebep olmuş bir fiil veya davranışın bir öğretim yılı içerisinde
+  tekrarında veya aynı cezayı gerektiren farklı bir fiil veya davranışın gerçekleşmesinde aynı
+  yönetmeliğin <strong>MADDE 166</strong> gereği, bir derece ağır ceza uygulanacaktır.
+</p>
+{% endif %}
+{% if decision and decision.penalty_type != 'NO_PENALTY' %}
+{% comment %}md. 169/3 itiraz CEZALARA karşıdır; ceza-dışı kararda basılmaz (Tur 181).{% endcomment %}
+<p class="para">
+  Bu karara karşı, cezanın tebliğini izleyen <strong>5 (beş) iş günü</strong> içinde
+  okul müdürlüğü kanalıyla yazılı olarak itiraz edebilirsiniz (md. 169/3).
+</p>
+{% endif %}
+
+<p class="para">
+  Öğrencimizin eğitim hayatının sağlıklı bir şekilde devam edebilmesi adına gerekli rehberlik
+  ve iş birliğinin önem arz ettiğini bilgilerinize sunar, gereğini rica ederim.
+</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="name">{% if committee %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% endif %}</div>
+      <div class="line"></div>
+      <div class="role">Tebliğ Eden — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">
+        Tebellüğ Alan Veli — Adı Soyadı · T.C. Kimlik No · Öğrenci ile Yakınlığı · Tebliğ Tarihi · İmza
+      </div>
+    </td>
+  </tr>
+</table>
+{% comment %}Tebellüğ şerhi (Tur 218, talep 7): veli beyanı basılı metin yerine
+velinin EL YAZISIYLA yazacağı boşluk; altta örnek şerh metni ipucu.{% endcomment %}
+<div class="section">
+  <div class="section-title">TEBELLÜĞ ŞERHİ <span style="font-weight: normal; font-size: 8.5pt; color: #64748b;">(Veli tarafından el yazısı ile doldurulur.)</span></div>
+  <div class="field-box" style="min-height: 2.5cm;"></div>
+</div>
+<p class="muted">
+  Örnek şerh: "Velisi bulunduğum öğrenciye verilen disiplin cezasına ilişkin tebliğ
+  yazısını okudum, içeriğini anladım ve bir suretini elden teslim aldım."
+</p>
+{% endblock %}

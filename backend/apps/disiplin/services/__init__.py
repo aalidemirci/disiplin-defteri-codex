@@ -1,0 +1,136 @@
+"""Disiplin servis katmanı — iş mantığı + transaction sınırları (OYS cephe deseni).
+
+OYS `ogrenci_isleri/services` paketinden temizlenerek taşındı (tasarım §4.4):
+`_audit_write` + bildirim emit'leri + rol/izin kontrolleri SİLİNDİ (tek
+kullanıcılı authsuz program); iş kuralları ve doğrulamalar AYNEN.
+"""
+
+from apps.disiplin.services.cases import (
+    add_attachment,
+    add_event,
+    close_case,
+    create_case,
+    delete_attachment,
+    generate_case_no,
+    revert_stage,
+    update_case,
+    update_guidance_assignee,
+)
+from apps.disiplin.services.committee import (
+    add_committee_member,
+    create_committee,
+    record_meeting,
+    remove_committee_member,
+    set_committee_chair,
+)
+from apps.disiplin.services.council import (
+    create_council_meeting,
+    delete_council_meeting,
+    prefill_attendees,
+    update_council_meeting,
+)
+from apps.disiplin.services.decisions import (
+    confirm_e_school_entry,
+    delete_decision,
+    file_appeal,
+    forward_appeal,
+    notify_decision,
+    record_decision,
+    record_principal_review,
+    resolve_appeal,
+    restore_decision,
+    set_decision_approval,
+    update_decision,
+)
+from apps.disiplin.services.documents import (
+    delete_document,
+    log_generated_document,
+    reorder_documents,
+    restore_document,
+    update_document,
+)
+from apps.disiplin.services.honors import (
+    add_general_assembly_member,
+    add_honor_board_member,
+    approve_honor_proposal_by_principal,
+    award_honor_certificate,
+    create_honor_board,
+    end_general_assembly_membership,
+    propose_honor_certificate,
+    recommend_honor_certificate,
+    reject_honor_certificate,
+    reject_honor_proposal_by_principal,
+    remove_honor_board_member,
+    set_honor_board_chair,
+    set_honor_board_substitute_chair,
+)
+from apps.disiplin.services.participants import (
+    add_participant,
+    issue_warning,
+    remove_participant,
+)
+from apps.disiplin.services.precautions import (
+    approve_extension,
+    create_extension,
+    create_precaution,
+    extend_precaution,
+    lift_precaution,
+)
+
+__all__ = [
+    "add_attachment",
+    "add_committee_member",
+    "add_event",
+    "add_general_assembly_member",
+    "add_honor_board_member",
+    "add_participant",
+    "approve_extension",
+    "approve_honor_proposal_by_principal",
+    "award_honor_certificate",
+    "close_case",
+    "confirm_e_school_entry",
+    "create_case",
+    "create_committee",
+    "create_council_meeting",
+    "create_extension",
+    "create_honor_board",
+    "create_precaution",
+    "delete_attachment",
+    "delete_council_meeting",
+    "delete_decision",
+    "update_document",
+    "restore_document",
+    "reorder_documents",
+    "log_generated_document",
+    "delete_document",
+    "end_general_assembly_membership",
+    "extend_precaution",
+    "file_appeal",
+    "forward_appeal",
+    "generate_case_no",
+    "issue_warning",
+    "lift_precaution",
+    "notify_decision",
+    "prefill_attendees",
+    "propose_honor_certificate",
+    "recommend_honor_certificate",
+    "record_decision",
+    "record_meeting",
+    "record_principal_review",
+    "reject_honor_certificate",
+    "reject_honor_proposal_by_principal",
+    "remove_committee_member",
+    "remove_honor_board_member",
+    "remove_participant",
+    "resolve_appeal",
+    "restore_decision",
+    "revert_stage",
+    "set_committee_chair",
+    "set_decision_approval",
+    "update_case",
+    "set_honor_board_chair",
+    "set_honor_board_substitute_chair",
+    "update_council_meeting",
+    "update_decision",
+    "update_guidance_assignee",
+]

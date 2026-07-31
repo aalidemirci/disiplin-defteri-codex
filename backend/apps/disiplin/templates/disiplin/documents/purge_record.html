@@ -1,0 +1,103 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 157/7 İMHA TUTANAĞI (F5-D2, tasarım §4.6).
+
+DİKKAT: bu formun data/sablonlar altında KANONİK bir MEB örneği YOKTUR; içerik
+md. 157/7-d tam metninden (docs/mevzuat/) türetilmiştir. Resmî bir form örneği
+elde edilirse kanonik metinle değiştirilmelidir.
+
+Tutanak, imha edilen kayıtların KALICI TEK İZİDİR: uyarı kayıtları, uyarı yazısı
+kütük satırları ve yalnız uyarıyla kapanmış Dal A dosyaları geri dönüşsüz
+silindikten sonra geriye yalnızca bu PDF kalır. Bu yüzden künye + mevzuat
+dayanağı + imha edilen kayıtların listesi + imza yerleri zorunludur.
+
+text-transform:uppercase KULLANILMAZ (base.html notu — WeasyPrint Türkçe "i").
+{% endcomment %}
+{% block content %}
+<div class="doc-title">İMHA TUTANAĞI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-d</div>
+
+<table class="info">
+  <tr><td class="label">İmha Tarihi</td><td>{{ purge_date|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">İmha Kapsamı</td><td>{{ scope_label }}</td></tr>
+  {% if transfer_date %}
+  <tr><td class="label">Nakil Tarihi</td><td>{{ transfer_date|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Yasal İmha Son Günü</td>
+    <td>{{ purge_deadline|date:'d.m.Y' }} (nakil tarihi + 5 iş günü — md. 157/7-d)</td>
+  </tr>
+  {% endif %}
+  <tr><td class="label">Mevzuat Dayanağı</td><td>md. 157/7-d</td></tr>
+</table>
+
+<p class="para" style="margin-top: 12pt;">
+  Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin <strong>157 nci maddesinin
+  yedinci fıkrasının (d) bendi</strong> uyarınca, yazılı uyarı ve veli görüşmesine ilişkin
+  belgelerin ders yılı sonunda ya da öğrencinin nakil olduğu tarihten itibaren beş iş günü
+  içinde imha edilmesi gerekmektedir. Yazılı uyarı bir <strong>disiplin cezası değildir</strong>
+  (md. 157/7) ve öğrencinin siciline işlenmez; bu bilgiler e-Okul sistemine de girilmez
+  (md. 157/7-ç). Bu hüküm gereğince aşağıda dökümü verilen kayıtlar
+  <strong>{{ purge_date|date:'d.m.Y' }}</strong> tarihinde imha edilmiştir.
+</p>
+
+<div class="section">
+  <div class="section-title">İMHA EDİLEN KAYITLAR</div>
+</div>
+<table class="doc-table">
+  <tr>
+    <th style="width: 7%; text-align: center;">Sıra</th>
+    <th style="width: 33%;">Öğrencinin Adı Soyadı</th>
+    <th style="width: 20%;">Dosya No</th>
+    <th style="width: 15%;">Tarih</th>
+    <th style="width: 25%;">İmha Edilen Kayıtlar</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td style="text-align: center; color: #64748b;">{{ forloop.counter }}</td>
+    <td>{{ row.student_name }}</td>
+    <td>{{ row.case_no }}</td>
+    <td>{{ row.record_date|date:'d.m.Y' }}</td>
+    <td>{{ row.detail }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="5" class="muted" style="text-align: center;">İmha edilen kayıt yok.</td></tr>
+  {% endfor %}
+</table>
+
+<table class="info flush">
+  <tr><td class="label">İmha Edilen Dosya Sayısı</td><td>{{ totals.cases }}</td></tr>
+  <tr><td class="label">İmha Edilen Uyarı Kaydı</td><td>{{ totals.warnings }}</td></tr>
+  <tr><td class="label">İmha Edilen Evrak Kütük Satırı</td><td>{{ totals.documents }}</td></tr>
+</table>
+
+<p class="para">
+  İşbu tutanak, yukarıda dökümü verilen kayıtların geri dönüşsüz biçimde imha edildiğini
+  belgelemek üzere düzenlenmiş ve birlikte imza altına alınmıştır. Kurul kararına bağlanmış
+  (md. 163-170) disiplin dosyaları bu imhanın <strong>kapsamı dışındadır</strong>.
+</p>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="name">……………………………</div>
+      <div class="role">Düzenleyen — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="name">……………………………</div>
+      <div class="role">Öğrenci İşleri</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="name">{{ principal_name|default:'……………………………' }}</div>
+      <div class="role">Okul Müdürü</div>
+    </td>
+  </tr>
+</table>
+
+<p class="muted" style="margin-top: 10pt;">
+  Not: Bu tutanak, MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-d hükmünden türetilmiştir;
+  resmî MEB form örneğine dayanmaz. Kayıtlar silindiğinden bu belge tek kalıcı izdir —
+  dosyalanarak saklanmalıdır.
+</p>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-18 İl/İlçe İtiraz Yazısı — okul müdürlüğünden üst kurula itiraz sevk
+yazısı (md. 169/2-3). Karar + veli itiraz dilekçesi (DisciplineAppeal) ön-doldurulur;
+olay özeti `decision.penalty_detail`'den. Tur 217: örnek okul formundaki sabit
+"Okuldan Kısa Süreli Uzaklaştırma" metni gerçek ceza türüne, itiraz mercii ve onay
+makamı md. 169/2-3 bentlerine (kınama/kısa süreli→ilçe, okul değiştirme→il, örgün
+dışı→üst kurul) bağlandı. Muhatap merci satırı elle netleştirilir.{% endcomment %}
+{% block content %}
+<div class="doc-title">DİSİPLİN CEZASI İTİRAZI HAKKINDA</div>
+<div class="doc-subtitle">Form-18 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169/3</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Disiplin Cezası İtirazı Hakkında ({{ student.full_name }})</td>
+  </tr>
+  <tr>
+    <td class="label">İlgi</td>
+    <td class="narr">a) {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihli ve {{ decision.decision_no|default:'………' }} sayılı Okul Öğrenci Ödül ve Disiplin Kurulu Kararı
+b) {{ appeal.filed_by_name|default:'[Veli Ad Soyad]' }}'nın {% if appeal %}{{ appeal.filed_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihli itiraz dilekçesi
+c) MEB Ortaöğretim Kurumları Yönetmeliği Madde 169</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt; text-align: center;">
+  <strong>……………… İL / İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
+  <span class="muted" style="font-style: normal;">(Ortaöğretim Şubesi)</span>
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} öğrencisi {{ student.student_number }} numaralı
+  <strong>{{ student.full_name }}</strong> hakkında,
+  <em>{{ decision.penalty_detail|default:'[disipline konu olan olayın kısa özeti]' }}</em>
+  nedeniyle İlgi (a) karar ile
+  "{% if decision %}{{ decision.get_penalty_type_display }}{% else %}…………………{% endif %}"
+  cezası verilmiş ve söz konusu karar
+  {% if decision.penalty_type == 'SCHOOL_CHANGE' %}ilçe öğrenci disiplin kurulunun
+  onayıyla (md. 169/2-b){% elif decision.penalty_type == 'EXPULSION' %}il öğrenci
+  disiplin kurulunun onayıyla (md. 169/2-c){% else %}tarafımdan onaylanarak
+  (md. 169/2-a){% endif %} kesinleşmiştir.
+</p>
+
+<p class="para">
+  İlgili ceza, …/…/202… tarihinde öğrenci velisine usulüne uygun olarak tebliğ edilmiştir.
+  Öğrenci velisi {{ appeal.filed_by_name|default:'……………………' }}, yönetmeliğin 169. maddesinin
+  3. fıkrası uyarınca yasal süresi (5 iş günü) içerisinde İlgi (b) dilekçe ile söz konusu cezaya
+  itiraz etmiştir.
+</p>
+
+<p class="para">
+  {% if decision.penalty_type == 'SCHOOL_CHANGE' %}Yönetmeliğin 169. maddesi 3. fıkrası
+  (b) bendi uyarınca; "Okul değiştirme cezasına itiraz il öğrenci disiplin kurulunca"
+  {% elif decision.penalty_type == 'EXPULSION' %}Yönetmeliğin 169. maddesi 3. fıkrası
+  (c) bendi uyarınca; "Örgün eğitim dışına çıkarma cezasına itiraz öğrenci üst disiplin
+  kurulunca"
+  {% else %}Yönetmeliğin 169. maddesi 3. fıkrası (a) bendi uyarınca; "Kınama ve okuldan
+  kısa süreli uzaklaştırma cezalarına itiraz ilçe öğrenci disiplin kurulunca"
+  {% endif %}değerlendirildiğinden, itiraz dilekçesi ve disiplin dosyası ekte sunulmuştur.
+</p>
+
+<p class="para">
+  Yapılan incelemede disiplin sürecinin usulüne uygun yürütüldüğü, cezanın fiil ile orantılı
+  olduğu değerlendirilmektedir.
+</p>
+
+<p class="para">Bilgilerinizi ve gereğini arz ederim.</p>
+
+<div class="signature">
+  <div class="date">{{ generated_at|date:'d.m.Y' }}</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<p class="para" style="margin-top: 18pt;"><strong>Ek:</strong> Ekleri elden teslim edilecektir.</p>
+{% endblock %}

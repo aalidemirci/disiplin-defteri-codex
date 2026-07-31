@@ -1,0 +1,58 @@
+{% extends "documents/base.html" %}
+{% comment %}Dizi Pusulası — dosyanın fihristi/kapağı (Tur 104; kategori gruplama Tur 140).
+Evrakları KATEGORİ başlıkları altında (İfadeler / Bilgi Alma / Tebliğler …) sırayla,
+her ana evrağın altında girintili ALT evraklarıyla listeler. Katılımcı belgelerinde
+ad = "kimden" (source_label: source_name); diğerlerinde sade başlık. Belge/Karar No
+sütunu kaldırıldı (Talep 2). `categories` = documents.categorized_documents(timeline).
+Kendini listelemez (kapak). Sayfa sayıları kütükten; toplam altbilgide.{% endcomment %}
+{% block content %}
+<div class="doc-title">DİZİ PUSULASI</div>
+<div class="doc-subtitle">Disiplin Dosyası Evrak Listesi</div>
+
+<table class="info">
+  <tr><td class="label">Dosya No</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Dilekçe Tarihi</td><td>{{ case.petition_date|date:'d.m.Y' }}</td></tr>
+</table>
+
+<table class="doc-table">
+  <tr>
+    <th style="width: 9%; text-align: center;">Sıra</th>
+    <th style="width: 64%;">Belgenin adı</th>
+    <th style="width: 19%;">Tarih</th>
+    <th style="width: 8%; text-align: center;">Sayfa</th>
+  </tr>
+  {% for category in categories %}
+  <tr>
+    <td colspan="4" style="font-weight: bold; background-color: #f1f5f9;">{{ forloop.counter }}. {{ category.label }}</td>
+  </tr>
+  {% for doc in category.documents %}
+  <tr>
+    <td style="text-align: center; color: #64748b;">{{ forloop.parentloop.counter }}.{{ forloop.counter }}</td>
+    <td>{% if doc.source_label %}{{ doc.source_label }}{% if doc.source_name %}: {{ doc.source_name }}{% endif %}{% else %}{{ doc.title }}{% endif %}</td>
+    <td>{{ doc.generated_on|date:'d.m.Y' }}</td>
+    <td style="text-align: center;">{{ doc.page_count }}</td>
+  </tr>
+  {% for sub in doc.sub_documents.all %}
+  <tr>
+    <td style="text-align: center; color: #94a3b8;">{{ forloop.parentloop.parentloop.counter }}.{{ forloop.parentloop.counter }}.{{ forloop.counter }}</td>
+    <td style="padding-left: 22pt; color: #334155;">↳ {% if sub.source_label %}{{ sub.source_label }}{% if sub.source_name %}: {{ sub.source_name }}{% endif %}{% else %}{{ sub.title }}{% endif %}</td>
+    <td style="color: #334155;">{{ sub.generated_on|date:'d.m.Y' }}</td>
+    <td style="text-align: center; color: #334155;">{{ sub.page_count }}</td>
+  </tr>
+  {% endfor %}
+  {% endfor %}
+  {% empty %}
+  <tr><td colspan="4" class="muted" style="text-align: center;">Dosyada evrak yok.</td></tr>
+  {% endfor %}
+</table>
+
+<p class="para">İşbu dizi pusulası, dosyadaki evrakın toplam {{ total_pages }} sayfadan
+ibaret olduğunu gösterir.</p>
+
+<div class="signature">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ compiler_name|default:'……………………………' }}</div>
+  <div class="role">{{ compiler_role|default:'Düzenleyen / Okul Müdürü' }}</div>
+</div>
+{% endblock %}

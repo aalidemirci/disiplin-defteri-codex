@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Okul Öğrenci Ödül ve Disiplin Kurulu — Sene Başı Hazırlık ve Bilgilendirme Notu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15233B;
+    --ink-soft:#33414f;
+    --teal:#0F6E7E;
+    --teal-deep:#0A4F5C;
+    --teal-tint:#E4EEF0;
+    --amber:#B9781A;
+    --amber-tint:#F6ECDC;
+    --paper:#EEF2F3;
+    --surface:#FFFFFF;
+    --line:#D3DDE0;
+    --line-strong:#B9C6CA;
+    --muted:#5D6E75;
+    --c-kinama:#2F8B7C;
+    --c-uzak:#B9781A;
+    --c-okul:#BB571F;
+    --c-orgun:#97231F;
+    --shadow:0 1px 2px rgba(21,35,59,.04),0 8px 30px rgba(21,35,59,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Source Serif 4",Georgia,serif;
+    font-size:17px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:940px;margin:0 auto;padding:0 22px 80px}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    background:
+      radial-gradient(1200px 420px at 82% -10%,rgba(185,120,26,.30),transparent 60%),
+      linear-gradient(150deg,var(--teal-deep) 0%,#0c5e6c 48%,var(--teal) 100%);
+    color:#EAF4F5;
+    position:relative;
+    overflow:hidden;
+    border-bottom:5px solid var(--amber);
+  }
+  .hero-inner{max-width:940px;margin:0 auto;padding:54px 22px 46px;position:relative;display:grid;grid-template-columns:1fr 150px;gap:30px;align-items:center}
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    text-transform:uppercase;
+    letter-spacing:.22em;
+    font-size:11.5px;
+    font-weight:500;
+    color:#9FD3D9;
+    margin:0 0 16px;
+  }
+  .hero h1{
+    font-family:"Libre Franklin",sans-serif;
+    font-weight:800;
+    font-size:clamp(27px,4.4vw,40px);
+    line-height:1.08;
+    letter-spacing:-.012em;
+    margin:0 0 14px;
+    color:#fff;
+  }
+  .hero .lead{
+    font-size:17.5px;
+    color:#CFE6E9;
+    max-width:54ch;
+    margin:0;
+  }
+  .compass-wrap{display:flex;justify-content:center;align-items:center}
+  .compass{width:148px;height:148px;animation:fadeUp .9s ease both .15s}
+  .meta{
+    margin-top:30px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px 14px;
+    grid-column:1 / -1;
+  }
+  .meta .chip{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;
+    letter-spacing:.02em;
+    background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.22);
+    color:#E7F4F5;
+    padding:6px 12px;
+    border-radius:2px;
+  }
+  .meta .chip b{color:#fff;font-weight:600}
+
+  /* ---------- TOC ---------- */
+  .toc{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:4px;
+    box-shadow:var(--shadow);
+    margin:-30px 0 46px;
+    padding:22px 26px;
+    position:relative;
+    z-index:3;
+  }
+  .toc h2{
+    font-family:"Libre Franklin",sans-serif;
+    font-size:12px;text-transform:uppercase;letter-spacing:.16em;
+    color:var(--teal);margin:0 0 14px;font-weight:700;
+  }
+  .toc ol{margin:0;padding:0;list-style:none;columns:2;column-gap:34px}
+  .toc li{break-inside:avoid;margin:0 0 7px;font-size:15px}
+  .toc a{color:var(--ink-soft);text-decoration:none;display:flex;gap:10px;align-items:baseline;padding:2px 0;border-bottom:1px dotted transparent}
+  .toc a:hover{color:var(--teal);border-bottom-color:var(--line-strong)}
+  .toc .n{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--amber);min-width:20px;font-weight:600}
+
+  /* ---------- SECTIONS ---------- */
+  section{margin:0 0 14px;scroll-margin-top:20px}
+  .sec-head{display:flex;align-items:baseline;gap:16px;margin:46px 0 10px;padding-bottom:12px;border-bottom:2px solid var(--ink)}
+  .sec-head .num{
+    font-family:"IBM Plex Mono",monospace;
+    font-weight:600;font-size:14px;color:#fff;
+    background:var(--teal);
+    padding:4px 9px;border-radius:3px;flex:none;line-height:1.2;
+    align-self:center;
+  }
+  .sec-head h2{
+    font-family:"Libre Franklin",sans-serif;
+    font-weight:700;font-size:clamp(20px,2.6vw,25px);
+    letter-spacing:-.01em;margin:0;color:var(--ink);line-height:1.15;
+  }
+  p{margin:0 0 14px}
+  .sec-body > p:first-child{margin-top:4px}
+  strong{color:var(--ink);font-weight:600}
+  a.inl{color:var(--teal);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+
+  /* legal reference chips */
+  .ref{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.80em;font-weight:500;
+    background:var(--teal-tint);color:var(--teal-deep);
+    padding:1px 6px;border-radius:3px;white-space:nowrap;
+    border:1px solid #cfe1e3;
+  }
+  .ref.rk{background:var(--amber-tint);color:#7d5210;border-color:#e8d6b8}
+
+  ul.clean{margin:6px 0 18px;padding:0;list-style:none}
+  ul.clean li{position:relative;padding:4px 0 4px 26px;margin:0}
+  ul.clean li::before{
+    content:"";position:absolute;left:4px;top:13px;width:8px;height:8px;
+    background:var(--teal);transform:rotate(45deg);border-radius:1px;
+  }
+  ul.clean li.amber::before{background:var(--amber)}
+
+  /* callout */
+  .callout{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-left:4px solid var(--amber);
+    border-radius:4px;padding:16px 20px;margin:20px 0;
+    box-shadow:var(--shadow);
+  }
+  .callout.teal{border-left-color:var(--teal)}
+  .callout .k{
+    font-family:"Libre Franklin",sans-serif;font-weight:700;
+    font-size:12px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--amber);margin:0 0 6px;display:block;
+  }
+  .callout.teal .k{color:var(--teal)}
+  .callout p:last-child{margin-bottom:0}
+
+  /* figure / svg */
+  figure{margin:24px 0;background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);overflow:hidden}
+  figure .fig-title{
+    font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:13px;
+    letter-spacing:.04em;color:var(--ink);
+    padding:13px 20px;border-bottom:1px solid var(--line);
+    background:#FAFCFC;display:flex;align-items:center;gap:9px;
+  }
+  figure .fig-title .dot{width:9px;height:9px;background:var(--teal);transform:rotate(45deg);flex:none}
+  figure .svgbox{padding:24px 20px;display:block;overflow-x:auto}
+  figure svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  figcaption{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);padding:0 20px 15px;line-height:1.5}
+
+  /* tables */
+  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow)}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;background:var(--surface);min-width:640px}
+  thead th{
+    background:var(--ink);color:#EAF1F2;
+    font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:12px;
+    text-transform:uppercase;letter-spacing:.05em;
+    text-align:left;padding:11px 14px;vertical-align:bottom;
+  }
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+  tbody tr:nth-child(even){background:#F8FAFB}
+  tbody tr:last-child td{border-bottom:none}
+  td .who{font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:13px;color:var(--ink)}
+  .when{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--teal-deep);font-weight:500}
+
+  /* checklist */
+  .checkgroup{margin:18px 0}
+  .checkgroup h3{
+    font-family:"Libre Franklin",sans-serif;font-weight:700;font-size:15px;
+    color:var(--ink);margin:22px 0 4px;display:flex;align-items:center;gap:10px;
+  }
+  .checkgroup h3 .tag{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    background:var(--teal);color:#fff;width:24px;height:24px;border-radius:3px;
+    display:inline-flex;align-items:center;justify-content:center;flex:none;
+  }
+  .checklist{list-style:none;margin:8px 0 4px;padding:0}
+  .checklist li{
+    display:flex;gap:12px;align-items:flex-start;
+    padding:9px 12px;border:1px solid var(--line);border-radius:4px;
+    background:var(--surface);margin:0 0 7px;
+  }
+  .checklist input[type=checkbox]{
+    appearance:none;-webkit-appearance:none;flex:none;
+    width:19px;height:19px;margin:2px 0 0;border:2px solid var(--line-strong);
+    border-radius:3px;cursor:pointer;position:relative;background:#fff;transition:.15s;
+  }
+  .checklist input[type=checkbox]:checked{background:var(--teal);border-color:var(--teal)}
+  .checklist input[type=checkbox]:checked::after{
+    content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;
+    border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(43deg);
+  }
+  .checklist input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .checklist .txt{font-size:15px;line-height:1.5}
+  .checklist label{cursor:pointer}
+
+  /* divider with compass needle */
+  .needle-div{display:flex;align-items:center;gap:14px;margin:40px 0 0;color:var(--line-strong)}
+  .needle-div::before,.needle-div::after{content:"";height:1px;background:var(--line);flex:1}
+  .needle-div svg{width:18px;height:18px;flex:none;opacity:.6}
+
+  /* footer */
+  footer{margin-top:54px;border-top:3px solid var(--ink);padding-top:26px}
+  footer h2{font-family:"Libre Franklin",sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--teal);margin:0 0 14px;font-weight:700}
+  .src{font-size:14px;color:var(--ink-soft);margin:0 0 12px;padding-left:22px;position:relative}
+  .src::before{content:"§";position:absolute;left:0;top:0;color:var(--amber);font-weight:700;font-family:"Libre Franklin",sans-serif}
+  .disclaimer{margin-top:22px;font-size:12.5px;color:var(--muted);font-family:"IBM Plex Mono",monospace;line-height:1.6;background:var(--surface);border:1px dashed var(--line-strong);border-radius:4px;padding:14px 16px}
+
+  /* print toolbar */
+  .toolbar{position:fixed;right:18px;bottom:18px;z-index:50}
+  .toolbar button{
+    font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:13px;
+    background:var(--ink);color:#fff;border:none;border-radius:40px;
+    padding:11px 20px;cursor:pointer;box-shadow:0 6px 20px rgba(21,35,59,.25);display:flex;align-items:center;gap:8px;
+  }
+  .toolbar button:hover{background:var(--teal-deep)}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  @media (max-width:680px){
+    body{font-size:16px}
+    .hero-inner{grid-template-columns:1fr;gap:18px}
+    .compass-wrap{justify-content:flex-start;order:-1}
+    .compass{width:96px;height:96px}
+    .toc ol{columns:1}
+    .sec-head{gap:11px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;scroll-behavior:auto}
+  }
+  @media print{
+    :root{--paper:#fff}
+    body{background:#fff;font-size:11.5pt}
+    .toolbar,.toc{display:none}
+    .wrap{padding:0;max-width:100%}
+    .hero{border-bottom:3px solid var(--amber)}
+    .hero-inner{padding:22px 0}
+    section,figure,.tbl-scroll,.callout,.checklist li{break-inside:avoid}
+    .sec-head{margin-top:24px}
+    a.inl,.toc a{text-decoration:none;color:inherit}
+    figure,.callout,.checklist li,.tbl-scroll,.toc{box-shadow:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="hero-inner">
+    <div>
+      <p class="eyebrow">Sene Başı Hazırlık &amp; Planlama Notu</p>
+      <h1>Okul Öğrenci Ödül ve<br>Disiplin Kurulu</h1>
+      <p class="lead">Öğretim yılı başında kurulun oluşturulması, sene başı toplantısının yürütülmesi ve önleyici disiplin sürecinin planlanması için mevzuata dayalı bilgilendirme ve yol haritası.</p>
+    </div>
+    <div class="compass-wrap" aria-hidden="true">
+      <!-- Compass signature (rehberlik / yönlendirme) -->
+      <svg class="compass" viewBox="0 0 200 200" role="img" aria-label="Pusula">
+        <circle cx="100" cy="100" r="92" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+        <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,.30)" stroke-width="1.4"/>
+        <g stroke="rgba(255,255,255,.55)" stroke-width="1.4">
+          <line x1="100" y1="20" x2="100" y2="34"/>
+          <line x1="100" y1="166" x2="100" y2="180"/>
+          <line x1="20" y1="100" x2="34" y2="100"/>
+          <line x1="166" y1="100" x2="180" y2="100"/>
+        </g>
+        <g stroke="rgba(255,255,255,.28)" stroke-width="1">
+          <line x1="143" y1="57" x2="135" y2="65"/>
+          <line x1="57" y1="57" x2="65" y2="65"/>
+          <line x1="143" y1="143" x2="135" y2="135"/>
+          <line x1="57" y1="143" x2="65" y2="135"/>
+        </g>
+        <!-- needle -->
+        <polygon points="100,32 112,100 100,90 88,100" fill="#F2C879"/>
+        <polygon points="100,168 112,100 100,110 88,100" fill="#EAF4F5"/>
+        <polygon points="32,100 100,112 90,100 100,88" fill="rgba(234,244,245,.55)"/>
+        <polygon points="168,100 100,112 110,100 100,88" fill="rgba(234,244,245,.55)"/>
+        <circle cx="100" cy="100" r="6.5" fill="#0A4F5C" stroke="#fff" stroke-width="2"/>
+        <text x="100" y="16" fill="#EAF4F5" font-family="IBM Plex Mono,monospace" font-size="13" font-weight="600" text-anchor="middle">K</text>
+      </svg>
+    </div>
+    <div class="meta">
+      <span class="chip"><b>Okul:</b> [Okul Adı]</span>
+      <span class="chip"><b>Öğretim Yılı:</b> [2026–2027]</span>
+      <span class="chip"><b>Belge Tarihi:</b> [GG.AA.YYYY]</span>
+      <span class="chip"><b>Hazırlayan:</b> Müdür Yardımcısı (Kurul Başkanı)</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ TOC ============ -->
+  <nav class="toc" aria-label="İçindekiler">
+    <h2>İçindekiler</h2>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>Amaç ve Kapsam</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Yasal Dayanak</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Kurulun Oluşumu ve Üyeleri</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Kurulun Görevleri</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Önleyici Disiplin ve Kök Değerler</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Disiplin Süreci ve Yasal Süreler</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Cezalar ve Davranış Puanı</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Sene Başı Toplantısı — Gündem</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Hazırlık Kontrol Listesi</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>Çalışma Takvimi ve Paydaşlar</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 01 ============ -->
+  <section id="s1">
+    <div class="sec-head"><span class="num">01</span><h2>Amaç ve Kapsam</h2></div>
+    <div class="sec-body">
+      <p>Bu belge; ortaöğretim kurumlarında öğretim yılı başında <strong>Okul Öğrenci Ödül ve Disiplin Kurulu</strong>nun (yaygın adıyla “disiplin kurulu”) mevzuata uygun biçimde oluşturulması, ilk dönem toplantısının yürütülmesi ve okulun önleyici disiplin sürecinin planlanması amacıyla hazırlanmıştır.</p>
+      <p>İçerik; kurulun üyeleri ve görevleri, disiplin süreci ve yasal süreler, ceza türleri ile davranış puanı uygulaması, sene başı toplantısı için önerilen gündem, bir <strong>hazırlık kontrol listesi</strong> ve paydaşların eklendiği bir <strong>çalışma takvimi</strong>ni kapsar. Tüm bölümler Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği ile Önleyici Disiplin Uygulamaları Öğretmen Rehber Kitabı’na dayandırılmıştır.</p>
+      <div class="callout teal">
+        <span class="k">Kısaca</span>
+        <p>Kurul, müdürün görevlendireceği bir müdür yardımcısının başkanlığında çalışır; üyeleri <strong>her ders yılının ilk ayı içinde</strong> belirlenir ve kurul <strong>dönem başlarında</strong> toplanarak okulun disiplin açısından genel durumunu değerlendirir. <span class="ref">MADDE 185</span> <span class="ref">MADDE 188</span> <span class="ref">MADDE 189/f</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 ============ -->
+  <section id="s2">
+    <div class="sec-head"><span class="num">02</span><h2>Yasal Dayanak</h2></div>
+    <div class="sec-body">
+      <p>Sürecin tamamı aşağıdaki mevzuat ve kılavuzlara dayanır. Belge boyunca ilgili madde numaraları <span class="ref">MADDE</span> biçiminde, rehber kitap referansları ise <span class="ref rk">Rehber Kitap</span> biçiminde gösterilmiştir.</p>
+      <ul class="clean">
+        <li><strong>Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği</strong> — öncelikle “Öğrenci Davranışları, Ödül ve Disipline İlişkin Hükümler” kısmı <span class="ref">MADDE 157</span> ve “Kurullar” bölümleri <span class="ref">MADDE 176</span>–<span class="ref">206</span>.</li>
+        <li><strong>Önleyici Disiplin Uygulamaları Öğretmen Rehber Kitabı</strong> (MEB Ortaöğretim Genel Müdürlüğü) — pozitif/önleyici disiplin, önleyici disiplin ekibi, okul ve sınıf kuralları, kök değerler. <span class="ref rk">Rehber Kitap</span></li>
+        <li class="amber"><strong>1739 sayılı Millî Eğitim Temel Kanunu</strong> — kök değerlerin ve genel amaçların dayanağı (Md. 2).</li>
+        <li class="amber"><strong>6698 sayılı Kişisel Verilerin Korunması Kanunu</strong> — öğrenci kişisel verilerinin işlenmesinde esas alınır.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 03 ============ -->
+  <section id="s3">
+    <div class="sec-head"><span class="num">03</span><h2>Kurulun Oluşumu, Başkanı ve Üyeleri</h2></div>
+    <div class="sec-body">
+      <p>Kurul; bir başkan ve dört asıl üyeden oluşur. Öğretmen üyeler <strong>her ders yılının ilk ayı içinde öğretmenler kurulunca gizli oyla</strong> seçilir. Oyların eşitliği hâlinde seçim yenilenir; eşitlik bozulmazsa kıdemli öğretmen seçilmiş sayılır. <span class="ref">MADDE 185</span></p>
+
+      <figure>
+        <div class="fig-title"><span class="dot"></span>Şekil 1 — Kurulun Yapısı ve Katılımcılar</div>
+        <div class="svgbox">
+          <svg viewBox="0 0 760 430" role="img" aria-label="Kurul yapısı şeması">
+            <defs>
+              <style>
+                .bx{fill:#fff;stroke:#0F6E7E;stroke-width:1.6;rx:6}
+                .lbl{font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:14px;fill:#15233B}
+                .sub{font-family:"IBM Plex Mono",monospace;font-size:11px;fill:#5D6E75}
+                .ttl{font-family:"Libre Franklin",sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;fill:#0F6E7E;text-transform:uppercase}
+                .ln{stroke:#B9C6CA;stroke-width:1.4;fill:none}
+              </style>
+            </defs>
+
+            <!-- Başkan -->
+            <rect x="280" y="16" width="200" height="62" rx="6" fill="#0A4F5C" stroke="#0A4F5C"/>
+            <text x="380" y="40" text-anchor="middle" font-family="Libre Franklin,sans-serif" font-weight="700" font-size="14.5" fill="#fff">BAŞKAN</text>
+            <text x="380" y="59" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" fill="#CFE6E9">Müdürün görevlendirdiği Müdür Yrd.</text>
+            <text x="380" y="72" text-anchor="middle" class="sub" fill="#9FD3D9">MADDE 188</text>
+
+            <!-- connectors to 4 -->
+            <path class="ln" d="M380 78 V100 H110 V120"/>
+            <path class="ln" d="M380 100 H300 V120"/>
+            <path class="ln" d="M380 100 H490 V120"/>
+            <path class="ln" d="M380 78 V100 H670 V120"/>
+
+            <!-- 4 asıl üye -->
+            <text x="380" y="114" text-anchor="middle" class="ttl">Asıl Üyeler</text>
+            <g>
+              <rect class="bx" x="28" y="122" width="164" height="74" rx="6"/>
+              <text x="110" y="150" text-anchor="middle" class="lbl">Öğretmen Üye</text>
+              <text x="110" y="169" text-anchor="middle" class="sub">Öğretmenler kurulu /</text>
+              <text x="110" y="182" text-anchor="middle" class="sub">gizli oy · 1</text>
+            </g>
+            <g>
+              <rect class="bx" x="218" y="122" width="164" height="74" rx="6"/>
+              <text x="300" y="150" text-anchor="middle" class="lbl">Öğretmen Üye</text>
+              <text x="300" y="169" text-anchor="middle" class="sub">Öğretmenler kurulu /</text>
+              <text x="300" y="182" text-anchor="middle" class="sub">gizli oy · 2</text>
+            </g>
+            <g>
+              <rect class="bx" x="408" y="122" width="164" height="74" rx="6"/>
+              <text x="490" y="146" text-anchor="middle" class="lbl">Onur Kurulu</text>
+              <text x="490" y="163" text-anchor="middle" class="lbl">İkinci Başkanı</text>
+              <text x="490" y="182" text-anchor="middle" class="sub">öğrenci üye</text>
+            </g>
+            <g>
+              <rect class="bx" x="598" y="122" width="164" height="74" rx="6"/>
+              <text x="680" y="150" text-anchor="middle" class="lbl">Öğrenci Velisi</text>
+              <text x="680" y="169" text-anchor="middle" class="sub">Okul-Aile Birliği</text>
+              <text x="680" y="182" text-anchor="middle" class="sub">üyelerinden</text>
+            </g>
+            <text x="380" y="214" text-anchor="middle" class="sub">Asıl üyelerin dayanağı: MADDE 185</text>
+
+            <!-- yedek -->
+            <rect x="28" y="244" width="354" height="74" rx="6" fill="#F8FAFB" stroke="#B9C6CA" stroke-width="1.4" stroke-dasharray="5 4"/>
+            <text x="205" y="268" text-anchor="middle" class="ttl">Yedek Üyeler</text>
+            <text x="205" y="290" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" fill="#33414f">Oy sırasına göre 3 yedek öğretmen +</text>
+            <text x="205" y="307" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" fill="#33414f">onur kurulu ve OAB’den birer yedek</text>
+
+            <!-- oy hakkı olmayan -->
+            <rect x="408" y="244" width="354" height="74" rx="6" fill="#F6ECDC" stroke="#B9781A" stroke-width="1.4"/>
+            <text x="585" y="268" text-anchor="middle" font-family="Libre Franklin,sans-serif" font-weight="700" font-size="11" letter-spacing=".08em" fill="#7d5210">OY HAKKI OLMAYAN KATILIMCILAR</text>
+            <text x="585" y="290" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" fill="#5b3d0a">Rehber öğretmen · Onur kurulu</text>
+            <text x="585" y="307" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" fill="#5b3d0a">başkanı · varsa okul doktoru</text>
+
+            <!-- footer notes -->
+            <text x="28" y="350" font-family="IBM Plex Mono,monospace" font-size="11" fill="#5D6E75">Yedek üyelik: MADDE 186 · Açık üyelik seçimi: MADDE 187</text>
+            <text x="28" y="368" font-family="IBM Plex Mono,monospace" font-size="11" fill="#5D6E75">Katılımcılar (kişisel olmayan genel görüşmeler): MADDE 185/6 · Çağrı: MADDE 190</text>
+            <line x1="28" y1="384" x2="732" y2="384" stroke="#D3DDE0" stroke-width="1"/>
+            <text x="28" y="406" font-family="Source Serif 4,serif" font-size="12.5" fill="#33414f">Toplantı: üyelerin salt çoğunluğuyla yapılır, kararlar oy çoğunluğuyla alınır; çekimser oy kullanılamaz.</text>
+            <text x="28" y="423" font-family="IBM Plex Mono,monospace" font-size="11" fill="#0F6E7E">MADDE 191</text>
+          </svg>
+        </div>
+        <figcaption>Onur kurulu başkanı, ödül ve disiplin kurulu üyelerinin dışında öğretmenler kurulunca seçilir (MADDE 182). Öğretmen üye sayısı yetersizse aday öğretmenler de seçilebilir (MADDE 185/2).</figcaption>
+      </figure>
+
+      <ul class="clean">
+        <li><strong>Başkan:</strong> Müdürün görevlendireceği müdür yardımcısı. Başkan yoksa, müdürün görevlendireceği öğretmen üyelerden biri başkanlık eder. <span class="ref">MADDE 188</span></li>
+        <li><strong>Görev süresi:</strong> Kurulun görevi, yeni kurul oluşuncaya kadar devam eder; üyeler kabul edilebilir bir özür olmadıkça görevden ayrılamaz. <span class="ref">MADDE 185/4</span></li>
+        <li class="amber"><strong>Önemli:</strong> Disiplin konusu davranıştan şikâyetçi olan veya zarar gören üye kurula katılamaz; yerine yedek üye çağrılır. <span class="ref">MADDE 191/2</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 04 ============ -->
+  <section id="s4">
+    <div class="sec-head"><span class="num">04</span><h2>Kurulun Görevleri</h2></div>
+    <div class="sec-body">
+      <p>Kurulun görevleri <span class="ref">MADDE 189</span>’da sayılır. Sene başı toplantısının doğrudan dayanağı, dönem başlarında toplanarak genel durumu değerlendirme görevidir:</p>
+      <ul class="clean">
+        <li>Okulda düzen ve disiplinin sağlanmasıyla ilgili görüşmeler yapar ve kararlar alır.</li>
+        <li>Disipline aykırı davranışların nedenlerini inceler ve bunları ortadan kaldırma yollarını arar.</li>
+        <li>Erdemli davranışlarda bulunan ve başarı gösteren öğrencilerin <strong>ödüllendirilmesine</strong> karar verir.</li>
+        <li class="amber"><strong>Dönem başlarında toplanarak</strong> disiplin yönünden okulun genel durumunu gözden geçirir; alınması gereken tedbirler hakkında kişisel olmayan kararlar alarak okul yönetimine tekliflerde bulunur. <span class="ref">MADDE 189/f</span></li>
+        <li>Okul müdürünün havale ettiği disiplin olaylarını inceler ve karara bağlar.</li>
+        <li class="amber"><strong>Dönem/yıl sonunda</strong> meydana gelen disiplin olaylarını, alınan tedbirleri ve sonuçları rapor hâlinde yönetime bildirir. <span class="ref">MADDE 189/ğ</span></li>
+      </ul>
+      <div class="callout">
+        <span class="k">Sene başı için kritik bağlantı</span>
+        <p>Okulun özelliklerine göre belirlenecek <strong>destekleyici kurallar</strong>, kurulun önerisi ve öğretmenler kurulunun kararına bağlı olarak müdürün onayından sonra uygulamaya konur. Bu nedenle sene başı toplantısı, okul kurallarının gözden geçirilmesi için en uygun zemindir. <span class="ref">MADDE 157/5</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 ============ -->
+  <section id="s5">
+    <div class="sec-head"><span class="num">05</span><h2>Önleyici Disiplin Yaklaşımı ve Kök Değerler</h2></div>
+    <div class="sec-body">
+      <p>Önleyici Disiplin Uygulamaları Öğretmen Rehber Kitabı, disiplini yalnızca olay sonrası bir ceza sistemi olarak değil; beklenen davranışların önceden öğretildiği, üç aşamalı bir süreç olarak ele alır. <span class="ref rk">Rehber Kitap</span></p>
+
+      <figure>
+        <div class="fig-title"><span class="dot"></span>Şekil 2 — Üç Aşamalı Disiplin Yaklaşımı</div>
+        <div class="svgbox">
+          <svg viewBox="0 0 720 300" role="img" aria-label="Üç aşamalı disiplin yaklaşımı">
+            <defs>
+              <style>
+                .stt{font-family:"Libre Franklin",sans-serif;font-weight:700;font-size:17px;fill:#fff}
+                .sds{font-family:"Source Serif 4",serif;font-size:13px;fill:#fff}
+                .stp{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600}
+              </style>
+            </defs>
+            <!-- step 1 -->
+            <rect x="40" y="26" width="600" height="68" rx="6" fill="#0F6E7E"/>
+            <circle cx="80" cy="60" r="20" fill="#0A4F5C"/><text x="80" y="65" text-anchor="middle" class="stp" fill="#9FD3D9">01</text>
+            <text x="118" y="55" class="stt">Önleyici Faaliyetler</text>
+            <text x="118" y="76" class="sds">Olumlu okul iklimi · net kurallar · kök değerler · sosyal-duygusal beceriler</text>
+            <!-- step 2 -->
+            <rect x="90" y="112" width="540" height="68" rx="6" fill="#B9781A"/>
+            <circle cx="130" cy="146" r="20" fill="#8a590f"/><text x="130" y="151" text-anchor="middle" class="stp" fill="#F6ECDC">02</text>
+            <text x="168" y="141" class="stt">Ödül / Ceza</text>
+            <text x="168" y="162" class="sds">Olumlu davranışın ödüllendirilmesi · ihlalde tutarlı yaptırım</text>
+            <!-- step 3 -->
+            <rect x="150" y="198" width="480" height="68" rx="6" fill="#15233B"/>
+            <circle cx="190" cy="232" r="20" fill="#0b1322"/><text x="190" y="237" text-anchor="middle" class="stp" fill="#9FD3D9">03</text>
+            <text x="228" y="227" class="stt">Disiplin Sonrası Müdahaleler</text>
+            <text x="228" y="248" class="sds">İyileştirici-yönlendirici çalışmalar · rehberlik · sosyal sorumluluk</text>
+            <!-- arrows -->
+            <path d="M120 94 L120 112" stroke="#B9C6CA" stroke-width="2" marker-end="url(#ar)"/>
+            <path d="M180 180 L180 198" stroke="#B9C6CA" stroke-width="2" marker-end="url(#ar)"/>
+            <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 z" fill="#B9C6CA"/></marker></defs>
+          </svg>
+        </div>
+        <figcaption>Disiplin sonrası iyileştirici, geliştirici ve yönlendirici çalışmalar ile sosyal sorumluluk programı, okul müdürünce onaylanan plan doğrultusunda yürütülür (MADDE 168/4).</figcaption>
+      </figure>
+
+      <p>Rehber kitap, okul kurallarının <strong>öğrenci, öğretmen ve idare iş birliğiyle</strong> belirlenmesini ve sonuçlarıyla birlikte tüm paydaşlara açıkça duyurulmasını önerir. Önleyici disiplin ekibinde okul müdürü/müdür yardımcısı idari süreçleri yürütür; rehber öğretmen kök değer ve sosyal-duygusal beceri çalışmalarını koordine eder. <span class="ref rk">Rehber Kitap</span></p>
+
+      <div class="callout teal">
+        <span class="k">10 Kök Değer</span>
+        <p>Adalet · Dostluk · Dürüstlük · Öz denetim · Sabır · Saygı · Sevgi · Sorumluluk · Vatanseverlik · Yardımseverlik. Bu değerler hem derslere entegre edilmeli hem de okul ikliminin temel taşları olmalıdır. <span class="ref rk">Rehber Kitap</span> <span class="ref">1739 s. K. Md.2</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 ============ -->
+  <section id="s6">
+    <div class="sec-head"><span class="num">06</span><h2>Disiplin Süreci ve Yasal Süreler</h2></div>
+    <div class="sec-body">
+      <p>Bir disiplin olayı ortaya çıktığında izlenen süreç ve kritik süreler aşağıdaki gibidir. Rehberlik servisi olan okullarda konu öncelikle bu servise intikal ettirilir. <span class="ref">MADDE 192</span></p>
+
+      <figure>
+        <div class="fig-title"><span class="dot"></span>Şekil 3 — Disiplin Süreç Akışı ve Süreler</div>
+        <div class="svgbox">
+          <svg viewBox="0 0 720 470" role="img" aria-label="Disiplin süreç akışı">
+            <defs>
+              <style>
+                .step rect{fill:#fff;stroke:#0F6E7E;stroke-width:1.5}
+                .stxt{font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:13.5px;fill:#15233B}
+                .ssub{font-family:"Source Serif 4",serif;font-size:12px;fill:#5D6E75}
+                .chip{fill:#F6ECDC;stroke:#B9781A;stroke-width:1.2}
+                .ctx{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;fill:#7d5210}
+                .flow{stroke:#B9C6CA;stroke-width:2;fill:none}
+                .mad{font-family:"IBM Plex Mono",monospace;font-size:10.5px;fill:#0F6E7E}
+              </style>
+              <marker id="a2" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 z" fill="#B9C6CA"/></marker>
+            </defs>
+
+            <!-- column of steps -->
+            <g class="step">
+              <rect x="40" y="14" width="420" height="48" rx="5"/>
+              <text x="58" y="34" class="stxt">1 · Olayın öğrenilmesi (doğrudan / ihbar / şikâyet)</text>
+              <text x="58" y="52" class="ssub">Şikâyetler okul müdürlüğüne yazılı bildirilir</text>
+              <text x="468" y="42" class="mad">M.167</text>
+            </g>
+            <path class="flow" d="M250 62 V78" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="80" width="420" height="48" rx="5"/>
+              <text x="58" y="100" class="stxt">2 · Rehberlik servisine intikal · rapor</text>
+              <text x="58" y="118" class="ssub">Öğrencinin kişilik ve sosyal durumuna ilişkin rapor müdüre verilir</text>
+              <text x="468" y="108" class="mad">M.192</text>
+            </g>
+            <path class="flow" d="M250 128 V144" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="146" width="420" height="48" rx="5"/>
+              <text x="58" y="166" class="stxt">3 · Müdürün yönlendirmesi / kurula sevk</text>
+              <text x="58" y="184" class="ssub">Rapor içeriğine göre kurul başkanı bilgilendirilir</text>
+              <text x="468" y="174" class="mad">M.192</text>
+            </g>
+            <path class="flow" d="M250 194 V210" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="212" width="420" height="48" rx="5"/>
+              <text x="58" y="232" class="stxt">4 · İfadelerin alınması · delillerin toplanması</text>
+              <text x="58" y="250" class="ssub">Dosya düzenlenir; tanıkların ifadesine başvurulur</text>
+              <text x="468" y="242" class="mad">M.193</text>
+            </g>
+            <path class="flow" d="M250 260 V276" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="278" width="420" height="48" rx="5"/>
+              <text x="58" y="298" class="stxt">5 · Yazılı / sözlü savunmanın alınması</text>
+              <text x="58" y="316" class="ssub">Çağrı yazılı ve imza karşılığı yapılır</text>
+              <text x="468" y="308" class="mad">M.194</text>
+            </g>
+            <path class="flow" d="M250 326 V342" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="344" width="420" height="48" rx="5" fill="#E4EEF0"/>
+              <text x="58" y="364" class="stxt">6 · Kararın verilmesi (gerekçeli · EK-1)</text>
+              <text x="58" y="382" class="ssub">Karar defterine yazılır, üyelerce imzalanır</text>
+              <text x="468" y="374" class="mad">M.196</text>
+            </g>
+
+            <!-- side time chips -->
+            <rect class="chip" x="500" y="280" width="196" height="58" rx="5"/>
+            <text x="598" y="303" text-anchor="middle" class="ctx">SÜRE</text>
+            <text x="598" y="322" text-anchor="middle" font-family="Source Serif 4,serif" font-size="12.5" fill="#5b3d0a">Kurula gelişten itibaren</text>
+            <text x="598" y="336" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="600" fill="#8a590f">en geç 10 iş günü</text>
+            <path class="flow" d="M500 309 H462" stroke-dasharray="4 3"/>
+
+            <!-- onay -->
+            <path class="flow" d="M250 392 V408" marker-end="url(#a2)"/>
+            <g class="step">
+              <rect x="40" y="410" width="420" height="50" rx="5" fill="#15233B" stroke="#15233B"/>
+              <text x="58" y="431" class="stxt" fill="#fff">7 · Onay → Tebliğ → İtiraz</text>
+              <text x="58" y="449" class="ssub" fill="#CFE6E9">Onay sonrası velilere tebliğ; itiraz 5 iş günü içinde</text>
+              <text x="468" y="440" class="mad" fill="#9FD3D9">M.169</text>
+            </g>
+            <rect class="chip" x="500" y="410" width="196" height="50" rx="5"/>
+            <text x="598" y="431" text-anchor="middle" font-family="Source Serif 4,serif" font-size="12.5" fill="#5b3d0a">İtiraz süresi</text>
+            <text x="598" y="449" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="600" fill="#8a590f">5 iş günü</text>
+          </svg>
+        </div>
+        <figcaption>Süre yetmezse, ara karar ve müdür onayıyla 10 iş günlük süre yalnızca bir kez uzatılabilir (MADDE 192/3). Müdür kararı uygun bulmazsa dosyayı bir kez daha görüşülmek üzere kurula iade eder (MADDE 197).</figcaption>
+      </figure>
+
+      <div class="callout teal">
+        <span class="k">Ceza takdirinde esas</span>
+        <p>Ceza belirlenirken öğrencinin 18 yaşına kadar <strong>çocuk</strong> olduğu, üstün yararı, gizlilik ilkesi, sınıf rehber öğretmeni ve veli görüşleri, öğrencinin kişisel/psikolojik durumu ve daha önce ceza alıp almadığı göz önünde bulundurulur. <span class="ref">MADDE 168</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 ============ -->
+  <section id="s7">
+    <div class="sec-head"><span class="num">07</span><h2>Cezalar ve Davranış Puanı</h2></div>
+    <div class="sec-body">
+      <p>Disiplin cezaları dört türdür ve her birinin onay mercii farklıdır. Her ders yılı başında öğrencilerin davranış puanı <strong>100</strong> olarak başlar; ceza alındığında puan indirilir. <span class="ref">MADDE 163</span> <span class="ref">MADDE 170</span></p>
+
+      <figure>
+        <div class="fig-title"><span class="dot"></span>Şekil 4 — Ceza Türleri, Davranış Puanı ve Onay Mercii</div>
+        <div class="svgbox">
+          <svg viewBox="0 0 720 340" role="img" aria-label="Ceza ve davranış puanı ölçeği">
+            <defs>
+              <style>
+                .cn{font-family:"Libre Franklin",sans-serif;font-weight:700;font-size:14px;fill:#fff}
+                .cp{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;fill:#fff}
+                .ca{font-family:"Source Serif 4",serif;font-size:12px;fill:#33414f}
+                .ch{font-family:"Libre Franklin",sans-serif;font-weight:600;font-size:11px;letter-spacing:.05em;fill:#5D6E75;text-transform:uppercase}
+              </style>
+            </defs>
+            <!-- baseline 100 -->
+            <text x="40" y="30" class="ch">Ders yılı başında davranış puanı</text>
+            <rect x="40" y="38" width="640" height="30" rx="4" fill="#E4EEF0" stroke="#0F6E7E" stroke-width="1.4"/>
+            <text x="360" y="58" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-weight="600" font-size="14" fill="#0A4F5C">100 PUAN</text>
+
+            <!-- rows -->
+            <!-- 1 kınama -->
+            <rect x="40" y="86" width="430" height="40" rx="4" fill="#2F8B7C"/>
+            <text x="58" y="111" class="cn">Kınama</text>
+            <text x="452" y="111" text-anchor="end" class="cp">−10</text>
+            <text x="488" y="105" class="ch">Onay</text>
+            <text x="488" y="121" class="ca">Okul müdürü</text>
+
+            <!-- 2 uzaklaştırma -->
+            <rect x="40" y="134" width="500" height="40" rx="4" fill="#B9781A"/>
+            <text x="58" y="159" class="cn">Okuldan kısa süreli uzaklaştırma</text>
+            <text x="522" y="159" text-anchor="end" class="cp">−20</text>
+            <text x="556" y="153" class="ch">Onay</text>
+            <text x="556" y="169" class="ca">Okul müdürü</text>
+
+            <!-- 3 okul değiştirme -->
+            <rect x="40" y="182" width="560" height="40" rx="4" fill="#BB571F"/>
+            <text x="58" y="207" class="cn">Okul değiştirme</text>
+            <text x="582" y="207" text-anchor="end" class="cp">−40</text>
+            <text x="616" y="201" class="ch">Onay</text>
+            <text x="616" y="217" class="ca">İlçe öğr. disiplin krl.</text>
+
+            <!-- 4 örgün dışı -->
+            <rect x="40" y="230" width="640" height="40" rx="4" fill="#97231F"/>
+            <text x="58" y="255" class="cn">Örgün eğitim dışına çıkarma</text>
+            <text x="662" y="255" text-anchor="end" class="cp">−80</text>
+            <text x="40" y="292" class="ca">Onay mercii: İl öğrenci disiplin kurulu</text>
+
+            <line x1="40" y1="306" x2="680" y2="306" stroke="#D3DDE0"/>
+            <text x="40" y="326" font-family="IBM Plex Mono,monospace" font-size="11" fill="#5D6E75">Onay/itiraz: MADDE 163 &amp; 169 · Puan indirimi: MADDE 170 · Tekrarda bir derece ağır ceza: MADDE 166</text>
+          </svg>
+        </div>
+        <figcaption>Cezalar e-Okul/e-Mesem sistemine işlenir. Davranışları olumlu yönde değişen öğrencilerin cezaları, öğretmenler kurulunca değerlendirilerek kaldırılabilir ve davranış puanı iade edilebilir (MADDE 171).</figcaption>
+      </figure>
+
+      <ul class="clean">
+        <li><strong>İlk kınamada yazılı uyarı usulü:</strong> Daha önce ceza almamış olup kınamayı gerektiren bir davranışı ilk kez yapan öğrenciye; sınıf rehber öğretmeni ile rehber öğretmenin değerlendirmesi sonrası müdür tarafından <strong>yazılı uyarı</strong> yapılır. <span class="ref">MADDE 157/7</span></li>
+        <li>Özel eğitim ihtiyacı olan, zihinsel engeli ya da otizmi olan öğrencilere disiplin cezası uygulanmaz; BEP birimi gerekli tedbirleri alır. <span class="ref">MADDE 168/5</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 08 ============ -->
+  <section id="s8">
+    <div class="sec-head"><span class="num">08</span><h2>Sene Başı Toplantısı — Önerilen Gündem</h2></div>
+    <div class="sec-body">
+      <p>Aşağıdaki gündem, <span class="ref">MADDE 189/f</span> kapsamındaki dönem başı değerlendirmesini ve önleyici disiplin planlamasını kapsar. Toplantı, kurul başkanının yazılı çağrısıyla yapılır. <span class="ref">MADDE 190</span></p>
+      <ul class="clean">
+        <li>Açılış, yoklama ve yeter sayının (salt çoğunluk) tespiti. <span class="ref">MADDE 191</span></li>
+        <li>Kurul üyelerinin tanıtımı; görev ve sorumlulukların paylaşılması. <span class="ref">MADDE 185</span>–<span class="ref">189</span></li>
+        <li>Geçen öğretim yılı disiplin durumu ve sonuç raporunun değerlendirilmesi. <span class="ref">MADDE 189/ğ</span></li>
+        <li>Okul genelinde disiplin açısından genel durumun gözden geçirilmesi; alınacak önleyici tedbirler. <span class="ref">MADDE 189/f</span></li>
+        <li>Önleyici disiplin yaklaşımı, kök değerler ve sosyal-duygusal beceri çalışmalarının planlanması. <span class="ref rk">Rehber Kitap</span></li>
+        <li>Okul/sınıf destekleyici kurallarının görüşülerek müdür onayına sunulmak üzere teklif edilmesi. <span class="ref">MADDE 157/5</span></li>
+        <li>Okul–Öğrenci–Veli Sözleşmesi sürecinin değerlendirilmesi. <span class="ref">MADDE 157/4</span></li>
+        <li>Davranış puanı, ödül ve ceza süreçlerinde iş birliği esasları. <span class="ref">MADDE 159</span>–<span class="ref">172</span></li>
+        <li>Toplantı, çağrı ve karar usullerinin hatırlatılması; karar defteri ve belgeler. <span class="ref">MADDE 190</span>–<span class="ref">196</span></li>
+        <li>Dilek, öneriler ve kapanış.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="needle-div" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><polygon points="12,2 15,12 12,10 9,12" fill="#B9781A"/><polygon points="12,22 15,12 12,14 9,12" fill="#0F6E7E"/><circle cx="12" cy="12" r="2" fill="#15233B"/></svg>
+  </div>
+
+  <!-- ============ 09 ============ -->
+  <section id="s9">
+    <div class="sec-head"><span class="num">09</span><h2>Hazırlık Kontrol Listesi</h2></div>
+    <div class="sec-body">
+      <p>Aşağıdaki maddeler ekranda işaretlenebilir; çıktı alındığında kutucuklar boş gelir. Sıralama, ders yılı başından toplantı sonrasına doğrudur.</p>
+
+      <div class="checkgroup">
+        <h3><span class="tag">A</span>Toplantı Öncesi Hazırlık</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="a1"><label for="a1" class="txt">Toplantı tarihi, saati ve yeri belirlendi; gündem taslağı hazırlandı.</label></li>
+          <li><input type="checkbox" id="a2c"><label for="a2c" class="txt">Geçen öğretim yılına ait disiplin durumu / sonuç raporu temin edildi <span class="ref">MADDE 189/ğ</span>.</label></li>
+          <li><input type="checkbox" id="a3"><label for="a3" class="txt">İlgili mevzuat (Ortaöğretim Kurumları Yönetmeliği) ve Önleyici Disiplin Rehber Kitabı hazır bulunduruldu.</label></li>
+          <li><input type="checkbox" id="a4"><label for="a4" class="txt">Üyelere yazılı toplantı çağrısı yapıldı <span class="ref">MADDE 190</span>.</label></li>
+        </ul>
+      </div>
+
+      <div class="checkgroup">
+        <h3><span class="tag">B</span>Üyelerin Belirlenmesi ve Kurulun Oluşumu</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="b1"><label for="b1" class="txt">Öğretmenler kurulunca <strong>gizli oyla 2 asıl + 3 yedek</strong> öğretmen üye seçildi <span class="ref">MADDE 185</span> <span class="ref">186</span>.</label></li>
+          <li><input type="checkbox" id="b2"><label for="b2" class="txt">Onur kurulu başkanı (öğretmen) öğretmenler kurulunca seçildi <span class="ref">MADDE 182</span>.</label></li>
+          <li><input type="checkbox" id="b3"><label for="b3" class="txt">Onur genel kurulu ve onur kurulu / ikinci başkan seçimleri tamamlandı <span class="ref">MADDE 178</span>–<span class="ref">180</span>.</label></li>
+          <li><input type="checkbox" id="b4"><label for="b4" class="txt">Okul-Aile Birliğince veli üye ve yedeği belirlendi <span class="ref">MADDE 185</span>.</label></li>
+          <li><input type="checkbox" id="b5"><label for="b5" class="txt">Müdür yardımcısı kurul başkanı olarak görevlendirildi; üyeler yazıyla tebliğ edildi <span class="ref">MADDE 188</span>.</label></li>
+        </ul>
+      </div>
+
+      <div class="checkgroup">
+        <h3><span class="tag">C</span>Belge, Kayıt ve Sözleşme</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="c1"><label for="c1" class="txt">Karar defteri ve EK-1 (Okul Öğrenci Ödül ve Disiplin Kurulu Kararı) örnekleri hazırlandı <span class="ref">MADDE 177</span> <span class="ref">196</span>.</label></li>
+          <li><input type="checkbox" id="c2"><label for="c2" class="txt">e-Okul’da tüm öğrencilerin davranış puanının <strong>100</strong> olarak başladığı teyit edildi <span class="ref">MADDE 170</span>.</label></li>
+          <li><input type="checkbox" id="c3"><label for="c3" class="txt">9. sınıf ve yeni/nakil öğrencilerle Okul–Öğrenci–Veli Sözleşmesi imzalandı <span class="ref">MADDE 157/4</span>.</label></li>
+          <li><input type="checkbox" id="c4"><label for="c4" class="txt">Öğrenci kişisel verilerinin işlenmesi KVKK kapsamında düzenlendi <span class="ref">6698 s. K.</span>.</label></li>
+        </ul>
+      </div>
+
+      <div class="checkgroup">
+        <h3><span class="tag">D</span>Toplantı Günü</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="d1"><label for="d1" class="txt">Yoklama alındı, salt çoğunluk sağlandı <span class="ref">MADDE 191</span>.</label></li>
+          <li><input type="checkbox" id="d2"><label for="d2" class="txt">Gündem maddeleri görüşüldü; okulun disiplin açısından genel durumu değerlendirildi <span class="ref">MADDE 189/f</span>.</label></li>
+          <li><input type="checkbox" id="d3"><label for="d3" class="txt">Destekleyici okul/sınıf kuralları görüşülüp müdür onayına sunulmak üzere teklif edildi <span class="ref">MADDE 157/5</span>.</label></li>
+          <li><input type="checkbox" id="d4"><label for="d4" class="txt">Önleyici disiplin, kök değer ve sosyal-duygusal beceri planı kararlaştırıldı <span class="ref rk">Rehber Kitap</span>.</label></li>
+        </ul>
+      </div>
+
+      <div class="checkgroup">
+        <h3><span class="tag">E</span>Toplantı Sonrası</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="e1"><label for="e1" class="txt">Kararlar gerekçeli olarak karar defterine yazıldı ve üyelerce imzalandı <span class="ref">MADDE 196</span>.</label></li>
+          <li><input type="checkbox" id="e2"><label for="e2" class="txt">Karar defteri imzalatılıp okul müdürüne sunuldu; saklama düzeni sağlandı <span class="ref">MADDE 196/3</span>.</label></li>
+          <li><input type="checkbox" id="e3"><label for="e3" class="txt">Onaylanan destekleyici kurallar öğrenci ve velilere duyuruldu <span class="ref">MADDE 157</span>.</label></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10 ============ -->
+  <section id="s10">
+    <div class="sec-head"><span class="num">10</span><h2>Çalışma Takvimi ve Paydaşlar</h2></div>
+    <div class="sec-body">
+      <p>Aşağıdaki takvim, öğretim yılı başlangıcına göre <strong>göreceli zaman</strong> ile düzenlenmiştir. Kesin tarihler okulun bağlı olduğu il/ilçe çalışma takvimine göre netleştirilmelidir. “Sorumlu Paydaş” sütunu, her iş için süreci yürütecek tarafları gösterir.</p>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:42px">#</th>
+              <th style="width:150px">Önerilen Zaman</th>
+              <th>Yapılacak İş</th>
+              <th style="width:170px">Sorumlu Paydaş</th>
+              <th style="width:96px">Dayanak</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><span class="when">Ders yılı başlamadan önce</span></td>
+              <td>Toplantı yeri/tarih belirleme, gündem taslağı, karar defteri ve EK-1 formlarının hazırlanması, geçen yıl raporunun gözden geçirilmesi.</td>
+              <td><span class="who">Müdür Yrd. (Başkan)</span>, Yazı İşleri</td>
+              <td><span class="ref">M.190</span> <span class="ref">177</span></td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><span class="when">İlk hafta</span></td>
+              <td>Kurul üyeliği seçiminin öğretmenler kurulu gündemine alınması; okul kurallarının öğrencilere duyurulması.</td>
+              <td><span class="who">Okul Müdürü</span>, Müdür Yrd.</td>
+              <td><span class="ref">M.108</span> <span class="ref">157/3</span></td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td><span class="when">İlk hafta</span></td>
+              <td>9. sınıf ve yeni/nakil öğrencilerle Okul–Öğrenci–Veli Sözleşmesi’nin imzalanması.</td>
+              <td><span class="who">Okul Yönetimi</span>, Sınıf Reh. Öğretmenleri, Veliler</td>
+              <td><span class="ref">M.157/4</span></td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><span class="when">İlk hafta–ilk ay</span></td>
+              <td>Onur genel kurulu seçimleri (her şubeden öğrenci) ve onur kurulu / ikinci başkan seçimi.</td>
+              <td><span class="who">Sınıf Reh. Öğretmenleri</span>, Öğrenciler</td>
+              <td><span class="ref">M.178</span>–<span class="ref">180</span></td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td><span class="when">İlk ay içinde (yasal süre)</span></td>
+              <td>Öğretmenler kurulunca gizli oyla 2 asıl + 3 yedek öğretmen üyenin ve onur kurulu başkanının seçilmesi.</td>
+              <td><span class="who">Öğretmenler Kurulu</span></td>
+              <td><span class="ref">M.185</span> <span class="ref">186</span> <span class="ref">182</span></td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td><span class="when">İlk ay içinde</span></td>
+              <td>Okul-Aile Birliğince veli üye ve yedeğinin belirlenmesi.</td>
+              <td><span class="who">Okul-Aile Birliği</span></td>
+              <td><span class="ref">M.185</span> <span class="ref">186</span></td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td><span class="when">Seçimlerin ardından</span></td>
+              <td>Kurulun resmen oluşturulması, başkan görevlendirme onayı ve üyelere yazılı tebliğ.</td>
+              <td><span class="who">Okul Müdürü</span>, Müdür Yrd.</td>
+              <td><span class="ref">M.185</span> <span class="ref">188</span></td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td><span class="when">Dönem başı (ilk ay sonu)</span></td>
+              <td>Sene başı kurul toplantısı: genel durum değerlendirmesi, önleyici tedbirler ve destekleyici kuralların önerilmesi.</td>
+              <td><span class="who">Kurul Başkanı + Üyeler</span> (+ rehber öğretmen, onur kurulu başkanı görüşü)</td>
+              <td><span class="ref">M.189/f</span> <span class="ref">157/5</span></td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td><span class="when">Toplantıdan sonra ≤10 iş günü</span></td>
+              <td>Kararların gerekçeli olarak karar defterine yazılması ve müdüre sunulması.</td>
+              <td><span class="who">Kurul Başkanı</span></td>
+              <td><span class="ref">M.196</span></td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td><span class="when">Ders yılı başı</span></td>
+              <td>Tüm öğrencilerin davranış puanının 100 olarak başlatıldığının e-Okul üzerinden teyidi.</td>
+              <td><span class="who">Müdür Yrd.</span>, Yazı İşleri</td>
+              <td><span class="ref">M.170</span></td>
+            </tr>
+            <tr>
+              <td>11</td>
+              <td><span class="when">Dönem boyunca</span></td>
+              <td>Önleyici disiplin ekibi çalışmaları; kök değer ve sosyal-duygusal beceri programları; sınıf kurallarının yürütülmesi.</td>
+              <td><span class="who">Rehberlik Servisi</span>, Öğretmenler, Müdür Yrd.</td>
+              <td><span class="ref rk">Rehber K.</span> <span class="ref">M.168/4</span></td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td><span class="when">Dönem / yıl sonu</span></td>
+              <td>Disiplin olayları, alınan tedbirler ve sonuçların rapor hâlinde okul yönetimine sunulması.</td>
+              <td><span class="who">Kurul Başkanı</span></td>
+              <td><span class="ref">M.189/ğ</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout teal">
+        <span class="k">Takvime not</span>
+        <p>5. ve 6. sıradaki üye seçimleri <strong>“her ders yılının ilk ayı içinde”</strong> tamamlanmak zorundadır; bu nedenle sene başı toplantısı (8. sıra) bu seçimlerin ardından planlanmalıdır. Bu belgedeki tarih ifadeleri yasal süreleri yansıtır; takvim günleri okulunuzun resmî çalışma takvimine göre uyarlanmalıdır.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <h2>Mevzuat ve Kaynak Künyesi</h2>
+    <p class="src"><strong>Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği</strong> — Öğrenci Davranışları, Ödül ve Disiplin (MADDE 157–172) ve Kurullar (MADDE 176–206).</p>
+    <p class="src"><strong>Önleyici Disiplin Uygulamaları Öğretmen Rehber Kitabı</strong> — <a href="https://ogm.meb.gov.tr/www/onleyici-disiplin-uygulamalari-ogretmen-rehber-kitabi-yayimlandi/icerik/1726">MEB Ortaöğretim Genel Müdürlüğü resmî yayını</a>.</p>
+    <p class="src"><strong>1739 sayılı Millî Eğitim Temel Kanunu</strong> (Md. 2) · <strong>6698 sayılı Kişisel Verilerin Korunması Kanunu</strong>.</p>
+    <div class="disclaimer">
+      Bu belge bilgilendirme ve planlama amaçlıdır; bağlayıcı hüküm değildir. Madde numaraları ve içerikler proje dosyalarındaki metne göre hazırlanmıştır. Uygulamada her zaman yürürlükteki güncel Resmî Gazete metni esas alınmalı, köşeli parantezli alanlar ([Okul Adı], [Öğretim Yılı], [Tarih]) okul bilgileriyle doldurulmalıdır.
+    </div>
+  </footer>
+
+</div>
+
+<div class="toolbar"><button onclick="window.print()" aria-label="Yazdır veya PDF olarak kaydet">⎙ Yazdır / PDF</button></div>
+
+</body>
+</html>

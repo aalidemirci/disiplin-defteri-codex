@@ -1,0 +1,50 @@
+{% extends "documents/base.html" %}
+{% comment %}Onur Belgesi Teklif Formu (md. 161) — öğretmenin çok-öğrencili teklifi.
+Boş (show_proposer=False): elle doldurulacak satırlar + Gerekçe sütunu; teklif eden = alt imza.
+Dolu (show_proposer=True): dijital teklif satırları + per-satır Teklif Eden (Ad Soyad · Rol).
+Mevzuat md. 161 kriterleri aynı sayfada modern 2-sütun ızgarada. "İstek Nedeni" sütunu yok.{% endcomment %}
+{% block content %}
+<div class="doc-title">ONUR BELGESİ TEKLİF FORMU</div>
+<div class="doc-subtitle">{{ school_name }} Müdürlüğüne (Onur Kurulu Başkanlığına)</div>
+
+<p class="para">Aşağıda sınıfı ve isimleri yazılı öğrencilerimizin, MEB Ortaöğretim Kurumları
+Yönetmeliğinin 161. maddesinde belirtilen davranışlarından dolayı &ldquo;Onur Belgesi&rdquo; ile
+ödüllendirilmeleri hususunda gereğini bilgilerinize arz ederim.</p>
+
+<table class="doc-table">
+  <tr>
+    <th style="width: 11%;">Sınıfı</th>
+    <th style="width: 12%;">Numarası</th>
+    <th style="width: {% if show_proposer %}27%{% else %}40%{% endif %};">Adı Soyadı</th>
+    {% if show_proposer %}<th style="width: 25%;">Teklif Eden (Ad Soyad &middot; Rol)</th>{% endif %}
+    <th>Gerekçe (İlgili yönetmelik maddesi)</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td style="height: 22pt;">{{ row.class_label }}</td>
+    <td>{{ row.student_number }}</td>
+    <td>{{ row.full_name }}</td>
+    {% if show_proposer %}<td>{{ row.proposer }}</td>{% endif %}
+    <td>{{ row.justification }}{% if row.regulation %}<br><span class="muted">{{ row.regulation }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="signature">
+  <div class="date">…… / …… / 20……</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ proposer_name|default:'……………………………' }}</div>
+  <div class="role">Adı Soyadı &middot; Branşı &middot; İmza</div>
+</div>
+
+<div class="section" style="margin-top: 16pt;">
+  <div class="section-title">Onur Belgesi Kriterleri — MEB Ortaöğretim Kurumları Yönetmeliği (md. 161)</div>
+  <p style="margin: 5pt 2pt; font-size: 8.5pt; color: #475569; line-height: 1.35;">Okul öğrenci ödül ve
+  disiplin kurulu puan şartına bağlı kalmadan; aşağıdaki davranışlardan bir ya da birkaçını gösteren
+  <strong>davranış puanı indirilmemiş</strong> öğrencileri, öğrenci/öğretmen/okul yönetiminin teklifi ve
+  onur kurulunun uygun görüşü doğrultusunda onur belgesiyle ödüllendirir:</p>
+  <div class="criteria">
+    {% for label in criteria_reference %}<div class="item">{{ label }}</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

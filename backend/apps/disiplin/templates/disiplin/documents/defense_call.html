@@ -1,0 +1,58 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-9 Savunmaya Çağrı (suçlanan) — kanonik metin
+data/sablonlar/disiplin-kurulu/form-09-savunmaya-cagri-suclanan.md; md. 194.
+Tebliğ-tebellüğ imza bloğu (savunma hakkı). Savunmanın alınacağı tarih/saat/yer
+arayüzden GEÇİCİ gelir (DB'ye yazılmaz). Antet shared; unit = kurul.{% endcomment %}
+{% block content %}
+<div class="doc-title">SAVUNMAYA ÇAĞRI</div>
+<div class="doc-subtitle">Form-9 · MEB Ortaöğretim Kurumları Yönetmeliği md. 194</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">Konu</td><td>Öğrencinin Savunmasının Alınması</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ participant.name|default:'…………………………' }}</strong>
+  {% if participant.person_type == 'STUDENT' %}<br>
+  (Okulumuz {{ participant.class_label|default:'……' }} Sınıfı
+  {{ participant.student_number|default:'……' }} Numaralı Öğrencisi){% endif %}
+</p>
+
+<p class="para">
+  Okulumuz öğrencisi olarak hakkınızda yürütülen disiplin soruşturması kapsamında Millî Eğitim
+  Bakanlığı Ortaöğretim Kurumları Yönetmeliği <strong>Madde 194</strong> gereği savunmanız
+  alınacaktır. Savunmanızı yapmak üzere aşağıda belirtilen tarih, saat ve yerde hazır bulunmanız
+  gerekmektedir. Savunmanızı yazılı veya sözlü olarak yapabilirsiniz.
+</p>
+
+<table class="info">
+  <tr>
+    <td class="label">Savunmanın Alınacağı Tarih</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+  <tr><td class="label">Saat</td><td>{{ statement_time|default:'……' }}</td></tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Müdür Yardımcısı Odası' }}</td></tr>
+</table>
+
+<table class="info" style="margin-top: 14pt;">
+  <tr>
+    <td class="label">Tebliğ Eden</td>
+    <td>
+      …/…/202…<br>
+      <strong>{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</strong><br>
+      Disiplin Kurulu Başkanı
+    </td>
+  </tr>
+  <tr>
+    <td class="label">Tebellüğ Eden (Öğrenci)</td>
+    <td>…/…/202…<br>…………………………………………<br>Adı Soyadı – İmza</td>
+  </tr>
+</table>
+
+<p class="muted" style="margin-top: 12pt;">
+  Not: Çağrıya özürsüz gelinmemesi durumunda dosyada bulunan bilgi ve belgelere göre karar
+  verilir (md. 194/3, 195).
+</p>
+{% endblock %}

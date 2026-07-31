@@ -1,0 +1,87 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-17 Veliye Disiplin Cezası Günleri Tebliği — uzaklaştırma gün
+tebliği, veli sürümü (md. 172). Tur 218: yalnız KESİNLEŞMİŞ cezada üretilir
+(generate_document kilidi, talep 9); adres satırı kaldırıldı (PTT tebligatında
+MERNİS'ten gelir, talep 11); tebellüğ şerhi veli el yazısıyla (talep 7); gün
+yazıyla (talep 10). Öğrenci sürümü Form-16 (ayrı belge).{% endcomment %}
+{% block content %}
+<div class="doc-title">VELİYE DİSİPLİN CEZASI GÜNLERİ TEBLİĞİ</div>
+<div class="doc-subtitle">Form-17 · MEB Ortaöğretim Kurumları Yönetmeliği md. 172</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Veliye Disiplin Cezası Günleri Tebliği ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ parent.full_name|default:'……………………………' }}</strong>{% if parent.kinship_display %}<br>
+  ({{ parent.kinship_display }}){% endif %}
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong> hakkında …/…/202… tarihinde meydana gelen ve tutanak
+  altına alınan disiplin olayı ile ilgili olarak yapılan inceleme ve değerlendirme sonucunda;
+  öğrencinin savunması alınmış, olayla ilgili bilgi ve belgeler incelenmiştir. Millî Eğitim
+  Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin ilgili maddeleri uyarınca toplanan Okul Öğrenci
+  Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı ile öğrencinize
+  <strong>{% if decision.suspension_days %}{{ decision.suspension_days }} ({{ suspension_days_text|default:'……' }} gün){% else %}…… (…… gün){% endif %}
+  süreyle okuldan kısa süreli uzaklaştırma cezası</strong> verilmiştir. İşbu ceza, itiraz
+  süresinin dolması / itirazın sonuçlanması ile <strong>kesinleşmiştir</strong> (md. 169/3-4).
+</p>
+
+<p class="para" style="margin-bottom: 2pt;"><strong>Uzaklaştırma Süresi:</strong></p>
+<table class="info flush">
+  <tr><td class="label">Başlangıç Tarihi</td><td>{% if enforcement_start %}{{ enforcement_start|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Bitiş Tarihi</td><td>{% if enforcement_end %}{{ enforcement_end|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Okula Başlama Tarihi</td><td>{% if school_return %}{{ school_return|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+</table>
+
+<p class="para">
+  Belirtilen tarihler arasında öğrenciniz okula devam edemeyecek olup bu süre özürlü
+  devamsızlıktan sayılır. Öğrencinin eğitim kaybı yaşamaması adına ders konularını takip etmesi
+  hususunda gerekli tedbirlerin alınması önem arz etmektedir. Kesinleşen disiplin cezası
+  e-Okul sistemine işlenir (md. 171); işbu yazı ile uygulama tarihleri tarafınıza resmî
+  olarak tebliğ edilmektedir.
+</p>
+
+<p class="para">Bilgilerinize sunar, gereğini rica ederim.</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="name">{% if committee %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% endif %}</div>
+      <div class="line"></div>
+      <div class="role">Tebliğ Eden — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">
+        Tebellüğ Alan Veli — Adı Soyadı · T.C. Kimlik No · Öğrenci ile Yakınlığı · Tebliğ Tarihi · İmza
+      </div>
+    </td>
+  </tr>
+</table>
+{% comment %}Tebellüğ şerhi (Tur 218, talep 7): veli beyanını el yazısıyla yazar.{% endcomment %}
+<div class="section">
+  <div class="section-title">TEBELLÜĞ ŞERHİ <span style="font-weight: normal; font-size: 8.5pt; color: #64748b;">(Veli tarafından el yazısı ile doldurulur.)</span></div>
+  <div class="field-box" style="min-height: 2.5cm;"></div>
+</div>
+<p class="muted">
+  Örnek şerh: "Velisi bulunduğum öğrenciye verilen disiplin cezasının uygulama
+  tarihlerine ilişkin tebliğ yazısını okudum, içeriğini anladım ve bir suretini elden
+  teslim aldım."
+</p>
+{% endblock %}

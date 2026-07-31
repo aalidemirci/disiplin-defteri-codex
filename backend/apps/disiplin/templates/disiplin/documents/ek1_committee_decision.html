@@ -1,0 +1,166 @@
+{% extends "documents/base.html" %}
+{% comment %}EK-1 Okul Öğrenci Ödül ve Disiplin Kurulu Kararı — modern tasarım (Tur 99).
+İçerik MEB yönetmeliği EK-1 formuyla BİREBİR (kanonik: data/sablonlar/disiplin-kurulu/
+ek1-odul-ve-disiplin-kurulu-karari.md). OYS verisinde olmayan öğrenci-bağlam alanları
+(yatılı/başarı/sağlık/aile/çevre…) boş bırakılır → kişisel dosya/rehberlik raporundan
+elle doldurulur. Başlıklar doğrudan büyük harf (Türkçe İ korunur).{% endcomment %}
+{% block content %}
+<div class="doc-title">OKUL ÖĞRENCİ ÖDÜL VE DİSİPLİN KURULU KARARI</div>
+<div class="doc-subtitle">EK-1 · MEB Ortaöğretim Kurumları Yönetmeliği md. 163-170, md. 196</div>
+
+<table class="info">
+  <tr><td class="label">Karar No</td><td>{{ decision.decision_no|default:'' }}</td></tr>
+  <tr>
+    <td class="label">Karar Tarihi</td>
+    <td>{% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% endif %}</td>
+  </tr>
+</table>
+
+<div class="section flow">
+  <div class="section-title">ÖĞRENCİNİN</div>
+  <table class="info flush flow">
+    <tr><td class="label">T.C. Kimlik Numarası</td><td>{{ student.tckn }}</td></tr>
+    <tr><td class="label">Adı Soyadı</td><td>{{ student.full_name }}</td></tr>
+    <tr>
+      <td class="label">Doğum Tarihi</td>
+      <td>{% if student.birth_date %}{{ student.birth_date|date:'d.m.Y' }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td class="label">Sınıfı, alanı/dalı ve okul numarası</td>
+      <td>{{ student.class_label }}{% if student.student_number %} — No: {{ student.student_number }}{% endif %}</td>
+    </tr>
+    <tr><td class="label">Paralı veya parasız yatılı ya da gündüzlü olduğu</td><td class="narr">{{ decision.boarding_status|default:'' }}</td></tr>
+    <tr><td class="label">Başarı durumu</td><td class="narr">{{ decision.academic_standing|default:'' }}</td></tr>
+    <tr><td class="label">Sağlık durumu</td><td class="narr">{{ decision.health_status|default:'' }}</td></tr>
+    <tr><td class="label">Ailesinin ekonomik durumu</td><td class="narr">{{ decision.family_economic_status|default:'' }}</td></tr>
+    <tr><td class="label">Ailesi ile birlikte oturup oturmadığı</td><td class="narr">{{ decision.lives_with_family|default:'' }}</td></tr>
+    <tr><td class="label">Anne-babasının sağ olup olmadığı</td><td class="narr">{{ decision.parents_alive|default:'' }}</td></tr>
+    <tr><td class="label">Anne-babasının öz olup olmadığı</td><td class="narr">{{ decision.parents_biological|default:'' }}</td></tr>
+    <tr><td class="label">Ailesinin yanında okuyup okumadığı</td><td class="narr">{{ decision.studies_near_family|default:'' }}</td></tr>
+    <tr><td class="label">Büyüyüp yetiştiği çevre</td><td class="narr">{{ decision.upbringing_environment|default:'' }}</td></tr>
+    <tr><td class="label">Ailesinin oturduğu yer ve çevresi</td><td class="narr">{{ decision.family_residence_area|default:'' }}</td></tr>
+    <tr>
+      <td class="label">Şimdiye kadar aldığı cezalar ve genel durumu</td>
+      <td class="narr">{{ decision.prior_penalties_summary|default:'' }}{% if decision.psychosocial_summary %}{% if decision.prior_penalties_summary %}
+{% endif %}{{ decision.psychosocial_summary }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td class="label">Cezayı gerektiren davranışının yapıldığı yer ve tarih</td>
+      <td class="narr">{{ decision.incident_place|default:'' }}{% if decision.incident_date %}{% if decision.incident_place %} — {% endif %}{{ decision.incident_date|date:'d.m.Y' }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td class="label">Cezayı gerektiren davranışının çeşidi</td>
+      <td class="narr">{{ decision.penalty_detail|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Cezayı gerektiren davranışının nedeni</td>
+      <td class="narr">{{ case.summary }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section flow">
+  <div class="section-title">OLAYLA İLGİLİ OLARAK</div>
+  <table class="info flush flow">
+    <tr>
+      <td class="label">a) Cezalandırılan öğrencinin ifadesinin özeti</td>
+      <td class="narr">{{ decision.accused_statement_summary|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">b) Tanıkların ifadesinin özeti</td>
+      <td class="narr">{{ decision.witness_statement_summary|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">c) Varsa cezayı gerektiren davranışının tespitine yarayan diğer deliller</td>
+      <td class="narr">{{ decision.other_evidence|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Cezayı hafifleten veya şiddetlendiren nedenler</td>
+      <td class="narr">{{ decision.mitigating_aggravating|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Okul öğrenci ödül ve disiplin kurulunun kanaati</td>
+      <td class="narr">{{ decision.committee_opinion|default:'' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Verilen cezanın çeşidi ve dayandığı yönetmelik maddesi</td>
+      <td>{% if decision %}{{ decision.get_penalty_type_display }} — {{ statute_label }}{% endif %}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section flow">
+  <div class="section-title">OKUL ÖĞRENCİ ÖDÜL VE DİSİPLİN KURULU KARARI</div>
+  <div class="field-box tall">{% if decision %}{{ decision.get_penalty_type_display }} ({{ statute_label }}){% if decision.suspension_days %} — {{ decision.suspension_days }} gün{% endif %}{% endif %}</div>
+</div>
+
+{% if not decision %}
+<p class="muted">Bu dosya için henüz resmî karar girilmemiştir; karar alanları boştur.</p>
+{% endif %}
+
+{% if committee %}
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td><div class="space"></div><div class="line"></div></td>
+    {% endif %}{% endfor %}
+  </tr>
+  <tr>
+    <td>
+      <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
+      <div class="role">Başkan (Müdür Yrd.)</div>
+    </td>
+    {% for m in members %}{% if not m.is_substitute %}
+      <td>
+        <div class="name">{{ m.member_name }}</div>
+        <div class="role">{{ m.title|default:m.get_member_type_display }}</div>
+      </td>
+    {% endif %}{% endfor %}
+  </tr>
+</table>
+{% else %}
+<p class="muted">Disiplin kurulu tanımlı değil; başkan ve üye imza alanları boştur.</p>
+{% endif %}
+
+{% comment %}Okul müdürünün onayı (Tur 218, talep 5 — kullanıcı tasarımı): sistem
+onay-durumundan BAĞIMSIZ; müdür kâğıt üzerinde işaretler. Onay mercii müdür olmayan
+cezalarda (md. 169/2-b/c) "Onaylıyorum" yerine uygun görüşle sevk ifadesi (yalnız
+ceza türünden türer). md. 197: uygun bulmazsa gerekçesiyle kurula iade. NO_PENALTY
+onay/itiraz gerektirmez (Tur 181) → yalnız GÖRÜLMÜŞTÜR.{% endcomment %}
+{% comment %}Tur 220 (talep 2): onay kutusu kurul imza ızgarasından ~3cm aşağıda;
+"ONAYLIYORUM" → "UYGUNDUR"; müdür imza bloğu sayfada ORTALANIR.{% endcomment %}
+<div class="section" style="margin-top: 3cm;">
+  <div class="section-title">OKUL MÜDÜRÜNÜN ONAYI (md. 169/2 · md. 197)</div>
+  <div class="field-box" style="white-space: normal;">
+  {% if decision and decision.penalty_type == 'NO_PENALTY' %}
+    <p style="margin: 0;">GÖRÜLMÜŞTÜR — "Ceza verilmesine yer olmadığına" dair karar;
+    onay ve itiraz gerektirmez (md. 191).</p>
+  {% else %}
+    {% if decision and decision.penalty_type == 'SCHOOL_CHANGE' %}
+    <p style="margin: 0 0 6pt;">☐ Uygun görüşle, onaylanmak üzere <strong>İLÇE ÖĞRENCİ
+    DİSİPLİN KURULUNA</strong> sevkini uygun buluyorum (md. 169/2-b).</p>
+    {% elif decision and decision.penalty_type == 'EXPULSION' %}
+    <p style="margin: 0 0 6pt;">☐ Uygun görüşle, onaylanmak üzere <strong>İL ÖĞRENCİ
+    DİSİPLİN KURULUNA</strong> sevkini uygun buluyorum (md. 169/2-c).</p>
+    {% else %}
+    <p style="margin: 0 0 6pt;">☐ <strong>UYGUNDUR</strong> (md. 169/2-a).</p>
+    {% endif %}
+    {% comment %}Tur 234 (talep 1): "YENİDEN GÖRÜŞÜLMESİNİ İSTİYORUM" →
+    "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" (kullanıcı talebi).{% endcomment %}
+    <p style="margin: 0 0 2pt;">☐ <strong>YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA</strong>
+    (md. 197) — Gerekçe:</p>
+    <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
+    <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
+    <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
+  {% endif %}
+  </div>
+</div>
+
+<div class="signature" style="margin-left: auto; margin-right: auto;">
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+{% endblock %}

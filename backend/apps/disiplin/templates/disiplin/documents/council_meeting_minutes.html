@@ -1,0 +1,144 @@
+{% extends "documents/base.html" %}
+{% comment %}Kurul Toplantı Tutanağı / Karar Defteri (Tur 204, madde j) — md. 184/206.
+İki kurul (Onur md. 180-184 + Ödül-Disiplin md. 185-191) için ortak; başlık/birim
+council_type'a göre (documents.py _COUNCIL_TITLES), madde atıfları da kurul türüne
+göre (`articles` bağlamı — _COUNCIL_ARTICLES, Tur 216). Katılanlar oy hakkı olan üye /
+oy hakkı olmayan davetli ayrı; karar gerekçeli + oy birliği/çoğunluğu (md. 206);
+imza ızgarası başkan + oy hakkı olan üyeler. Dosya görüşme tutanağında
+(CASE_REVIEW, Tur 212) görüşülen dosya + öğrenci-bazlı resmî kararlar (md. 163)
+dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.{% endcomment %}
+{% block content %}
+<div class="doc-title">{{ title }}</div>
+<div class="doc-subtitle">{{ articles.subtitle }}</div>
+
+<table class="info">
+  <tr><td class="label">Toplantı No</td><td>{{ meeting.meeting_no_display }}</td></tr>
+  <tr><td class="label">Toplantı Tarihi</td><td>{{ meeting.meeting_date|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">Karar Esası</td><td>{{ meeting.get_decision_basis_display }}</td></tr>
+  {% if case %}<tr><td class="label">Görüşülen Dosya</td><td>{{ case.case_no }}</td></tr>{% endif %}
+</table>
+
+<div class="section flow">
+  <div class="section-title">GÜNDEM</div>
+  <div class="field-box tall">{{ meeting.agenda|default:'—' }}</div>
+</div>
+
+{% if case_decisions %}
+<div class="section">
+  <div class="section-title">ÖĞRENCİ BAZLI KARARLAR — {{ case.case_no }} SAYILI DOSYA (md. 163)</div>
+  <table class="doc-table">
+    <tr>
+      <th style="width: 6%; text-align: center;">Sıra</th>
+      <th style="width: 28%;">Adı Soyadı</th>
+      <th style="width: 14%;">Sınıfı / No</th>
+      <th style="width: 26%;">Karar (Ceza Türü)</th>
+      <th style="width: 13%;">Karar No</th>
+      <th style="width: 13%;">Karar Tarihi</th>
+    </tr>
+    {% for d in case_decisions %}
+    <tr>
+      <td style="text-align: center;">{{ forloop.counter }}</td>
+      <td>{{ d.full_name }}</td>
+      <td>{{ d.class_label }}{% if d.student_number %} / {{ d.student_number }}{% endif %}</td>
+      <td>{{ d.penalty_display }}</td>
+      <td>{{ d.decision_no|default:'—' }}</td>
+      <td>{{ d.decision_date|date:'d.m.Y' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% for d in case_decisions %}
+  {% if d.penalty_detail %}
+  <p class="para"><strong>{{ d.full_name }} — gerekçe:</strong> {{ d.penalty_detail }}{% if d.statute_label %} <span class="muted">({{ d.statute_label }})</span>{% endif %}</p>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="section">
+  <div class="section-title">KATILANLAR — OY HAKKI OLAN ÜYELER{% if articles.attendees %} ({{ articles.attendees }}){% endif %}</div>
+  <table class="doc-table">
+    <tr>
+      <th style="width: 6%; text-align: center;">Sıra</th>
+      <th style="width: 44%;">Adı Soyadı</th>
+      <th style="width: 50%;">Görevi / Ünvanı</th>
+    </tr>
+    {% for a in voting_members %}
+    <tr>
+      <td style="text-align: center;">{{ forloop.counter }}</td>
+      <td>{{ a.person_name }}{% if a.is_chair %} <strong>(Başkan)</strong>{% endif %}</td>
+      <td>{{ a.title|default:'Üye' }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" class="muted" style="text-align: center;">Oy hakkı olan üye yok.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if invitees %}
+<div class="section">
+  <div class="section-title">OY HAKKI OLMAYAN DAVETLİLER{% if articles.invitees %} ({{ articles.invitees }}){% endif %}</div>
+  <table class="doc-table">
+    <tr>
+      <th style="width: 6%; text-align: center;">Sıra</th>
+      <th style="width: 44%;">Adı Soyadı</th>
+      <th style="width: 50%;">Görevi / Ünvanı</th>
+    </tr>
+    {% for a in invitees %}
+    <tr>
+      <td style="text-align: center;">{{ forloop.counter }}</td>
+      <td>{{ a.person_name }}</td>
+      <td>{{ a.title|default:'Davetli' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="section flow">
+  <div class="section-title">KARAR (Gerekçeli — md. 206)</div>
+  <div class="field-box tall">{{ meeting.decision_text|default:'—' }}</div>
+</div>
+
+<p class="para">İşbu karar, kurul üyelerince
+<strong>{% if meeting.decision_basis == 'UNANIMITY' %}oy birliği{% else %}oy çoğunluğu{% endif %}</strong>
+ile alınmıştır ({{ articles.closing }}).</p>
+
+{% if dissenters %}
+<div class="section">
+  <div class="section-title">KARŞI GÖRÜŞLER (md. 206)</div>
+  {% for a in dissenters %}
+  <p class="para"><strong>{{ a.person_name }}:</strong> {{ a.dissent_note }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if meeting.notes %}
+<div class="section flow">
+  <div class="section-title">AÇIKLAMA</div>
+  <div class="field-box">{{ meeting.notes }}</div>
+</div>
+{% endif %}
+
+<table class="sig-grid">
+  <tr>
+    {% if chair %}
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ chair.person_name }}</div>
+      <div class="role">{{ chair.title|default:'Başkan' }}</div>
+    </td>
+    {% endif %}
+    {% for a in voting_members %}
+    {% if not a.is_chair %}
+    <td>
+      <div class="space"></div>
+      <div class="line"></div>
+      <div class="name">{{ a.person_name }}</div>
+      <div class="role">{{ a.title|default:'Üye' }}</div>
+    </td>
+    {% endif %}
+    {% endfor %}
+  </tr>
+</table>
+{% endblock %}

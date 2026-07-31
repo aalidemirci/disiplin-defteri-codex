@@ -1,0 +1,82 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-16 Öğrenciye Disiplin Ceza Günleri Tebliği — kısa süreli
+uzaklaştırma gün tebliği (md. 172). Tur 218 (talep 9): bu belge ancak ceza
+KESİNLEŞİNCE üretilebilir (generate_document kilidi — md. 169/3-4, 172/2-ç);
+metin de kesinleşme diliyle. Gün sayısı rakam + yazıyla (suspension_days_text,
+talep 10). Veli sürümü Form-17 (ayrı belge).{% endcomment %}
+{% block content %}
+<div class="doc-title">ÖĞRENCİYE DİSİPLİN CEZA GÜNLERİ TEBLİĞİ</div>
+<div class="doc-subtitle">Form-16 · MEB Ortaöğretim Kurumları Yönetmeliği md. 172</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Öğrenciye Disiplin Ceza Günleri Tebliği ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ student.full_name }}</strong><br>
+  ({{ student.class_label }} Sınıfı {{ student.student_number }} Numaralı Öğrencisi)
+</p>
+
+<p class="para">
+  Okul Öğrenci Ödül ve Disiplin Kurulunun
+  {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
+  tarih ve {{ decision.decision_no|default:'………' }} sayılı kararı doğrultusunda, işlemiş
+  olduğunuz disiplin fiili nedeniyle tarafınıza, Millî Eğitim Bakanlığı Ortaöğretim Kurumları
+  Yönetmeliği'nin ilgili maddesi gereğince
+  <strong>{% if decision.suspension_days %}{{ decision.suspension_days }} ({{ suspension_days_text|default:'……' }}){% else %}…… (……){% endif %}
+  gün Kısa Süreli Uzaklaştırma Cezası</strong> verilmiştir. İşbu ceza, itiraz süresinin
+  dolması / itirazın sonuçlanması ile <strong>kesinleşmiştir</strong> (md. 169/3-4).
+</p>
+
+<p class="para" style="margin-bottom: 2pt;">Söz konusu ceza;</p>
+<table class="info flush">
+  <tr><td class="label">Başlangıç Tarihi</td><td>{% if enforcement_start %}{{ enforcement_start|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr><td class="label">Bitiş Tarihi</td><td>{% if enforcement_end %}{{ enforcement_end|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+  <tr>
+    <td class="label">Toplam Gün Sayısı</td>
+    <td>{% if decision.suspension_days %}{{ decision.suspension_days }}{% else %}……{% endif %} iş günü</td>
+  </tr>
+  <tr><td class="label">Okula Başlama Tarihi</td><td>{% if school_return %}{{ school_return|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td></tr>
+</table>
+<p class="para" style="margin-top: 2pt;">olarak uygulanacaktır.</p>
+
+<p class="para">
+  Belirtilen tarihler arasında okulda derslere ve okul faaliyetlerine katılamayacağınız, ancak
+  sınav tarihlerinizin bu süreye rastlaması hâlinde mevzuat hükümlerine göre işlem yapılacağı,
+  okula devam etmediğiniz bu sürelerin özürlü devamsızlıktan sayılacağı; eğitim kaybı
+  yaşamamanız adına ders konularını takip etmeniz hususunda gerekli tedbirlerin alınması önem
+  arz etmektedir.
+</p>
+
+<p class="para">Bilgilerinize tebliğ olunur.</p>
+
+<div class="signature">
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td>
+      <div class="space"></div>
+      <div class="name">{% if committee %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% endif %}</div>
+      <div class="line"></div>
+      <div class="role">Tebliğ Eden — Müdür Yardımcısı</div>
+    </td>
+    <td>
+      <div class="space"></div><div class="line"></div>
+      <div class="role">Tebellüğ Eden (Öğrenci) — Adı Soyadı · İmza · Tarih</div>
+    </td>
+  </tr>
+</table>
+<p class="muted">
+  Açıklama: Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği uyarınca şahsıma verilen
+  disiplin cezasına ilişkin yukarıdaki tebliğ yazısını okudum, içeriğini anladım ve bir suretini
+  elden teslim aldım.
+</p>
+{% endblock %}
