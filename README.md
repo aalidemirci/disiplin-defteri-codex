@@ -114,9 +114,10 @@ bildirimi ve şikâyetler yukarıdaki e-posta adresine iletilebilir.
 
 ## Proje web sitesi
 
-Tanıtım, güvenli indirme, kullanım kılavuzu, sürüm notları ve KVKK
-bilgilendirmesini içeren statik site `website/` klasöründedir. Site ziyaretçi
-analizi, reklam, çerez, iletişim formu veya üçüncü taraf istemci betiği kullanmaz.
-`main` dalındaki site değişiklikleri GitHub Pages iş akışıyla yayımlanır; en yeni
-sürüm ve izin verilen kurulum dosyaları GitHub Releases kaydından yayın sırasında
-alınır.
+Tanıtım, güvenli indirme, kullanım kılavuzu ve KVKK bilgilendirmesi
+[okulapp.org/disiplin-defteri](https://okulapp.org/disiplin-defteri/) adresinde
+yayımlanır (MEB ağında GitHub engelli olduğu için GitHub Pages'ten taşındı;
+kaynağı ayrı bir depodadır). Site ziyaretçi analizi, reklam, çerez, iletişim
+formu veya üçüncü taraf istemci betiği kullanmaz. Bu depodaki `website/`
+klasörü yalnız eski GitHub Pages bağlantılarını okulapp.org'a yönlendiren stub
+sayfaları içerir.

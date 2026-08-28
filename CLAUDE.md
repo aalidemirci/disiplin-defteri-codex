@@ -93,11 +93,11 @@ desktop/            main.py (kilit→yedek→migrate→waitress thread→pencere
 packaging/          pyinstaller/ (ortak spec + rthook + fonts.conf), windows/ (build.ps1,
                     dll_kapanisi.py, .iss, NOTLAR.md), linux/ (build.sh, .deb, kurulum provası),
                     fontlar/ (DejaVu 4 kesim), ikonlar/
-website/            GitHub Pages mirası statik site (tanıtım/kılavuzun tek kaynağı
-                    artık okulapp.org — §5)
+website/            okulapp.org'a yönlendiren stub sayfalar (eski GitHub Pages
+                    bağlantıları kırılmasın diye — tek kaynak okulapp.org, §5)
 docs/               tasarim/ (331 satır genel tasarım), mevzuat/, kurulum.md, teknik-borc.md
 scripts/gates.sh    tek komutluk kapı koşusu
-.github/workflows/  paketleme.yml + pages.yml (Pages mirası)
+.github/workflows/  paketleme.yml + pages.yml (yönlendirme stub'larını yayımlar)
 ```
 
 **Açılış sırası (kritik, `desktop/main.py`):** tek-instance kilidi → günlük
@@ -347,7 +347,7 @@ Etki × yoğunluk sırasıyla:
 | `docs/kurulum.md` | Son kullanıcı kurulum + sorun giderme + çıkış kodları. |
 | `packaging/README.md` | Paket üreten kişi için dosya haritası ve komutlar. |
 | `packaging/windows/NOTLAR.md` | Windows'a özgü doğrulanmamış varsayımlar (W1-W9). |
-| `README.md` | Genel tanıtım; güncel. Yalnız "Proje web sitesi" bölümü GitHub Pages düzenini anlatır — tanıtım/kılavuzun tek kaynağı artık okulapp.org'dur (§5). |
+| `README.md` | Genel tanıtım; güncel. |
 
 ---
 
