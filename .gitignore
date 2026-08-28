@@ -28,6 +28,7 @@ dist/
 
 # ---------- Claude / Superpowers ----------
 .superpowers/
+.claude/settings.local.json
 
 # ---------- Veri / Medya (KVKK — kişisel veri repoya girmez) ----------
 data/

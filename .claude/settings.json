@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose build:*)",
+      "Bash(docker compose run --rm backend:*)",
+      "Bash(docker compose run --rm frontend:*)",
+      "Bash(bash scripts/gates.sh)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git fetch:*)"
+    ]
+  }
+}
