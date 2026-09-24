@@ -584,11 +584,15 @@ function DecisionCard({
       {panel === null &&
         (canApprove || canNotify || canEditNarrative || canManageAppeal || canEditDelete) && (
           <div className="mt-3 flex flex-wrap gap-1">
-            {canApprove && d.approval_status !== "REJECTED" && !d.notified_at && (
-              <Button variant="text" icon="approval" onClick={() => setPanel("approve")}>
-                {d.approval_status === "REFERRED" ? "İlçe kurulu kararı" : "Onay durumu"}
-              </Button>
-            )}
+            {/* Tebliğden sonra onay değişmez; eski sürümde onaysız tebliğ edilmiş karar
+                için onayın sonradan girilebilmesi açık kalır. */}
+            {canApprove &&
+              d.approval_status !== "REJECTED" &&
+              (!d.notified_at || d.approval_status !== "APPROVED") && (
+                <Button variant="text" icon="approval" onClick={() => setPanel("approve")}>
+                  {d.approval_status === "REFERRED" ? "İlçe kurulu kararı" : "Onay durumu"}
+                </Button>
+              )}
             {/* md. 197: "bir defa daha görüşülmek üzere" — yalnız bir kez iade. */}
             {canApprove && d.approval_status === "PENDING" && !d.returned_at && !d.notified_at && (
               <Button variant="text" icon="undo" onClick={() => setPanel("return")}>

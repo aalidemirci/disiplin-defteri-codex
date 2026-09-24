@@ -181,7 +181,7 @@ her biri gerekçesiyle kayıt altındadır.
 | `AuditLog`/`AccessLog` yok | Tek kullanıcı; kalıcı iz = evrak kütüğü. AuditLog bilinçli kaldırıldı. | §3.4, borç K5 |
 | Aşama geri alma / erken kapatma **gerekçesi saklanmıyor** | Yukarıdakinin sonucu. UI artık saklandığı vaadini vermiyor. | borç K5 |
 | İmha aracında `hard_delete()` | Soft-delete'in **bilinçli istisnası** — md. 157/7 uyarı belgelerinin imhası. Kalıcı iz olarak imha tutanağı PDF'i üretilir; öğrenci PROTECT. | §4.6 |
-| Evrak PDF'lerinin **içeriği saklanmıyor** | Yalnız `GeneratedDocument` kütüğü tutulur (canonical_order ×10). İfade/savunma gövdeleri "no-trace". | §3.2 |
+| Üretilen evrak PDF'i veritabanında (`GeneratedDocument.stored_pdf_b64`) saklanıyor | Kütükten yeniden indirme için bilinçli. İfade/savunma/davranış özeti metinleri de bu PDF'in içindedir; alan `EncryptedTextField` — parola kuruluysa şifreli. (Eski "no-trace" ifadesi artık geçerli DEĞİL; KVKK değerlendirmesi buna göre.) | `models/document_log.py` |
 | Dosya ekleri (`MEDIA_ROOT`) şifrelenmiyor | Yalnız alan şifrelemesi seçildi; UI bunu açıkça söylüyor. Tam koruma = BitLocker/LUKS. | borç K2 |
 | Şifreli kipte `uq_student_tckn_alive` etkisiz | Fernet deterministik değil; blind index bilinçli alınmadı (≤1000 kayıt). Tekillik serviste: `selectors.find_student_by_tckn`. | borç K1, §10.2 |
 | Şifreleme anahtarı süreç ömrü boyunca bellekte | Bağlanacak oturum kimliği yok; her istekte Argon2id ~0,2 sn maliyet olurdu. Kilitleme = kapatma veya açık "Kilitle". | `shared/crypto.py` başlığı |
@@ -223,8 +223,11 @@ metne uygulanmaz.
 ### 7.3 İş günü vs takvim günü
 Yasal sürelerin **hepsi iş günü** (`shared/working_days.py` + `is_working_day`
 predicate enjeksiyonu). `timedelta(days=N)` ile süre hesabı gören her yer kusur
-adayıdır. Ayrıca: **ara tatiller `Holiday` tablosuna girilmez** — girilirse yasal
-süre hesabı bozulur (sihirbazda açık uyarı var).
+adayıdır. Ayrıca: **ara tatil resmî tatil olarak girilmez** — girilirse yasal
+süre hesabı bozulur. Kasım/nisan ara tatili yalnız `HolidayKind.SCHOOL_BREAK`
+türüyle girilir: `is_working_day`'i etkilemez, yalnız `is_school_open_day`'de
+(uzaklaştırma günleri, md. 172/1-a "okulun açık olduğu sürede") atlanır.
+Yasal süre → `is_working_day`; cezanın fiilen çekildiği gün → `is_school_open_day`.
 
 ### 7.4 Evrak/şablon paritesi
 `documents.py::_student_context` anahtarları (`full_name, tckn, birth_date,
@@ -254,19 +257,31 @@ bunu derlenmiş CSS'e karşı doğruluyor — bu testi bozacak sınıf ekleme.
 
 Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdur.
 
+- **Ceza kararı yalnız disiplin kuruluna sevkli, açık dosyada** girilir (md. 163/2).
+- **Onaysız karar ceza değildir** (md. 163/2, 169/2): tebliğ edilemez, kesinleşmez,
+  davranış puanı düşürmez. Hukuken var sayılan cezalar tek yerden:
+  `selectors.penalties_in_force` (onaylı + cezalı + bozulmamış + md. 171/2 ile
+  kaldırılmamış) — puan, triaj ve EK-1 "önceki cezalar" bunu kullanır.
+- **İtiraz mercii onaylayan merciin bir üstüdür** (md. 169/4):
+  `services.decisions.appeal_authority_for_decision` — md. 197 ile ilçeye giden
+  kararda il kurulu. "Değiştirildi" (REDUCED) sonucu cezayı ve puanı günceller.
 - **Müdür kararı tek seçimdir:** yazılı uyarı / onur kuruluna sevk / disiplin
   kuruluna sevk. Yalnız uyarı → dosya otomatik `CLOSED`.
-- **Müdür uyarısı (md. 157/7) ceza değildir**, davranış puanı düşürmez; tekrarı
-  triajı kurula yönlendirir (md. 166).
+- **Müdür uyarısı (md. 157/7) ceza değildir**, davranış puanı düşürmez; geçmişte
+  ceza/uyarı (uyarıyla kapanmış Dal A dosyası dahil) varsa yazılı uyarı yolu
+  override'sız kapalıdır (md. 157/7-e, 166).
 - Dosya başına öğrenciye **tek canlı karar**. Puan ve onay/itiraz mercii cezadan
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
-- **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle iade eder /
-  (iade sonrası) ilçeye sevk eder.
-- **İtiraz:** tebliğsiz itiraz olmaz; süre dışı itiraz da kaydedilir (işaretli).
+- **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
+  iade eder / (iade sonrası) ilçeye sevk eder.
+- **İtiraz:** tebliğsiz itiraz olmaz; süre dışı itiraz da kaydedilir (işaretli);
+  sonuçlanmış itiraza yeniden itiraz ve sonuç değişikliği yok (md. 169/4).
   `OVERTURNED` → `REJECTED` + puan iadesi. Okul değiştirme cezasında süresinde
   itiraz → uygulama bekletilir.
-- **Kapanış uygunluğu (`close_eligible`):** md. 197 askısı ve `PENDING` itiraz yok
+- **Kapanış uygunluğu (`close_eligible`):** onaylı karar + md. 197 askısı ve `PENDING` itiraz yok
   + tebliğ yapılmış + itiraz süresi dolmuş + 5 iş günü tampon.
+  Kural hem "Kapat" ucunda hem CLOSED aşama olayında uygulanır; uygun değilse
+  yalnız gerekçeli override (iz kaydedilir).
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.

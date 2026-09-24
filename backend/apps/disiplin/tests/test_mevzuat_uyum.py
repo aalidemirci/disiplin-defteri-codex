@@ -587,3 +587,18 @@ def test_yanlis_uyari_duzeltilince_dal_b_olur() -> None:
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
     assert doc_engine._case_referred_to_committee(case) is True
+
+
+def test_eski_surumde_onaysiz_teblig_edilmis_karar_sonradan_onaylanabilir() -> None:
+    """Geçiş: eski sürüm onaysız tebliğe izin veriyordu — onay sonradan girilebilmeli."""
+    case, sid = _case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
+    )
+    DisciplineDecision.objects.filter(pk=d.pk).update(
+        notified_at=date(2026, 5, 21), appeal_deadline=date(2026, 5, 28)
+    )
+    d.refresh_from_db()
+    assert selectors.decision_is_final(d, today=date(2026, 7, 1))[0] is False
+    services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 5, 20))
+    assert selectors.decision_is_final(d, today=date(2026, 7, 1))[0] is True
