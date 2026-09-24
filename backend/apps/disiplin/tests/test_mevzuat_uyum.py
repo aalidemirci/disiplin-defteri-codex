@@ -561,3 +561,29 @@ def test_ayni_tckn_ile_ikinci_ogrenci_eklenemez() -> None:
     persons.create_student(first_name="A", last_name="B", tckn="10000000146")
     with pytest.raises(ValueError, match="T.C. kimlik"):
         persons.create_student(first_name="C", last_name="D", tckn="10000000146")
+
+
+# ---------------------------------------------------------------------------
+# Dal düzeltme — yanlış "yazılı uyarı" geri alınıp kurula sevk edilince Dal B olur
+# ---------------------------------------------------------------------------
+def test_yanlis_uyari_duzeltilince_dal_b_olur() -> None:
+    case, _ = _case(refer=False)
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 19),
+        override=True,
+        override_reason="x",
+        principal_decisions=[PrincipalDecision.WRITTEN_WARNING],
+    )
+    case.refresh_from_db()
+    services.revert_stage(case, target_stage=CaseStage.PETITION, reason="Yanlış seçim")
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 20),
+        override=True,
+        override_reason="Düzeltme",
+        principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
+    )
+    assert doc_engine._case_referred_to_committee(case) is True

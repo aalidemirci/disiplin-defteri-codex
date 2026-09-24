@@ -563,7 +563,8 @@ function PrecautionRow({
 
       {canManage && isActive && panel === null && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {p.extension_count < 2 && (
+          {/* Toplam 10 iş günü dolduysa uzatma her seferinde reddedilirdi — düğme gizlenir. */}
+          {p.extension_count < 2 && p.requested_days < 10 && (
             <Button variant="text" icon="more_time" onClick={() => setPanel("extend")}>
               Uzat
             </Button>
@@ -823,7 +824,8 @@ function ExtendPrecautionForm({
   return (
     <PanelShell title="Tedbiri uzat" icon="more_time">
       <p className="text-body-small text-on-surface-variant">
-        Toplam süre 10 iş gününü aşamaz; en fazla iki kez uzatılabilir (md. 175/2). Mevcut:{" "}
+        Uzatma, haklı ve zorlayıcı sebeplerin devamında Millî Eğitim Müdürünün onayına bağlıdır; en
+        fazla iki kez (md. 175/2). Program toplam süreyi 10 iş günüyle sınırlar. Mevcut:{" "}
         {p.requested_days} gün, {p.extension_count}/2 uzatma.
       </p>
       <TextField

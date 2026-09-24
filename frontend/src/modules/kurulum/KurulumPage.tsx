@@ -635,8 +635,9 @@ function TatilAdimi({
           Diyanet takvimi kesinleşince Ayarlar &gt; Tatiller ekranından düzeltin.
         </BilgiBandi>
         <BilgiBandi ikon="warning">
-          Ara tatiller (yarıyıl, kasım/nisan) GİRİLMEZ — bunlar resmî tatil değildir ve yasal süre
-          hesabını bozar.
+          Ara tatiller resmî tatil değildir; resmî tatil olarak girilirse yasal süre hesabı bozulur.
+          Kasım/nisan ara tatilini Ayarlar &gt; Tatiller ekranından yalnız &quot;Ara tatil (okul
+          kapalı)&quot; türüyle girin — yalnız uzaklaştırma günlerinde atlanır (md. 172/1-a).
         </BilgiBandi>
       </div>
 

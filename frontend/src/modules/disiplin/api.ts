@@ -13,7 +13,7 @@
 //   istemci-taraflıydı.
 
 import { api } from "../../lib/api";
-import { unwrap, type Paginated } from "../../lib/pagination";
+import { collectPages, unwrap, type Paginated } from "../../lib/pagination";
 
 export type { Paginated };
 
@@ -380,6 +380,8 @@ export interface DisciplineAppeal {
   result_display: string;
   resulted_on: string | null;
   result_notes: string;
+  // md. 200/Ç — "değiştirildi" sonucunda kararın DEĞİŞİKLİK ÖNCESİ ceza türü.
+  previous_penalty_type: PenaltyType | "";
 }
 
 // EK-1 anlatı alanları (md. 168 takdir + md. 193 ifade/delil).
@@ -434,6 +436,11 @@ export interface DisciplineDecision extends DecisionNarrative {
   appeal_deadline: string | null;
   e_school_processed_on?: string | null;
   is_enforced: boolean;
+  // md. 197 — karar ilçe kuruluna gönderildiyse itiraz il kurulunda görülür.
+  referred_to_district: boolean;
+  // md. 171/2 — öğretmenler kurulunca ceza kaldırma (puan iadesi) tarihi + açıklaması.
+  penalty_removed_on: string | null;
+  penalty_removal_note: string;
   // Karar kesinleşti mi (md. 169/3-4; backend decision_is_final):
   // e-Okul uyarı rozeti + Form-16/17 üretim kilidi UI ipucu.
   is_final: boolean;
@@ -480,6 +487,15 @@ export interface CaseCloseBody {
 export interface DecisionApprovalBody {
   approval_status: DecisionApprovalStatus;
   approved_on?: string | null;
+  // Onay mercii kurulsa (ilçe/il; md. 197 sevki) kurul cezayı DEĞİŞTİREBİLİR (md. 200/1-a).
+  modified_penalty_type?: PenaltyType | "";
+  modified_suspension_days?: number | null;
+}
+
+// md. 171/2 — öğretmenler kurulunca ceza kaldırma + davranış puanı iadesi.
+export interface PenaltyRemovalBody {
+  removed_on: string;
+  note?: string;
 }
 
 // md. 197 — müdürün kurula iade (RETURN) / ilçeye sevk (REFER) girdisi.
@@ -522,6 +538,9 @@ export interface AppealResolveBody {
   result: AppealResult;
   resulted_on: string;
   result_notes?: string;
+  // "Değiştirildi" (REDUCED) sonucunda itiraz kurulunun verdiği yeni ceza (md. 200/Ç).
+  new_penalty_type?: PenaltyType | "";
+  new_suspension_days?: number | null;
 }
 
 // =============================================================================
@@ -913,7 +932,8 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Ceza/Karar tebliği (Form-14/15)",
     studentRequired: true,
     recipientSelectable: true,
-    description: "Karar + itiraz son günü (öğrenci/veli sürümü, ön-doldurulmuş, md. 169/5).",
+    description:
+      "Karar + 5 iş günü itiraz hakkı (öğrenci/veli sürümü, ön-doldurulmuş, md. 169/3-5).",
   },
   {
     value: "PENALTY_DAYS_NOTICE",
@@ -1001,10 +1021,12 @@ export const disiplinApi = {
     if (params.stage) parts.push(`stage=${encodeURIComponent(params.stage)}`);
     if (params.search) parts.push(`search=${encodeURIComponent(params.search)}`);
     if (params.studentId !== undefined) parts.push(`student=${params.studentId}`);
-    const data = await api.get<Paginated<DisciplineCase> | DisciplineCase[]>(
-      `${BASE}/cases/?${parts.join("&")}`,
+    // Tüm sayfalar toplanır — tek `limit=200` sayfası sonrasını sessizce kesiyordu.
+    let items = await collectPages((offset) =>
+      api.get<Paginated<DisciplineCase> | DisciplineCase[]>(
+        `${BASE}/cases/?${[...parts, `offset=${offset}`].join("&")}`,
+      ),
     );
-    let items = unwrap(data);
     if (params.onlyOpen) items = items.filter((c) => !c.closed_at);
     return items;
   },
@@ -1200,6 +1222,16 @@ export const disiplinApi = {
 
   resolveAppeal: (caseId: number, appealId: number, body: AppealResolveBody) =>
     api.post<DisciplineAppeal>(`${BASE}/cases/${caseId}/appeals/${appealId}/resolve/`, body),
+
+  // md. 171/2 — ceza kaldırma (POST) / yanlış kaydı geri alma (DELETE).
+  removePenalty: (caseId: number, decisionId: number, body: PenaltyRemovalBody) =>
+    api.post<DisciplineDecision>(
+      `${BASE}/cases/${caseId}/decisions/${decisionId}/penalty-removal/`,
+      body,
+    ),
+
+  undoPenaltyRemoval: (caseId: number, decisionId: number) =>
+    api.del<DisciplineDecision>(`${BASE}/cases/${caseId}/decisions/${decisionId}/penalty-removal/`),
 
   // --- Kurul karar süresi + uzatma + tedbir ---
 

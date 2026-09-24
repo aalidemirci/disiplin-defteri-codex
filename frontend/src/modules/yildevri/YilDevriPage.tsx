@@ -504,8 +504,9 @@ function TatilAdimi({ sonuc }: { sonuc: RolloverResult | null }) {
 
       <BilgiNotu>
         Dini bayramlar Diyanet ilanından önce <strong>tahmini</strong> yüklenir; ilan çıkınca takvim
-        ekranından düzeltin. Ara tatil ve yarıyıl tatili buraya <strong>girilmez</strong> — o
-        günlerde memur çalışır, yasal süreler işler.
+        ekranından düzeltin. Ara tatil resmî tatil olarak <strong>girilmez</strong> — o günlerde
+        memur çalışır, yasal süreler işler; kasım/nisan ara tatilini &quot;Ara tatil (okul
+        kapalı)&quot; türüyle girin (yalnız uzaklaştırma günlerinde atlanır).
       </BilgiNotu>
 
       <Card elevation={1} className="p-6">

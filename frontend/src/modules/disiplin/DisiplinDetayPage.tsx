@@ -1112,8 +1112,9 @@ function EventForm({
             Müdür değerlendirmesi / sevk kararı <span className="text-error">*</span> (tek seçim)
           </p>
           <p className="mb-2 text-body-small text-on-surface-variant">
-            Müdür ya uyarır (süreç sicile işlenip kapanır) ya da bir kurula sevk eder; ikisi bir
-            arada olmaz. Kurula sevkte süreci kurul başkanı yürütür.
+            Müdür ya yazılı uyarı verir (yalnız daha önce ceza/uyarı almamış öğrenciye — md. 157/7;
+            e-Okul&apos;a işlenmez, dosya kapanır) ya da bir kurula sevk eder; ikisi bir arada
+            olmaz. Kurula sevkte süreci kurul başkanı yürütür.
           </p>
           <div className="flex flex-col gap-2">
             {(Object.entries(PRINCIPAL_DECISION_TR) as [PrincipalDecision, string][]).map(

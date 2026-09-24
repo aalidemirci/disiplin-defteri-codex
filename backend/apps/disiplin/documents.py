@@ -460,8 +460,12 @@ _BRANCH_A_ALLOWED: frozenset[str] = frozenset(
 
 
 def _case_referred_to_committee(case: DisciplineCase) -> bool:
-    """Dosya kurula sevk edildi mi? (Dal B) — DECIDED olayının müdür kararından (Tur 109)."""
-    decided = case.events.filter(stage=CaseStage.DECIDED).order_by("event_date").first()
+    """Dosya kurula sevk edildi mi? (Dal B) — EN SON DECIDED olayının müdür kararından.
+
+    Yanlış "yazılı uyarı" seçimi aşama geri alınıp kurula sevkle düzeltildiğinde
+    dal da düzelmeli; ilk olay esas alınsaydı dosya Dal A'da kilitli kalırdı.
+    """
+    decided = case.events.filter(stage=CaseStage.DECIDED).order_by("-recorded_at", "-id").first()
     pds = (decided.principal_decisions or []) if decided else []
     return any(
         d in (PrincipalDecision.HONOR_COMMITTEE, PrincipalDecision.DISCIPLINE_COMMITTEE)
@@ -994,7 +998,9 @@ def generate_document(
     # kurula sevk yok) kurul formları üretilmez — Tur 213 (3c) UI filtresinin
     # sunucu karşılığı. DECIDED öncesi (dal belirsiz) ve Dal B'de tam liste.
     if document_type not in _BRANCH_A_ALLOWED:
-        decided = case.events.filter(stage=CaseStage.DECIDED).order_by("event_date").first()
+        decided = (
+            case.events.filter(stage=CaseStage.DECIDED).order_by("-recorded_at", "-id").first()
+        )
         pds = (decided.principal_decisions or []) if decided else []
         if pds and not _case_referred_to_committee(case):
             raise ValueError(
