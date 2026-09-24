@@ -37,7 +37,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | # | Kalem | Neden bırakıldı |
 |---|---|---|
-| M1 | **AYNEN şablon metinleri:** Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor ve merciyi ceza türünden türetiyor (md. 197 sevkinde "ilçe" — doğrusu il); Form-15/17 savunmasız dosyada da "savunması alınmış"; Form-12 hep "oy birliği"; EK-1 cezasız kararda md. 197 iadesini dışlıyor; tedbir bildirimi uzatılmış tedbirde toplam süreyi "(md. 175/1: en fazla 10 iş günü)" notuyla basıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi |
+| M1 | **AYNEN şablon metinleri:** Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor ve merciyi ceza türünden türetiyor (md. 197 sevkinde "ilçe" — doğrusu il); Form-15/17 savunmasız dosyada da "savunması alınmış"; Form-12 hep "oy birliği"; EK-1 cezasız kararda md. 197 iadesini dışlıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi |
 | M2 | **Eksik resmî belgeler:** 157/7-a Form-01, 157/7-b veli davet/görüşme/gelmeme tutanağı, 158/3 arama tutanağı, 195 tespit tutanağı, 197 iade/sevk yazıları, 169/1 onaya sevk yazısı, 175 MEM bilgilendirme/onay yazıları, 192/3 müdür OLUR bloğu | Yeni şablon + saha örneği gerektirir |
 | M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
 | M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
@@ -50,6 +50,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| Tedbir bildirimi uzatılmış tedbirde toplam süreyi "en fazla 10 iş günü" notuyla basıyordu (M1 alt kalemi) | KAPANDI 24.09.2026 — kullanıcı onayıyla şablon notu uzatma sayısını basıyor |
 | SPA hiç servis edilmiyordu (`GET /` → 404; paket açılmazdı) | KAPANDI 24.07.2026 · `5d4c175` |
 | Erişim logu PII sızdırıyordu (`?search=<öğrenci adı>`) | KAPANDI 24.07.2026 · `bbbca99` (ayrıca `django.setup()` susturmayı siliyordu) |
 | 18 form varsayılan tarihi UTC'den türüyordu (TR'de gece bir gün geriye) | KAPANDI 24.07.2026 · `c16ee0f` + kaynak tarama kapısı |
