@@ -37,9 +37,11 @@ from apps.disiplin.services.decisions import (
     notify_decision,
     record_decision,
     record_principal_review,
+    remove_penalty,
     resolve_appeal,
     restore_decision,
     set_decision_approval,
+    undo_penalty_removal,
     update_decision,
 )
 from apps.disiplin.services.documents import (
@@ -111,6 +113,8 @@ __all__ = [
     "issue_warning",
     "lift_precaution",
     "notify_decision",
+    "remove_penalty",
+    "undo_penalty_removal",
     "prefill_attendees",
     "propose_honor_certificate",
     "recommend_honor_certificate",

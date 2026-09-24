@@ -25,6 +25,7 @@ from apps.disiplin import selectors, services, views_purge
 from apps.disiplin.models import (
     CaseStage,
     DisciplineCase,
+    DisciplineDecision,
     DisciplineEvent,
     DisciplineParticipant,
     DisciplineWarning,
@@ -289,15 +290,14 @@ def test_jeton_tek_kullanimlik_degil_ama_kapsam_yeniden_dogrulanir() -> None:
     case, student = _warning_case()
     record = purge_service.issue_record(case_ids=[case.pk], confirmed=True)
 
-    # Aynı dosyaya kurul kararı işlenirse kapsam bozulur.
-    year = SchoolYearFactory()
-    chair = PersonnelFactory(first_name="MÜDÜR", last_name="YARDIMCISI")
-    services.create_committee(school_year_id=year.pk, chair_id=chair.pk)
-    services.record_decision(
-        case,
-        student_id=student.pk,
+    # Aynı dosyaya kurul kararı işlenirse kapsam bozulur. (Servis artık kapalı Dal A
+    # dosyasına karar yazdırmaz — md. 163/2; eski sürümden kalma veri ORM ile taklit.)
+    DisciplineDecision.objects.create(
+        case=case,
+        student=student,
         penalty_type=PenaltyType.REPRIMAND,
         decision_date=date(2026, 3, 10),
+        approval_authority="PRINCIPAL",
     )
 
     with pytest.raises(ValueError, match="kapsam|Dal B|kurul"):

@@ -164,6 +164,14 @@ class DisciplineDecision(BaseModel):
         blank=True,
         help_text="md. 197: kurula iade veya ilçe kuruluna gönderme tarihi.",
     )
+    # md. 197 — karar ilçe kuruluna gönderildiyse işaretlenir; ilçe kararına itiraz
+    # bir üst kurulda (il) görülür (md. 169/4 "kararı onayan kurul aynı karara
+    # yönelik itirazları görüşemez", md. 202/1-b).
+    referred_to_district = models.BooleanField(
+        "ilçe kuruluna gönderildi (md. 197)",
+        default=False,
+        help_text="md. 197 ısrar-sevki yapıldıysa itiraz mercii bir üst kurula (il) kayar.",
+    )
     notified_at = models.DateField("tebliğ tarihi", null=True, blank=True)
     notification_method = models.CharField(
         "tebliğ yöntemi",
@@ -185,6 +193,20 @@ class DisciplineDecision(BaseModel):
         help_text=(
             "Kesinleşen cezanın e-Okul'a işlendiğinin kullanıcı tarafından onaylandığı tarih."
         ),
+    )
+    # md. 171/2 — öğretmenler kurulunca cezanın kaldırılması + davranış puanı iadesi.
+    penalty_removed_on = models.DateField(
+        "ceza kaldırma tarihi (md. 171/2)",
+        null=True,
+        blank=True,
+        help_text="Öğretmenler kurulunca cezanın kaldırılıp davranış puanının iade edildiği "
+        "tarih; kaldırılan ceza puana, triaja ve EK-1 önceki cezalarına girmez (md. 171/3).",
+    )
+    penalty_removal_note = models.TextField(
+        "ceza kaldırma açıklaması",
+        blank=True,
+        default="",
+        help_text="Öğretmenler kurulu karar tarihi/sayısı vb. (md. 171/2).",
     )
     is_enforced = models.BooleanField(
         "uygulandı",
@@ -392,6 +414,15 @@ class DisciplineAppeal(BaseModel):
     )
     resulted_on = models.DateField("sonuç tarihi", null=True, blank=True)
     result_notes = models.TextField("sonuç açıklaması", blank=True, default="")
+    # md. 200/Ç, 202/1-c, 204/1-b — itiraz kurulu kararı "değiştirdiyse" (REDUCED) kararın
+    # eski ceza türü burada saklanır; karar yeni cezaya güncellenir (md. 170 puanı dahil).
+    previous_penalty_type = models.CharField(
+        "değişiklik öncesi ceza türü",
+        max_length=24,
+        choices=PenaltyType.choices,
+        blank=True,
+        default="",
+    )
 
     class Meta:
         verbose_name = "disiplin itirazı"

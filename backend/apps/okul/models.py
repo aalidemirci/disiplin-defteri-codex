@@ -160,14 +160,20 @@ class HolidayKind(models.TextChoices):
     OFFICIAL = "OFFICIAL", "Resmî tatil"
     RELIGIOUS = "RELIGIOUS", "Dini bayram"
     OTHER = "OTHER", "İdari/diğer"
+    # Ara tatil (Kasım/Nisan) ve yarıyıl tatili: okul KAPALI ama idari iş günü sürer.
+    # Yasal süre hesabına (is_working_day) GİRMEZ; yalnız "okulun açık olduğu gün"
+    # hesabında (md. 172/1-a — kısa süreli uzaklaştırma günleri) atlanır.
+    SCHOOL_BREAK = "SCHOOL_BREAK", "Ara tatil (okul kapalı, iş günü sürer)"
 
 
 class Holiday(BaseModel):
     """İş günü hesabına giren tatil aralığı (tasarım §4.2 + §7).
 
-    YALNIZ resmî/idari tatiller girilir; ara tatil / yarıyıl tatili GİRİLMEZ —
-    memur çalışır, yasal disiplin süreleri işler (OYS ADR-0026 kavram ayrımının
-    bu projedeki karşılığı; sihirbaz UI'ında açık uyarı vardır).
+    Resmî/idari tatiller yasal süre hesabından (iş günü) düşülür. Ara tatil /
+    yarıyıl tatili resmî tatil DEĞİLDİR — memur çalışır, yasal disiplin süreleri
+    işler (OYS ADR-0026 kavram ayrımı). Bu yüzden ara tatil yalnız `SCHOOL_BREAK`
+    türüyle girilir: iş günü hesabını ETKİLEMEZ, yalnız "okulun açık olduğu gün"
+    hesabında (md. 172/1-a uzaklaştırma günleri) atlanır.
 
     `is_estimated`: hicri takvime bağlı dini bayramlar Diyanet ilanından önce
     TAHMİNİDİR — kullanıcı takvim ekranından düzeltebilir (tasarım §7).

@@ -9,7 +9,7 @@ import pytest
 from apps.disiplin import services
 from apps.disiplin.deadlines import Severity, collect_deadline_items
 from apps.disiplin.models import CaseStage, DisciplineCase, PrincipalDecision
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
 
 pytestmark = pytest.mark.django_db
 
@@ -74,6 +74,7 @@ def test_itiraz_sevk_suresi_listelenir() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
     # Sevk son günü 01.06.2026 (25.05 + 5 iş günü).
@@ -109,6 +110,7 @@ def test_kapanisa_hazir_dosya_bilgi_olarak_listelenir() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     # İtiraz süresi dolunca önce e-Okul hatırlatması gelir.
     bekleyen = [

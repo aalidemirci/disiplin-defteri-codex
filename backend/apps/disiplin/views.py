@@ -453,10 +453,15 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
         decision = _get_decision_or_404(case, did)
         approved_on = request.data.get("approved_on")
         with _service_errors():
+            raw_mod_days = request.data.get("modified_suspension_days")
             services.set_decision_approval(
                 decision,
                 approval_status=str(request.data.get("approval_status", "")),
                 approved_on=(_parse_date(approved_on) if approved_on else None),
+                modified_penalty_type=str(request.data.get("modified_penalty_type") or ""),
+                modified_suspension_days=(
+                    _to_int(str(raw_mod_days)) if raw_mod_days not in (None, "") else None
+                ),
             )
         return Response(DecisionSerializer(decision).data)
 
@@ -551,13 +556,40 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
         if appeal is None or appeal.decision.case_id != case.pk:
             raise NotFound("İtiraz bulunamadı.")
         with _service_errors():
+            raw_new_days = request.data.get("new_suspension_days")
             services.resolve_appeal(
                 appeal,
                 result=str(request.data.get("result", "")),
                 resulted_on=_parse_date(request.data.get("resulted_on")),
                 result_notes=str(request.data.get("result_notes", "")),
+                new_penalty_type=str(request.data.get("new_penalty_type") or ""),
+                new_suspension_days=(
+                    _to_int(str(raw_new_days)) if raw_new_days not in (None, "") else None
+                ),
             )
         return Response(AppealSerializer(appeal).data)
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        url_path=r"decisions/(?P<did>[0-9]+)/penalty-removal",
+    )
+    def decision_penalty_removal(
+        self, request: Request, pk: str | None = None, did: str = ""
+    ) -> Response:
+        """md. 171/2 — öğretmenler kurulunca ceza kaldırma + puan iadesi (DELETE: geri al)."""
+        case = _get_case_or_404(pk)
+        decision = _get_decision_or_404(case, did)
+        with _service_errors():
+            if request.method == "DELETE":
+                services.undo_penalty_removal(decision)
+            else:
+                services.remove_penalty(
+                    decision,
+                    removed_on=_parse_date(request.data.get("removed_on")),
+                    note=str(request.data.get("note", "")),
+                )
+        return Response(DecisionSerializer(decision).data)
 
     # ------------------------------------------------------- uzatma/tedbir
     @action(detail=True, methods=["get", "post"], url_path="extensions")

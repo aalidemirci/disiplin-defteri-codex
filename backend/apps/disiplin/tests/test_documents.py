@@ -24,7 +24,12 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    approve,
+)
 from apps.okul.services import setup as okul_setup
 
 pytestmark = pytest.mark.django_db
@@ -198,6 +203,7 @@ def test_form16_kesinlesme_kilidi() -> None:
             student_id=sid,
         )
     # Tebliğ + itiraz süresi (29.05.2026) bugünden önce doldu → kesin → üretilir.
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     d.refresh_from_db()
     from apps.disiplin.services.decisions import update_decision_narrative

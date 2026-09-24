@@ -19,7 +19,7 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
 from apps.okul.models import Holiday
 
 pytestmark = pytest.mark.django_db
@@ -110,8 +110,13 @@ def test_record_decision_dahil_olmayan_ogrenci_hata() -> None:
 def test_onceki_cezalar_ek1_ozetine_derlenir() -> None:
     """İkinci dosyadaki kararın EK-1 'önceki cezalar' özeti ilk kararı içerir."""
     case1, sid = _committee_case()
-    services.record_decision(
-        case1, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    approve(
+        services.record_decision(
+            case1,
+            student_id=sid,
+            penalty_type=PenaltyType.REPRIMAND,
+            decision_date=date(2026, 5, 22),
+        )
     )
     case2 = services.create_case(
         petition_date=date(2026, 6, 1),
@@ -226,6 +231,7 @@ def test_teblig_itiraz_son_gununu_hesaplar() -> None:
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     # Cuma 22.05.2026 tebliğ → +5 iş günü (hafta sonları atlanır) = Cuma 29.05.2026.
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     d.refresh_from_db()
     assert d.appeal_deadline == date(2026, 5, 29)
@@ -240,6 +246,7 @@ def test_teblig_yerel_tatili_atlar() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     d.refresh_from_db()
     # 25,26 iş; 27,28 tatil; 29 iş; hafta sonu; 1,2 Haziran iş → son gün 02.06.2026.
@@ -253,6 +260,7 @@ def test_itiraz_tebligsiz_hata_ve_sure_disi_isaretlenir() -> None:
     )
     with pytest.raises(ValueError, match="tebliğ"):
         services.file_appeal(d, filed_on=date(2026, 5, 23), filed_by_role="PARENT")
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     gec = services.file_appeal(d, filed_on=date(2026, 6, 15), filed_by_role="PARENT")
     assert gec.within_deadline is False  # süre dışı da KAYDEDİLİR (işaretli)
@@ -268,6 +276,7 @@ def test_okul_degistirmede_suresinde_itiraz_uygulamayi_bekletir() -> None:
     )
     d.is_enforced = True
     d.save(update_fields=["is_enforced"])
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
     d.refresh_from_db()
@@ -279,6 +288,7 @@ def test_itiraz_bozmasi_karari_kaldirir_ve_puan_iade_edilir() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     appeal = services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
     assert selectors.behavior_point_for_student(sid) == 90  # kınama −10
@@ -299,6 +309,7 @@ def test_close_eligible_teblig_itiraz_tampon_zinciri() -> None:
     )
     # Tebliğsiz → uygun değil (tarihsiz bloke).
     assert selectors.close_eligible(case, today=date(2026, 6, 1)) == (False, None)
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     # İtiraz son günü 29.05 + 5 iş günü tampon = 05.06.2026.
     eligible, eligible_on = selectors.close_eligible(case, today=date(2026, 6, 1))
@@ -315,6 +326,7 @@ def test_close_eligible_bekleyen_itiraz_bloke_eder() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     appeal = services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
     assert selectors.close_eligible(case, today=date(2026, 7, 1)) == (False, None)
@@ -331,6 +343,7 @@ def test_e_okul_onayi_yalniz_kesinlesen_cezaya_verilir() -> None:
     )
     with pytest.raises(ValueError, match="kesinleşmeden"):
         services.confirm_e_school_entry(d, processed_on=date(2026, 5, 23))
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     services.confirm_e_school_entry(d, processed_on=date(2026, 6, 1))
     d.refresh_from_db()
@@ -342,6 +355,9 @@ def test_decision_is_final_kurallari() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    final, reason = selectors.decision_is_final(d, today=date(2026, 6, 1))
+    assert final is False and "onaylanmadı" in reason  # md. 163/2
+    approve(d)
     final, reason = selectors.decision_is_final(d, today=date(2026, 6, 1))
     assert final is False and "tebliğ" in reason
     services.notify_decision(d, notified_on=date(2026, 5, 22))
@@ -357,6 +373,7 @@ def test_appeals_awaiting_forward() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
     # Sevk son günü: 25.05 + 5 iş günü = 01.06.2026.

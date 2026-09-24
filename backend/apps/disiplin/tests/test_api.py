@@ -85,6 +85,20 @@ class TestCaseLifecycleApi:
         assert decision["behavior_point_deduction"] == 10  # otomatik türetildi
         did = decision["id"]
 
+        # Onaysız karar tebliğ edilemez (md. 163/2, 169/2).
+        resp = client.post(
+            f"/api/v1/discipline/cases/{case_id}/decisions/{did}/notify/",
+            {"notified_on": "2026-05-22"},
+            format="json",
+        )
+        assert resp.status_code == 400
+        resp = client.post(
+            f"/api/v1/discipline/cases/{case_id}/decisions/{did}/approve/",
+            {"approval_status": "APPROVED", "approved_on": "2026-05-22"},
+            format="json",
+        )
+        assert resp.status_code == 200
+
         # Tebliğ → itiraz son günü snapshot
         resp = client.post(
             f"/api/v1/discipline/cases/{case_id}/decisions/{did}/notify/",
@@ -541,11 +555,18 @@ class TestOysZarfParitesiApi:
         assert set(body.keys()) == {"decisions", "behavior_points"}
         assert len(body["decisions"]) == 1
         decision = body["decisions"][0]
-        assert decision["is_final"] is False  # tebliğ yok → kesin değil
+        assert decision["is_final"] is False  # onay/tebliğ yok → kesin değil
         assert decision["student_birth_date"] == "2010-03-15"
-        # OYS semantiği (md. 170/171): bozulmamış her karar düşer (PENDING dahil);
-        # yalnız itirazla BOZULAN karar puan iadesiyle hariç tutulur. Kınama = 10.
-        assert body["behavior_points"] == {str(student.pk): 90}
+        # md. 163/2, 170: onaysız kurul kararı henüz ceza değildir — puan düşmez.
+        assert body["behavior_points"] == {str(student.pk): 100}
+        resp = client.post(
+            f"/api/v1/discipline/cases/{case['id']}/decisions/{decision['id']}/approve/",
+            {"approval_status": "APPROVED", "approved_on": "2026-05-22"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        body = client.get(f"/api/v1/discipline/cases/{case['id']}/decisions/").json()
+        assert body["behavior_points"] == {str(student.pk): 90}  # kınama −10
 
     def test_extensions_get_zarfi(self, client: APIClient) -> None:
         SchoolYearFactory()

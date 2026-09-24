@@ -10,12 +10,13 @@ from dataclasses import dataclass
 from django.db.models import QuerySet
 
 from apps.disiplin.models import (
-    AppealResult,
-    DisciplineAppeal,
+    CaseStage,
     DisciplineCase,
     DisciplineDecision,
+    DisciplineEvent,
     DisciplineParticipant,
     DisciplineWarning,
+    PrincipalDecision,
 )
 
 
@@ -58,17 +59,28 @@ def student_discipline_history(
     değildir ama tekrar göstergesidir; bozulmuş (OVERTURNED) cezalar geçmiş
     sayılmaz (md. 171).
     """
+    from apps.disiplin.selectors.decisions import penalties_in_force
+
     warnings = DisciplineWarning.objects.filter(student_id=student_id)
     decisions = DisciplineDecision.objects.filter(student_id=student_id)
     if exclude_case_id is not None:
         warnings = warnings.exclude(case_id=exclude_case_id)
         decisions = decisions.exclude(case_id=exclude_case_id)
 
-    overturned = DisciplineAppeal.objects.filter(result=AppealResult.OVERTURNED).values_list(
-        "decision_id", flat=True
+    # Cezasız / onaysız / bozulmuş / md. 171/2 ile kaldırılmış karar "ceza" sayılmaz.
+    penalty_count = penalties_in_force(decisions).count()
+    # Uyarı = uyarı kaydı olan dosyalar ∪ müdür kararı "Yazılı uyarı" ile kapanan
+    # (Dal A) dosyalar — ikincisi uyarı kaydı açılmadan da md. 157/7-e sayılır.
+    warned_cases = set(warnings.values_list("case_id", flat=True))
+    events = DisciplineEvent.objects.filter(
+        stage=CaseStage.DECIDED, case__case_students__student_id=student_id
     )
-    penalty_count = decisions.exclude(pk__in=overturned).count()
-    warning_count = warnings.count()
+    if exclude_case_id is not None:
+        events = events.exclude(case_id=exclude_case_id)
+    for case_id, decided in events.values_list("case_id", "principal_decisions"):
+        if PrincipalDecision.WRITTEN_WARNING in (decided or []):
+            warned_cases.add(case_id)
+    warning_count = len(warned_cases)
     return DisciplineHistory(
         student_id=student_id,
         warning_count=warning_count,
