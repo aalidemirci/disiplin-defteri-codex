@@ -287,7 +287,7 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.
 
 Süre matrisi (iş günü): itiraz tebliğ+5, sevk+5, kurul 10 (+1 uzatma), tedbir ≤10
-(+2 uzatma, başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri
+(+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri
 10/20/40/80. Hepsi `discipline_periods.py`'de.
 
 ---

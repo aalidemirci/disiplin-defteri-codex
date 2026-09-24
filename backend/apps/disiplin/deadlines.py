@@ -105,7 +105,10 @@ def collect_deadline_items(today: date) -> list[DeadlineItem]:
                 precaution.process_start_deadline,
                 "Tedbir sonrası disiplin işlemine başlanmalı (tedbir + 3 iş günü)",
             ),
-            (precaution.end_date, "Tedbir süresi doluyor (en fazla 10 iş günü)"),
+            (
+                precaution.end_date,
+                "Tedbir süresi doluyor (10 iş günü; MEM onayıyla iki kez uzatılabilir)",
+            ),
         )
         for due, title in thresholds:
             if due > horizon:

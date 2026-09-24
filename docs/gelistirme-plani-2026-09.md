@@ -63,7 +63,8 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
   **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
   her biri ayrı ve dikkat isteyen iş.
-- **M7 tedbir toplam süresi:** yorum farkı; okul/ilçe uygulamasıyla teyit bekliyor.
+- **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
+  süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
 
 ## Geçiş notları (kullanıcıya etkisi)
 

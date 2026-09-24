@@ -37,13 +37,13 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | # | Kalem | Neden bırakıldı |
 |---|---|---|
-| M1 | **AYNEN şablon metinleri:** Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor ve merciyi ceza türünden türetiyor (md. 197 sevkinde "ilçe" — doğrusu il); Form-15/17 savunmasız dosyada da "savunması alınmış"; Form-12 hep "oy birliği"; EK-1 cezasız kararda md. 197 iadesini dışlıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi |
+| M1 | **AYNEN şablon metinleri:** Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor ve merciyi ceza türünden türetiyor (md. 197 sevkinde "ilçe" — doğrusu il); Form-15/17 savunmasız dosyada da "savunması alınmış"; Form-12 hep "oy birliği"; EK-1 cezasız kararda md. 197 iadesini dışlıyor; tedbir bildirimi uzatılmış tedbirde toplam süreyi "(md. 175/1: en fazla 10 iş günü)" notuyla basıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi |
 | M2 | **Eksik resmî belgeler:** 157/7-a Form-01, 157/7-b veli davet/görüşme/gelmeme tutanağı, 158/3 arama tutanağı, 195 tespit tutanağı, 197 iade/sevk yazıları, 169/1 onaya sevk yazısı, 175 MEM bilgilendirme/onay yazıları, 192/3 müdür OLUR bloğu | Yeni şablon + saha örneği gerektirir |
 | M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
 | M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
 | M5 | **İmha:** ders yılı ortasında imha yalnız rozetle uyarılıyor; imha edilen veri 14 günlük yedeklerde kalıyor; tekil (nakil) imha çok öğrencili dosyada eksik | Geri dönüşsüz araç — ayrı ve dikkatli iş |
 | M6 | **Şube adı Türkçe harf:** "10/Ç" kayda "10/C" olarak geçiyor | Mevcut kayıtların eşleştirme göçü gerekir |
-| M7 | **Tedbir toplam süresi:** program uzatmalar dahil toplam 10 iş günüyle sınırlıyor; md. 175/2 "iki kez daha uzatılabilir" her uzatmanın ayrı süre olduğu biçiminde de okunabilir | Yorum farkı — okul/ilçe uygulamasıyla teyit bekliyor |
+| M7 | ~~Tedbir toplam süresi~~ | KAPANDI 24.09.2026 — kullanıcı (okul yönetimi) teyidi: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez, MEM onayı zorunlu |
 | M8 | **Onur kararlarında geri alma yok**; onur uygunluğu müdür onayı adımında yeniden denetlenmiyor | Ayrı iş |
 
 ## Kapanmış

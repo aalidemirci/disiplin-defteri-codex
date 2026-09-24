@@ -128,17 +128,27 @@ def test_tedbir_kaldirma_ve_uzatma_kurallari() -> None:
     p = services.create_precaution(
         case, student_id=sid, start_date=date(2026, 5, 20), requested_days=5
     )
-    services.extend_precaution(p, additional_days=3)
+    # MEM onayı olmadan uzatılamaz (md. 175/2).
+    with pytest.raises(ValueError, match="onayına bağlıdır"):
+        services.extend_precaution(p, additional_days=3)
+    onceki_bitis = p.end_date
+    services.extend_precaution(p, additional_days=3, mne_notified=True)
     p.refresh_from_db()
+    # Uzatma mevcut bitişten sonra işler: 3 iş günü sonrası.
+    from shared.working_days import add_working_days
+
+    assert p.end_date == add_working_days(onceki_bitis, 3)
     assert p.requested_days == 8
     assert p.extension_count == 1
-    # Toplam 10'u aşamaz.
-    with pytest.raises(ValueError, match="10 iş günü"):
-        services.extend_precaution(p, additional_days=5)
-    services.extend_precaution(p, additional_days=2)
+    # Her uzatma AYRI süredir; tek uzatma 10 iş gününü aşamaz.
+    with pytest.raises(ValueError, match="1-10 iş günü"):
+        services.extend_precaution(p, additional_days=11, mne_notified=True)
+    services.extend_precaution(p, additional_days=10, mne_notified=True)
+    p.refresh_from_db()
+    assert p.requested_days == 18  # toplam 10'u aşabilir
     # Üçüncü uzatma yasak (md. 175/2 en fazla iki).
     with pytest.raises(ValueError, match="iki kez"):
-        services.extend_precaution(p, additional_days=1)
+        services.extend_precaution(p, additional_days=1, mne_notified=True)
 
     services.lift_precaution(p, lifted_on=date(2026, 5, 27))
     p.refresh_from_db()

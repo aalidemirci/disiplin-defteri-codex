@@ -563,8 +563,8 @@ function PrecautionRow({
 
       {canManage && isActive && panel === null && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {/* Toplam 10 iş günü dolduysa uzatma her seferinde reddedilirdi — düğme gizlenir. */}
-          {p.extension_count < 2 && p.requested_days < 10 && (
+          {/* md. 175/2: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez. */}
+          {p.extension_count < 2 && (
             <Button variant="text" icon="more_time" onClick={() => setPanel("extend")}>
               Uzat
             </Button>
@@ -825,14 +825,14 @@ function ExtendPrecautionForm({
     <PanelShell title="Tedbiri uzat" icon="more_time">
       <p className="text-body-small text-on-surface-variant">
         Uzatma, haklı ve zorlayıcı sebeplerin devamında Millî Eğitim Müdürünün onayına bağlıdır; en
-        fazla iki kez (md. 175/2). Program toplam süreyi 10 iş günüyle sınırlar. Mevcut:{" "}
-        {p.requested_days} gün, {p.extension_count}/2 uzatma.
+        fazla iki kez (md. 175/2). Her uzatma ayrı bir süredir (en fazla 10 iş günü) ve mevcut bitiş
+        gününden sonra başlar. Mevcut: {p.requested_days} gün, {p.extension_count}/2 uzatma.
       </p>
       <TextField
-        label="Ek süre (iş günü, 1-9)"
+        label="Ek süre (iş günü, 1-10)"
         type="number"
         min={1}
-        max={9}
+        max={10}
         required
         value={additionalDays}
         onChange={(e) => setAdditionalDays(e.target.value)}
@@ -844,7 +844,7 @@ function ExtendPrecautionForm({
           onChange={(e) => setMneNotified(e.target.checked)}
           className="h-5 w-5 accent-primary"
         />
-        Milli Eğitim Müdürlüğü bilgilendirildi
+        Millî Eğitim Müdürünün onayı alındı (zorunlu — md. 175/2)
       </label>
       <FormError error={error} />
       <PanelActions
