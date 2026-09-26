@@ -367,6 +367,7 @@ def _record_event(
     elif event_type in {
         HonorCertificateEventType.PRINCIPAL_APPROVED,
         HonorCertificateEventType.PRINCIPAL_REJECTED,
+        HonorCertificateEventType.UNDONE,
     }:
         meetings = meetings.none()
     if meeting_id is not None:
@@ -522,10 +523,21 @@ def approve_honor_proposal_by_principal(
     decided_on: date,
     explanation: str = "",
 ) -> HonorCertificate:
-    """Ödül-disiplin kurulu kararını okul müdürü onayına bağlar."""
+    """Ödül-disiplin kurulu kararını okul müdürü onayına bağlar.
+
+    Uygunluk yeniden denetlenir (M8): kurul kabulü ile müdür onayı arasında ceza
+    alan / puanı düşen öğrenciye onur belgesi onaylanmaz (md. 161, 181/1).
+    """
+    from apps.disiplin.selectors import is_eligible_for_honor
+
     if certificate.status != HonorCertificateStatus.AWARDED:
         raise ValueError(
             "Yalnız ödül ve disiplin kurulunca kabul edilen teklif okul müdürünce onaylanabilir."
+        )
+    if not is_eligible_for_honor(certificate.student_id, certificate.school_year_id):
+        raise ValueError(
+            "Öğrenci kurul kararından sonra disiplin cezası almış veya davranış puanı "
+            "düşmüş; onur belgesi onaylanamaz (md. 161, 181/1)."
         )
     certificate.status = HonorCertificateStatus.PRINCIPAL_APPROVED
     certificate.principal_decided_at = decided_on
@@ -611,6 +623,60 @@ def reject_honor_certificate(
         event_type=HonorCertificateEventType.REJECTED,
         event_date=decided_on,
         meeting_id=meeting_id,
+        explanation=reason,
+    )
+    return certificate
+
+
+@transaction.atomic
+def undo_honor_certificate_step(
+    certificate: HonorCertificate, *, reason: str, undone_on: date | None = None
+) -> HonorCertificate:
+    """Onur belgesi sürecinin SON adımını gerekçeyle geri alır (kullanıcı kararı M8).
+
+    RECOMMENDED → PROPOSED, AWARDED → RECOMMENDED, PRINCIPAL_REJECTED → AWARDED,
+    REJECTED → (uygun görüş varsa) RECOMMENDED / PROPOSED. Müdür onayı (belge
+    verilmiş sayılır) ve teklif aşaması geri alınamaz. Geri alınan adımın tarihleri
+    temizlenir; iz `UNDONE` olayı olarak gerekçesiyle kalır.
+    """
+    from django.utils import timezone
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("Geri alma gerekçesi zorunludur.")
+    status = certificate.status
+    fields = ["status", "updated_at"]
+    if status == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED:
+        certificate.status = HonorCertificateStatus.PROPOSED
+        certificate.recommended_at = None
+        fields.append("recommended_at")
+    elif status == HonorCertificateStatus.AWARDED:
+        certificate.status = HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+        certificate.awarded_at = None
+        fields.append("awarded_at")
+    elif status == HonorCertificateStatus.PRINCIPAL_REJECTED:
+        certificate.status = HonorCertificateStatus.AWARDED
+        certificate.principal_decided_at = None
+        certificate.principal_decision_reason = ""
+        fields += ["principal_decided_at", "principal_decision_reason"]
+    elif status == HonorCertificateStatus.REJECTED:
+        certificate.status = (
+            HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+            if certificate.recommended_at is not None
+            else HonorCertificateStatus.PROPOSED
+        )
+        certificate.rejected_at = None
+        certificate.rejection_reason = ""
+        fields += ["rejected_at", "rejection_reason"]
+    elif status == HonorCertificateStatus.PRINCIPAL_APPROVED:
+        raise ValueError("Okul müdürünce onaylanmış onur belgesi geri alınamaz.")
+    else:
+        raise ValueError("Teklif aşamasında geri alınacak adım yok.")
+    certificate.save(update_fields=fields)
+    _record_event(
+        certificate,
+        event_type=HonorCertificateEventType.UNDONE,
+        event_date=undone_on or timezone.localdate(),
         explanation=reason,
     )
     return certificate

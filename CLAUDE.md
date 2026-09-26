@@ -294,6 +294,9 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.
+- **Onur kurulu (md. 180-181):** üye sınıf seviyesi sicilden, seviye başına tek asıl
+  üye, asıl ikinci başkan 11/12. sınıftan; onur belgesi müdür onayında uygunluk
+  yeniden denetlenir, müdür onayı geri alınamaz (öncesi gerekçeyle geri alınır).
 
 Süre matrisi (iş günü): itiraz tebliğ+5, sevk+5, kurul 10 (+1 uzatma), tedbir ≤10
 (+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri

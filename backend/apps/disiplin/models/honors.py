@@ -19,7 +19,11 @@ from shared.models import BaseModel
 
 
 class HonorCertificateStatus(models.TextChoices):
-    """Onur belgesi durum makinesi (md. 161 + 183/b) — tek yönlü süreç."""
+    """Onur belgesi durum makinesi (md. 161 + 183/b).
+
+    İleri yönlüdür; müdür onayından ÖNCEKİ son adım gerekçeyle geri alınabilir
+    (`services.undo_honor_certificate_step`). Müdür onayı kesindir.
+    """
 
     PROPOSED = "PROPOSED", "Teklif edildi"
     HONOR_BOARD_RECOMMENDED = "HONOR_BOARD_RECOMMENDED", "Onur kurulu uygun gördü"
@@ -326,6 +330,8 @@ class HonorCertificateEventType(models.TextChoices):
     PRINCIPAL_APPROVED = "PRINCIPAL_APPROVED", "Okul müdürü onayladı"
     PRINCIPAL_REJECTED = "PRINCIPAL_REJECTED", "Okul müdürü onaylamadı"
     REJECTED = "REJECTED", "Uygun görülmedi"
+    # Kullanıcı kararı 26.09.2026 (M8): son adım gerekçeyle geri alınır; iz korunur.
+    UNDONE = "UNDONE", "Son adım geri alındı"
 
 
 class HonorCertificateEvent(BaseModel):

@@ -9,6 +9,7 @@ import pytest
 from apps.disiplin import selectors, services
 from apps.disiplin.models import (
     CaseStage,
+    HonorCertificate,
     HonorCertificateStatus,
     HonorCriterion,
     HonorProposerRole,
@@ -298,3 +299,88 @@ def test_md180_onur_kurulu_kompozisyonu() -> None:
     # Görevi sonlanan üyenin yerine aynı seviyeden yenisi seçilebilir.
     services.remove_honor_board_member(m)
     services.add_honor_board_member(board, student_id=uye(10, "D"))
+
+
+def _awarded_certificate(student_id: int) -> HonorCertificate:
+    cert = services.propose_honor_certificate(
+        student_id=student_id,
+        proposer_role=HonorProposerRole.TEACHER,
+        criteria=[HonorCriterion.ATTENDANCE],
+    )
+    services.recommend_honor_certificate(cert, recommended_on=date(2026, 5, 25))
+    services.award_honor_certificate(cert, awarded_on=date(2026, 6, 1))
+    return cert
+
+
+def test_m8_mudur_onayinda_uygunluk_yeniden_denetlenir() -> None:
+    """Kurul kabulünden sonra ceza alan öğrenciye onur belgesi onaylanmaz (md. 161, 181/1)."""
+    SchoolYearFactory()
+    student = StudentFactory()
+    cert = _awarded_certificate(student.pk)
+    case = services.create_case(
+        petition_date=date(2026, 6, 2),
+        petitioner_name="İdare",
+        petitioner_role="IDARE",
+        summary="olay",
+        student_ids=[student.pk],
+    )
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 6, 2),
+        override=True,
+        override_reason="atla",
+        principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
+    )
+    approve(
+        services.record_decision(
+            case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 6, 3)
+        )
+    )
+    with pytest.raises(ValueError, match="onaylanamaz"):
+        services.approve_honor_proposal_by_principal(cert, decided_on=date(2026, 6, 5))
+
+
+def test_m8_son_adim_gerekceyle_geri_alinir() -> None:
+    from apps.disiplin.models import HonorCertificateEventType
+
+    SchoolYearFactory()
+    cert = _awarded_certificate(StudentFactory().pk)
+    with pytest.raises(ValueError, match="gerekçesi zorunlu"):
+        services.undo_honor_certificate_step(cert, reason=" ")
+    services.undo_honor_certificate_step(cert, reason="Yanlış dosya.", undone_on=date(2026, 6, 2))
+    cert.refresh_from_db()
+    assert cert.status == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+    assert cert.awarded_at is None
+    last = cert.events.order_by("-id").first()
+    assert last is not None
+    assert last.event_type == HonorCertificateEventType.UNDONE
+    assert last.explanation == "Yanlış dosya."
+
+    # Ret → uygun görüşe döner; müdür onayı geri alınamaz.
+    services.reject_honor_certificate(cert, reason="x", decided_on=date(2026, 6, 3))
+    services.undo_honor_certificate_step(cert, reason="Ret hatalı.", undone_on=date(2026, 6, 4))
+    cert.refresh_from_db()
+    assert cert.status == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+    assert cert.rejection_reason == ""
+    services.award_honor_certificate(cert, awarded_on=date(2026, 6, 5))
+    services.reject_honor_proposal_by_principal(cert, decided_on=date(2026, 6, 6), reason="y")
+    services.undo_honor_certificate_step(cert, reason="Müdür vazgeçti.", undone_on=date(2026, 6, 7))
+    cert.refresh_from_db()
+    assert cert.status == HonorCertificateStatus.AWARDED
+    services.approve_honor_proposal_by_principal(cert, decided_on=date(2026, 6, 8))
+    with pytest.raises(ValueError, match="geri alınamaz"):
+        services.undo_honor_certificate_step(cert, reason="z")
+
+
+def test_m8_geri_alma_ucu() -> None:
+    from rest_framework.test import APIClient
+
+    SchoolYearFactory()
+    cert = _awarded_certificate(StudentFactory().pk)
+    client = APIClient()
+    url = f"/api/v1/honor/certificates/{cert.pk}/undo/"
+    assert client.post(url, {}, format="json").status_code == 400
+    resp = client.post(url, {"reason": "Yanlış kayıt."}, format="json")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED

@@ -60,8 +60,8 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**: her biri ayrı ve dikkat
-  isteyen iş.
+- **M5 imha zamanı ve yedekler**: ayrı ve dikkat isteyen iş.
+- **M8 onur kararı geri alma:** ✅ kapandı — müdür onayında denetim + son adımı geri alma.
 - **M3 onur kurulu:** ✅ kapandı — md. 181/1 uyarısı + md. 180 kompozisyon kuralları.
 - **M4 md. 166 / 168/5:** ✅ kapandı — md. 166 gerekçeli kural; md. 168/5 bilinçli
   olarak programa alınmadı (KVKK md. 6).
@@ -115,6 +115,11 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
     Yedek üyeler bu sınırların dışında. Mevcut kurullardaki kayıtlar değiştirilmez;
     kurallar yeni üye eklemede uygulanır.
 
+12. **Onur belgesi (M8 — A):** müdür onayında uygunluk yeniden denetlenir (kurul
+    kabulünden sonra ceza alan öğrenciye onay yok); müdür onayından önceki son adım
+    ("uygun gördü", "kabul etti", "uygun görülmedi", "müdür onaylamadı") gerekçeyle
+    geri alınır. Migrasyon: `disiplin 0008` (olay türü seçeneği).
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"
@@ -123,4 +128,5 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 - Kasım/nisan ara tatilini Ayarlar > Tatiller'den **"Ara tatil (okul kapalı)"**
   türüyle girin; yalnız uzaklaştırma günlerinde atlanır, yasal süreleri etkilemez.
 - Migrasyonlar: `disiplin 0006_decision_legal_fields`, `disiplin 0007_decision_md166_override`,
+  `disiplin 0008_honor_event_undone`,
   `okul 0005_holiday_school_break` (yalnız alan ekleme / seçenek; veri dönüştürmez).

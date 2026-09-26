@@ -386,7 +386,11 @@ export const odulApi = {
   principalRejectCertificate: (id: number, body: HonorPrincipalDecisionBody) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/principal-reject/`, body),
 
-  // Uygun görülmedi (terminal red): PROPOSED|RECOMMENDED → REJECTED.
+  // Son adımı gerekçeyle geri al (müdür onayı hariç; kullanıcı kararı 26.09.2026, M8).
+  undoCertificateStep: (id: number, body: { reason: string }) =>
+    api.post<HonorCertificate>(`${BASE}/certificates/${id}/undo/`, body),
+
+  // Uygun görülmedi: PROPOSED|RECOMMENDED → REJECTED (son adım olarak geri alınabilir).
   rejectCertificate: (id: number, body: HonorCertificateRejectBody) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/reject/`, body),
 

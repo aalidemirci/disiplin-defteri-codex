@@ -1217,6 +1217,16 @@ class HonorCertificateViewSet(viewsets.GenericViewSet[HonorCertificate]):
             )
         return Response(HonorCertificateSerializer(certificate).data)
 
+    @action(detail=True, methods=["post"], url_path="undo")
+    def undo(self, request: Request, pk: str | None = None) -> Response:
+        """Son adımı gerekçeyle geri alır (müdür onayı hariç; kullanıcı kararı M8)."""
+        certificate = self._get(pk)
+        with _service_errors():
+            services.undo_honor_certificate_step(
+                certificate, reason=str(request.data.get("reason", ""))
+            )
+        return Response(HonorCertificateSerializer(certificate).data)
+
 
 # ---------------------------------------------------------------------------
 # Karar defteri (CouncilMeeting)
