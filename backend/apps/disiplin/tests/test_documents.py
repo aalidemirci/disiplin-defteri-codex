@@ -30,6 +30,7 @@ from apps.disiplin.tests.factories import (
     StudentFactory,
     approve,
 )
+from apps.okul.models import Student
 from apps.okul.services import setup as okul_setup
 
 pytestmark = pytest.mark.django_db
@@ -590,3 +591,67 @@ def test_uzatilmis_tedbir_bildirimi_uzatmayi_basar() -> None:
     text = " ".join(_pdf_text(pdf_bytes).split())
     assert "15 iş günü" in text
     assert "1 kez uzatıldı" in text
+
+
+def _appeal_letter_text(case: DisciplineCase, sid: int) -> str:
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.APPEAL_LETTER,
+        generated_on=date(2026, 6, 15),
+        student_id=sid,
+    )
+    return " ".join(_pdf_text(pdf_bytes).split())
+
+
+def test_form18_itiraz_eden_ve_sure_kayittan() -> None:
+    """Form-18: itiraz eden (18+ öğrenci), süre dışı başvuru ve tebliğ tarihi kayıttan;
+    itiraz derdestken karar "kesinleşmiş" yazılmaz (md. 169/3)."""
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    Student.objects.filter(pk=sid).update(birth_date=date(2008, 1, 1))
+    services.file_appeal(
+        d, filed_on=date(2026, 6, 10), filed_by_role="STUDENT_ADULT", filed_by_name="EMRE CAN"
+    )
+    text = _appeal_letter_text(case, sid)
+    assert "18 yaşını tamamlamış öğrenci EMRE CAN" in text
+    assert "geçtikten sonra" in text
+    assert "22.05.2026 tarihinde usulüne uygun" in text
+    assert "kesinleşmiştir" not in text
+    assert "tarafımdan onaylanmıştır" in text
+    assert "ilçe öğrenci disiplin kurulunca" in text  # kınama → md. 169/3-a
+
+
+def test_form18_mudur_itirazi_orantililik_gorusu_basmaz() -> None:
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PRINCIPAL")
+    text = _appeal_letter_text(case, sid)
+    assert "Okul müdürü olarak tarafımdan" in text
+    assert "içerisinde" in text
+    assert "orantılı" not in text
+    assert "itiraz yazısı" in text
+
+
+def test_form18_md197_ilce_kararinda_itiraz_il_kurulunda() -> None:
+    """md. 169/4, 202/1-b: ilçe kurulunun bağladığı karara itiraz il kurulunda."""
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
+    )
+    services.record_principal_review(d, action="RETURN", reason="a", decided_on=date(2026, 5, 21))
+    services.record_principal_review(d, action="REFER", reason="b", decided_on=date(2026, 5, 26))
+    services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 6, 5))
+    services.notify_decision(d, notified_on=date(2026, 6, 8))
+    services.file_appeal(d, filed_on=date(2026, 6, 9), filed_by_role="PARENT")
+    text = _appeal_letter_text(case, sid)
+    assert "197. maddesi uyarınca gönderildiği ilçe" in text
+    assert "il öğrenci disiplin kurulunca" in text
+    assert "169. maddesi 3. fıkrası (a)" not in text

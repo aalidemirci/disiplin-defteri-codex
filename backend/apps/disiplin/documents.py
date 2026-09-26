@@ -579,18 +579,82 @@ def _penalty_days_notice_context(case: DisciplineCase, student: Any) -> dict[str
     }
 
 
+# Form-18 metin parçaları (kullanıcı kararı 26.09.2026: şablon kayıttan doldurulur).
+_APPEAL_FILER_PHRASE: dict[str, str] = {
+    "PARENT": "Öğrenci velisi",
+    "STUDENT_ADULT": "18 yaşını tamamlamış öğrenci",
+    "PRINCIPAL": "Okul müdürü olarak tarafımdan",
+}
+# İtiraz merciine göre md. 169 atfı (mercii kayıttan: onaylayan merciin bir üstü).
+_APPEAL_BOARD_TEXT: dict[str, str] = {
+    ApprovalAuthority.DISTRICT_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (a) bendi uyarınca; "Kınama ve okuldan '
+        'kısa süreli uzaklaştırma cezalarına itiraz ilçe öğrenci disiplin kurulunca"'
+    ),
+    ApprovalAuthority.PROVINCIAL_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (b) bendi uyarınca; "Okul değiştirme '
+        'cezasına itiraz il öğrenci disiplin kurulunca"'
+    ),
+    ApprovalAuthority.UPPER_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (c) bendi uyarınca; "Örgün eğitim dışına '
+        'çıkarma cezasına itiraz öğrenci üst disiplin kurulunca"'
+    ),
+}
+_APPEAL_BOARD_TEXT_REFERRED = (
+    "Karar, Yönetmeliğin 197. maddesi uyarınca ilçe öğrenci disiplin kurulunca karara "
+    'bağlandığından; 169. maddesi 4. fıkrası ("Kararı onayan kurul aynı karara yönelik '
+    'itirazları görüşemez") ve 202. maddesi 1. fıkrası (b) bendi uyarınca itiraz il '
+    "öğrenci disiplin kurulunca"
+)
+
+
+def _approval_phrase(decision: Any) -> str:
+    """Kararı kimin onayladığı/bağladığı — "kesinleşmiştir" DENMEZ (itiraz derdest)."""
+    if decision is None:
+        return "……………… onaylanmıştır"
+    if decision.referred_to_district:
+        return (
+            "müdürlüğümüzce Yönetmeliğin 197. maddesi uyarınca gönderildiği ilçe öğrenci "
+            "disiplin kurulunca karara bağlanmıştır"
+        )
+    if decision.approval_authority == ApprovalAuthority.DISTRICT_BOARD:
+        return "ilçe öğrenci disiplin kurulunca onaylanmıştır (md. 169/2-b)"
+    if decision.approval_authority == ApprovalAuthority.PROVINCIAL_BOARD:
+        return "il öğrenci disiplin kurulunca onaylanmıştır (md. 169/2-c)"
+    return "tarafımdan onaylanmıştır (md. 169/2-a)"
+
+
 def _appeal_letter_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
-    """İl/İlçe itiraz yazısı (Form-18) bağlamı — karar + en son itiraz dilekçesi."""
+    """İl/İlçe itiraz yazısı (Form-18) bağlamı — karar + en son itiraz dilekçesi.
+
+    İtiraz eden (veli / 18+ öğrenci / müdür), süre içinde olup olmadığı ve itiraz
+    mercii KAYITTAN basılır (md. 169/3-4, 202/1-b); onaylanan karar itiraz derdestken
+    "kesinleşmiş" yazılmaz.
+    """
     decision = case.decisions.filter(student_id=student.pk).first()
     appeal = None
     if decision is not None:
         appeal = selectors.appeals_for_decision(decision).first()
+    filer_role = appeal.filed_by_role if appeal else "PARENT"
+    if appeal is not None and decision is not None and decision.referred_to_district:
+        board_text = _APPEAL_BOARD_TEXT_REFERRED
+    elif appeal is not None:
+        board_text = _APPEAL_BOARD_TEXT.get(
+            appeal.appeal_authority, _APPEAL_BOARD_TEXT[ApprovalAuthority.DISTRICT_BOARD]
+        )
+    else:
+        board_text = _APPEAL_BOARD_TEXT[ApprovalAuthority.DISTRICT_BOARD]
     return {
         **_common_context(case),
         "student": _student_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
         "appeal": appeal,
+        "appeal_filer_phrase": _APPEAL_FILER_PHRASE.get(filer_role, "Öğrenci velisi"),
+        "appeal_by_principal": filer_role == "PRINCIPAL",
+        "appeal_within_deadline": appeal.within_deadline if appeal else True,
+        "approval_phrase": _approval_phrase(decision),
+        "appeal_board_text": board_text,
     }
 
 

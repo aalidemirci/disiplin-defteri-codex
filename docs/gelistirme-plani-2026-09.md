@@ -21,7 +21,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 | # | Kusur | Mevzuat | Durum |
 |---|---|---|---|
-| 7 | md. 197 ile ilçeye giden kararda itiraz mercii "ilçe" (doğrusu il) | 169/4, 202/1-b | ✅ Kayıt: onaylayan merciin bir üstü. ⏸ Form-18 şablon metni (M1) |
+| 7 | md. 197 ile ilçeye giden kararda itiraz mercii "ilçe" (doğrusu il) | 169/4, 202/1-b | ✅ Kayıt: onaylayan merciin bir üstü; Form-18 metni de kayıttan (26.09.2026) |
 | 8 | Uzaklaştırma günleri ara tatile/hafta sonuna düşüyordu | 172/1-a | ✅ `is_school_open_day` + `SCHOOL_BREAK` tatil türü; başlangıç günü doğrulanır |
 | 9 | Form-16/17 kınamada da üretilebiliyordu | 164/2, 172/1 | ✅ Yalnız kısa süreli uzaklaştırma |
 | 10 | EK-1 imzası toplantıya katılanları değil, aktif yılın kurulunu basıyordu | 196/1, 185/4 | ✅ Dosyanın yılının kurulu + toplantı katılımcıları |
@@ -58,13 +58,26 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
-- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister.
+- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18 kapandı).
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
   **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
   her biri ayrı ve dikkat isteyen iş.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
   süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
+
+## Ara tatil kararları (26.09.2026, okul yönetimi)
+
+Ara tatilde uzaklaştırma araştırmasının ardından tek tek alınan kararlar:
+
+1. **Ara tatil yasal sürelerde iş günü sayılır** (tedbir, itiraz, sevk): yönetmelik
+   süreleri "iş günü" diye tanımlar; ara tatil resmî tatil değildir. Kod değişmedi.
+2. **Uzaklaştırma başlangıcı okulun kapalı olduğu güne girilemez** (md. 172/1-a):
+   mevcut ret davranışı korundu. Kod değişmedi.
+3. **Form-18 metni kayıttan doldurulur:** itiraz eden (veli / 18 yaşını tamamlamış
+   öğrenci / müdür), süre içi/dışı, tebliğ tarihi, onay makamı ve itiraz mercii
+   (md. 197 sevkinde il kurulu, md. 169/4, 202/1-b). "Kesinleşmiştir" ifadesi
+   kaldırıldı. Bu formda OYS paritesi bilinçli olarak bırakıldı.
 
 ## Geçiş notları (kullanıcıya etkisi)
 
