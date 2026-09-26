@@ -552,7 +552,7 @@ class TestOysZarfParitesiApi:
         assert resp.status_code == 201, resp.content
 
         body = client.get(f"/api/v1/discipline/cases/{case['id']}/decisions/").json()
-        assert set(body.keys()) == {"decisions", "behavior_points"}
+        assert set(body.keys()) == {"decisions", "behavior_points", "md166_priors"}
         assert len(body["decisions"]) == 1
         decision = body["decisions"][0]
         assert decision["is_final"] is False  # onay/tebliğ yok → kesin değil

@@ -40,7 +40,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 | M1 | ~~AYNEN şablon metinleri~~ | KAPANDI 26.09.2026 — kullanıcı kararlarıyla Form-18, Form-15/17, Form-12 ve EK-1 müdür onay kutusu düzeltildi (ayrıntı aşağıda "Kapanmış"). Bu dört formda OYS birebir paritesi bilinçli olarak bırakıldı |
 | M2 | **Eksik resmî belgeler:** 157/7-a Form-01, 157/7-b veli davet/görüşme/gelmeme tutanağı, 158/3 arama tutanağı, 195 tespit tutanağı, 197 iade/sevk yazıları, 169/1 onaya sevk yazısı, 175 MEM bilgilendirme/onay yazıları, 192/3 müdür OLUR bloğu | Yeni şablon + saha örneği gerektirir |
 | M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
-| M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
+| M4 | **md. 168/5 uyarısı:** zihinsel engel/otizm için "disiplin cezası uygulanmaz" uyarısı yok (md. 166 kısmı 26.09.2026'da kapandı — aşağıda) | Öğrenci kartında özel eğitim alanı yok |
 | M5 | **İmha:** ders yılı ortasında imha yalnız rozetle uyarılıyor; imha edilen veri 14 günlük yedeklerde kalıyor; tekil (nakil) imha çok öğrencili dosyada eksik | Geri dönüşsüz araç — ayrı ve dikkatli iş |
 | M6 | ~~Şube adı Türkçe harf~~ | KAPANDI 26.09.2026 — kullanıcı kararıyla şube Türkçe büyük harfle saklanıyor (`normalize.section_upper`); eski "C" kayıtları otomatik dönüştürülmez (C mi Ç mi ayırt edilemez), yeniden içe aktarmayla TCKN üzerinden düzelir |
 | M7 | ~~Tedbir toplam süresi~~ | KAPANDI 24.09.2026 — kullanıcı (okul yönetimi) teyidi: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez, MEM onayı zorunlu |
@@ -50,6 +50,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| md. 166: aynı öğretim yılında tekrar için "bir derece ağır ceza" hiç hatırlatılmıyordu (M4 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla (B) öğrencinin bu öğretim yılında yürürlükte cezası varsa ondan ağır olmayan ceza yalnız kurul gerekçesiyle girilir (`md166_override_reason`, evraka basılmaz); cezasız karar ve üst kurulun itiraz/onay değişiklikleri kural dışı |
 | EK-1 müdür onay kutusu cezasız kararda yalnız "GÖRÜLMÜŞTÜR" basıyor, md. 197 iadesini dışlıyor ve "onay ve itiraz gerektirmez" için md. 191'e atıf yapıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla cezasız kararda da "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılıyor; md. 191 atfı bu cümleden kaldırıldı |
 | Form-12 süre uzatma tutanağı hep "oy birliği" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla üretimde "oy birliği / oy çoğunluğu" seçiliyor (md. 191/1; geçici alan, DB'ye yazılmaz) |
 | Form-15/17 savunma alınmamış dosyada da "öğrencinin savunması alınmış" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla ifade yalnız dosya kütüğünde öğrencinin savunma tutanağı (Form-11) varsa basılıyor (md. 194/1) |

@@ -276,6 +276,9 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - **Müdür uyarısı (md. 157/7) ceza değildir**, davranış puanı düşürmez; geçmişte
   ceza/uyarı (uyarıyla kapanmış Dal A dosyası dahil) varsa yazılı uyarı yolu
   override'sız kapalıdır (md. 157/7-e, 166).
+- **md. 166:** öğrencinin aynı öğretim yılında yürürlükte cezası varsa ondan ağır
+  olmayan ceza yalnız gerekçeyle (`md166_override_reason`) girilir; sıralama
+  `selectors.decisions.PENALTY_SEVERITY`. Cezasız karar kural dışı.
 - Dosya başına öğrenciye **tek canlı karar**. Puan ve onay/itiraz mercii cezadan
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**

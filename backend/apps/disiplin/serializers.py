@@ -209,6 +209,7 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "penalty_removed_on",
             "penalty_removal_note",
             "notes",
+            "md166_override_reason",
             "deleted_at",
             "appeals",
             # EK-1 anlatı + öğrenci-bağlam alanları

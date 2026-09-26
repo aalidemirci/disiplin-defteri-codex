@@ -56,6 +56,7 @@ from apps.disiplin.selectors.decisions import (
     get_decision_by_id,
     latest_resolved_appeal,
     penalties_in_force,
+    same_year_prior_penalty,
 )
 from apps.disiplin.selectors.document_log import (
     defense_recorded,
@@ -96,6 +97,7 @@ __all__ = [
     "appeals_for_decision",
     "behavior_point_for_student",
     "penalties_in_force",
+    "same_year_prior_penalty",
     "case_student_ids",
     "cases_awaiting_committee_decision",
     "cases_for_student",

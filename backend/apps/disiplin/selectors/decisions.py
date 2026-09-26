@@ -48,6 +48,40 @@ def penalties_in_force(qs: QuerySet[DisciplineDecision]) -> QuerySet[DisciplineD
     )
 
 
+# md. 166 "bir derece ağır ceza" sıralaması (md. 164 fıkra sırası). Cezasız karar yok.
+PENALTY_SEVERITY: dict[str, int] = {
+    PenaltyType.REPRIMAND: 1,
+    PenaltyType.SHORT_TERM_SUSPENSION: 2,
+    PenaltyType.SCHOOL_CHANGE: 3,
+    PenaltyType.EXPULSION: 4,
+}
+
+
+def same_year_prior_penalty(
+    student_id: int, on: date, *, exclude_case_id: int | None = None
+) -> DisciplineDecision | None:
+    """md. 166: öğrencinin `on` gününün öğretim yılında yürürlükteki EN AĞIR cezası.
+
+    Öğretim yılı, başlangıcı `on`dan önce olan en son `SchoolYear`dır (yaz aylarında
+    verilen karar da biten yıla sayılır). Karar tarihi yıl başı ile `on` arasındaki,
+    `penalties_in_force` süzgecinden geçen cezalar dikkate alınır; aynı dosya hariç.
+    """
+    year = SchoolYear.objects.filter(start_date__lte=on).order_by("-start_date").first()
+    if year is None:
+        return None
+    qs = penalties_in_force(
+        DisciplineDecision.objects.filter(
+            student_id=student_id, decision_date__gte=year.start_date, decision_date__lte=on
+        )
+    )
+    if exclude_case_id is not None:
+        qs = qs.exclude(case_id=exclude_case_id)
+    candidates = list(qs.order_by("-decision_date"))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda d: PENALTY_SEVERITY.get(d.penalty_type, 0))
+
+
 def decisions_for_case(case: DisciplineCase) -> QuerySet[DisciplineDecision]:
     """Bir dosyanın resmî kararları (itirazları + öğrenci önceden çekilir)."""
     return case.decisions.select_related("student").prefetch_related("appeals")

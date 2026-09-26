@@ -30,6 +30,7 @@ import {
   APPEAL_RESULT_TR,
   DECISION_APPROVAL_STATUS_TR,
   disiplinApi,
+  md166NeedsReason,
   PENALTY_TYPE_TR,
 } from "./api";
 import { asMessage, FormError, PanelActions, PanelShell } from "./formHelpers";
@@ -49,6 +50,7 @@ import type {
   DisciplineAppeal,
   DisciplineCase,
   DisciplineDecision,
+  Md166Prior,
   PenaltyType,
 } from "./api";
 import { ALL_CAPABILITIES, isDisciplineCommitteeReferred } from "./workflow";
@@ -173,6 +175,7 @@ export default function DecisionsSection({
     caseObj.closed_at === null && isDisciplineCommitteeReferred(caseObj.events);
   const [decisions, setDecisions] = useState<DisciplineDecision[] | null>(null);
   const [behaviorPoints, setBehaviorPoints] = useState<Record<number, number>>({});
+  const [md166Priors, setMd166Priors] = useState<Record<string, Md166Prior>>({});
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -188,6 +191,7 @@ export default function DecisionsSection({
       .then((r) => {
         setDecisions(r.decisions);
         setBehaviorPoints(r.behavior_points ?? {});
+        setMd166Priors(r.md166_priors ?? {});
         setError(null);
       })
       .catch((e: unknown) => {
@@ -309,6 +313,7 @@ export default function DecisionsSection({
         <div className="mt-4">
           <AddDecisionForm
             caseObj={caseObj}
+            md166Priors={md166Priors}
             onCancel={() => setAdding(false)}
             onAdded={() => {
               setAdding(false);
@@ -340,6 +345,7 @@ export default function DecisionsSection({
               decision={d}
               studentName={names[d.student] ?? `Öğrenci #${d.student}`}
               caps={caps}
+              md166Prior={md166Priors[String(d.student)]}
               onChanged={refresh}
               onDelete={handleDelete}
             />
@@ -412,6 +418,7 @@ function DecisionCard({
   decision: d,
   studentName,
   caps,
+  md166Prior,
   onChanged,
   onDelete,
 }: {
@@ -419,6 +426,7 @@ function DecisionCard({
   decision: DisciplineDecision;
   studentName: string;
   caps: DisciplineCapabilities;
+  md166Prior?: Md166Prior;
   onChanged: () => void;
   onDelete: (decision: DisciplineDecision) => void;
 }) {
@@ -560,6 +568,11 @@ function DecisionCard({
       {d.notes && (
         <p className="mt-1 whitespace-pre-wrap text-body-small text-on-surface-variant">
           {d.notes}
+        </p>
+      )}
+      {d.md166_override_reason && (
+        <p className="mt-1 whitespace-pre-wrap text-body-small text-on-surface-variant">
+          <span className="font-medium">md. 166 gerekçesi:</span> {d.md166_override_reason}
         </p>
       )}
 
@@ -731,6 +744,7 @@ function DecisionCard({
         <EditDecisionForm
           caseObj={caseObj}
           decision={d}
+          md166Prior={md166Prior}
           onCancel={() => setPanel(null)}
           onSaved={() => {
             setPanel(null);
@@ -766,12 +780,57 @@ function DecisionCard({
 // Yeni karar formu
 // ===========================================================================
 
+// md. 166 (kullanıcı kararı 26.09.2026): aynı öğretim yılında yürürlükte cezası olan
+// öğrenciye ondan ağır OLMAYAN ceza ancak kurul gerekçesiyle girilir (backend de zorlar).
+function Md166ReasonField({
+  prior,
+  value,
+  onChange,
+}: {
+  prior: Md166Prior;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-2 rounded-shape-sm bg-error-container px-4 py-3 text-on-error-container">
+      <p className="flex items-start gap-2 text-body-small">
+        <Icon name="warning" size="sm" />
+        <span>
+          md. 166: öğrencinin bu öğretim yılında yürürlükte &quot;{prior.penalty_type_display}
+          &quot; cezası var ({prior.decision_no}, {formatDate(prior.decision_date)}). Tekrarında bir
+          derece ağır ceza uygulanır; bu cezayı vermek için kurulun gerekçesini yazın.
+        </span>
+      </p>
+      <label htmlFor={id} className="block text-label-large">
+        md. 166 gerekçesi
+      </label>
+      <textarea
+        id={id}
+        rows={2}
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="block w-full rounded-shape-xs border border-outline bg-surface px-4 py-3 text-body-medium text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary focus:border-primary"
+      />
+    </div>
+  );
+}
+
+function md166ReasonOrThrow(needed: boolean, reason: string): string {
+  if (!needed) return "";
+  if (!reason.trim()) throw new Error("md. 166 gerekçesi zorunludur.");
+  return reason.trim();
+}
+
 function AddDecisionForm({
   caseObj,
+  md166Priors,
   onCancel,
   onAdded,
 }: {
   caseObj: DisciplineCase;
+  md166Priors: Record<string, Md166Prior>;
   onCancel: () => void;
   onAdded: () => void;
 }) {
@@ -788,18 +847,22 @@ function AddDecisionForm({
   const [decisionNo, setDecisionNo] = useState("");
   const [penaltyDetail, setPenaltyDetail] = useState("");
   const [notes, setNotes] = useState("");
+  const [md166Reason, setMd166Reason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
   const fieldIdBase = useId();
 
   const isSuspension = penaltyType === "SHORT_TERM_SUSPENSION";
+  const md166Prior = studentId ? md166Priors[studentId] : undefined;
+  const md166Needed = md166NeedsReason(md166Prior, penaltyType);
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
       if (!studentId) throw new Error("Bir öğrenci seçilmelidir.");
+      const md166 = md166ReasonOrThrow(md166Needed, md166Reason);
       const body: DecisionCreateBody = {
         student_id: Number(studentId),
         penalty_type: penaltyType,
@@ -808,6 +871,7 @@ function AddDecisionForm({
         decision_no: decisionNo.trim(),
         penalty_detail: penaltyDetail.trim(),
         notes: notes.trim(),
+        md166_override_reason: md166,
       };
       if (isSuspension) {
         body.suspension_days = Number(suspensionDays);
@@ -847,6 +911,9 @@ function AddDecisionForm({
           helperText="Md. 163 — kanunla sabit; davranış puanı indirimi otomatik."
         />
       </div>
+      {md166Needed && md166Prior && (
+        <Md166ReasonField prior={md166Prior} value={md166Reason} onChange={setMd166Reason} />
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField
@@ -944,11 +1011,13 @@ function AddDecisionForm({
 function EditDecisionForm({
   caseObj,
   decision: d,
+  md166Prior,
   onCancel,
   onSaved,
 }: {
   caseObj: DisciplineCase;
   decision: DisciplineDecision;
+  md166Prior?: Md166Prior;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -960,17 +1029,20 @@ function EditDecisionForm({
   const [decisionNo, setDecisionNo] = useState(d.decision_no);
   const [penaltyDetail, setPenaltyDetail] = useState(d.penalty_detail);
   const [notes, setNotes] = useState(d.notes);
+  const [md166Reason, setMd166Reason] = useState(d.md166_override_reason ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
   const fieldIdBase = useId();
 
   const isSuspension = penaltyType === "SHORT_TERM_SUSPENSION";
+  const md166Needed = md166NeedsReason(md166Prior, penaltyType);
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
+      const md166 = md166ReasonOrThrow(md166Needed, md166Reason);
       const body: DecisionEditBody = {
         penalty_type: penaltyType,
         decision_date: decisionDate,
@@ -978,6 +1050,7 @@ function EditDecisionForm({
         decision_no: decisionNo.trim(),
         penalty_detail: penaltyDetail.trim(),
         notes: notes.trim(),
+        md166_override_reason: md166,
       };
       if (isSuspension) {
         body.suspension_days = Number(suspensionDays);
@@ -1017,6 +1090,9 @@ function EditDecisionForm({
           onChange={(e) => setDecisionDate(e.target.value)}
         />
       </div>
+      {md166Needed && md166Prior && (
+        <Md166ReasonField prior={md166Prior} value={md166Reason} onChange={setMd166Reason} />
+      )}
 
       {isSuspension && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -60,7 +60,7 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
+- **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 168/5 uyarısı** (md. 166 kapandı),
   **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**:
   her biri ayrı ve dikkat isteyen iş.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
@@ -95,6 +95,11 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
    içe aktarma, elle giriş ve süzgeç aynı dönüşümü kullanır. Eski kayıtlar öğrenci
    listesi yeniden içe aktarılınca düzelir; eski "10/C" eşleştirme satırı elle silinir.
 
+8. **md. 166 zorunlu kural (B):** öğrencinin aynı öğretim yılında yürürlükte cezası
+   varsa ondan ağır olmayan ceza (kayıt veya düzenlemede) yalnız "md. 166 gerekçesi"
+   yazılarak girilir; gerekçe karar kaydında kalır, evraka basılmaz. Cezasız karar ve
+   üst kurulun itiraz/onay değişiklikleri kural dışıdır. Migrasyon: `disiplin 0007`.
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"
@@ -102,5 +107,5 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
   ilçe / il kurulu onay tarihi) girin.
 - Kasım/nisan ara tatilini Ayarlar > Tatiller'den **"Ara tatil (okul kapalı)"**
   türüyle girin; yalnız uzaklaştırma günlerinde atlanır, yasal süreleri etkilemez.
-- Migrasyonlar: `disiplin 0006_decision_legal_fields`, `okul 0005_holiday_school_break`
-  (yalnız alan ekleme / seçenek; veri dönüştürmez).
+- Migrasyonlar: `disiplin 0006_decision_legal_fields`, `disiplin 0007_decision_md166_override`,
+  `okul 0005_holiday_school_break` (yalnız alan ekleme / seçenek; veri dönüştürmez).
