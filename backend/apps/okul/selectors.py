@@ -104,9 +104,9 @@ def student_list(
     if class_level is not None:
         qs = qs.filter(class_level=class_level)
     if class_section.strip():
-        # Kayıtlar import/serializer'da _ascii_upper ile katlanır ('ş' → 'S');
-        # filtre de AYNI katlamadan geçmeli, yoksa Türkçe harfli şube bulunamaz.
-        qs = qs.filter(class_section=normalize._ascii_upper(class_section.strip()))
+        # Kayıtlar import/serializer'da section_upper ile saklanır ('ş' → 'Ş');
+        # filtre de AYNI dönüşümden geçmeli, yoksa Türkçe harfli şube bulunamaz.
+        qs = qs.filter(class_section=normalize.section_upper(class_section))
     if search.strip():
         needle = normalize_header(search)
         return [

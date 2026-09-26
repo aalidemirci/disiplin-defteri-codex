@@ -70,6 +70,18 @@ class TestStudentCommit:
         assert s.class_level == 11 and s.class_section == "B"
         assert s.student_number == "999"
 
+    def test_c_ve_c_cedilla_subeleri_ayri_kalir(self) -> None:
+        """M6: "10/Ç" kayda "10/C" olarak geçmez; yeniden içe aktarma eski kaydı düzeltir."""
+        Student.objects.create(
+            tckn=str(TCKN_OGRENCI_1),
+            first_name="A",
+            last_name="B",
+            class_level=10,
+            class_section="C",
+        )  # eski sürümün katladığı kayıt
+        import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row(sinif="10/Ç")]))
+        assert Student.objects.get().class_section == "Ç"
+
     def test_ayni_veri_unchanged_sayilir(self) -> None:
         import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row()]))
         report = import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row()]))

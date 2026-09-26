@@ -42,7 +42,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 | M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
 | M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
 | M5 | **İmha:** ders yılı ortasında imha yalnız rozetle uyarılıyor; imha edilen veri 14 günlük yedeklerde kalıyor; tekil (nakil) imha çok öğrencili dosyada eksik | Geri dönüşsüz araç — ayrı ve dikkatli iş |
-| M6 | **Şube adı Türkçe harf:** "10/Ç" kayda "10/C" olarak geçiyor | Mevcut kayıtların eşleştirme göçü gerekir |
+| M6 | ~~Şube adı Türkçe harf~~ | KAPANDI 26.09.2026 — kullanıcı kararıyla şube Türkçe büyük harfle saklanıyor (`normalize.section_upper`); eski "C" kayıtları otomatik dönüştürülmez (C mi Ç mi ayırt edilemez), yeniden içe aktarmayla TCKN üzerinden düzelir |
 | M7 | ~~Tedbir toplam süresi~~ | KAPANDI 24.09.2026 — kullanıcı (okul yönetimi) teyidi: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez, MEM onayı zorunlu |
 | M8 | **Onur kararlarında geri alma yok**; onur uygunluğu müdür onayı adımında yeniden denetlenmiyor | Ayrı iş |
 

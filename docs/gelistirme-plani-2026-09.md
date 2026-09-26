@@ -61,7 +61,7 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
-  **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
+  **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**:
   her biri ayrı ve dikkat isteyen iş.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
   süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
@@ -90,6 +90,10 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 6. **EK-1 müdür onay kutusu:** "ceza verilmesine yer olmadığına" kararında da
    "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılır; "onay ve itiraz
    gerektirmez (md. 191)" cümlesindeki atıf kaldırıldı.
+
+7. **Şube harfi Türkçe saklanır (M6 kapandı):** "10/Ç" artık "10/C"ye katlanmaz;
+   içe aktarma, elle giriş ve süzgeç aynı dönüşümü kullanır. Eski kayıtlar öğrenci
+   listesi yeniden içe aktarılınca düzelir; eski "10/C" eşleştirme satırı elle silinir.
 
 ## Geçiş notları (kullanıcıya etkisi)
 

@@ -223,7 +223,8 @@ basar. Daha önce 18 formda aynı anda yakalandı.
 Python'da çıplak `.upper()`/`.lower()` Türkçe metne uygulanıyorsa şüphelen: doğru
 yol `apps/okul/normalize.py` içindeki `_TR_UPPER_MAP` çevirisidir (`ı/İ → I`),
 ki o da **eşleştirme/karşılaştırma** içindir — kullanıcıya veya evraka basılacak
-metne uygulanmaz.
+metne uygulanmaz. Şube adı için doğru yol `normalize.section_upper` (Türkçe büyük harf,
+katlama YOK — "10/Ç" ≠ "10/C", borç M6).
 
 ### 7.3 İş günü vs takvim günü
 Yasal sürelerin **hepsi iş günü** (`shared/working_days.py` + `is_working_day`

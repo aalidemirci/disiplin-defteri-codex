@@ -71,6 +71,11 @@ export default function SinifSorumlulariPage() {
             öğretmenini, ilgili rehber öğretmeni ve müdür yardımcısını aynı ekrandan eşleştirin.
             Disiplin dosyası rehberliğe sevk edilirken bu bilgiler otomatik önerilir.
           </p>
+          <p className="dd-page-description">
+            Şube harfleri Türkçe saklanır (10/Ç). Eski sürüm "10/Ç" şubesini "10/C" olarak
+            kaydediyordu: öğrenci listesini yeniden aktarınca öğrenciler doğru şubeye geçer; artık
+            kullanılmayan eski satırı buradan silebilirsiniz.
+          </p>
         </div>
         <Button icon="add" onClick={() => setEditing("new")} disabled={yearId === null}>
           Sınıf ekle

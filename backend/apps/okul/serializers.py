@@ -114,7 +114,7 @@ class ClassResponsibilitySerializer(serializers.ModelSerializer[ClassResponsibil
         return value
 
     def validate_class_section(self, value: str) -> str:
-        normalized = normalize._ascii_upper(value.strip())
+        normalized = normalize.section_upper(value)
         if not normalized:
             raise serializers.ValidationError("Şube zorunludur.")
         return normalized
@@ -179,10 +179,10 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
         return value
 
     def validate_class_section(self, value: str) -> str:
-        # İçe aktarmayla aynı katlama: Türkçe harf → ASCII büyük ('ş' → 'S').
+        # İçe aktarmayla aynı dönüşüm: Türkçe büyük harf ('ş' → 'Ş'; M6).
         if not value.strip():
             return ""
-        return normalize._ascii_upper(value.strip())
+        return normalize.section_upper(value)
 
     def _validate_phone(self, value: str, label: str) -> str:
         if not value.strip():

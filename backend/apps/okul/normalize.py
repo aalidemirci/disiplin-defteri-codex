@@ -43,6 +43,19 @@ def _ascii_upper(value: str) -> str:
     return value.translate(_TR_UPPER_MAP).upper()
 
 
+# Türkçe büyük harf için yalnız i/ı özel: çıplak str.upper() "i" → "I" yapar (doğrusu "İ").
+_TR_I_MAP = str.maketrans({"i": "İ", "ı": "I"})
+
+
+def section_upper(value: str) -> str:
+    """Şube adını TÜRKÇE büyük harfe çevirir ("ç" → "Ç", "i" → "İ").
+
+    ASCII'ye KATLANMAZ (M6): "10/Ç" ile "10/C" ayrı şubelerdir ve şube adı resmî
+    evraka basılır. İçe aktarma, elle giriş ve süzgeç aynı dönüşümü kullanır.
+    """
+    return value.strip().translate(_TR_I_MAP).upper()
+
+
 def normalize_tckn(value: object) -> str | None:
     """Ham TCKN değerini doğrular ve 11 haneli dizgiye çevirir; geçersizse None.
 
@@ -118,7 +131,7 @@ def normalize_phone(value: object) -> str | None:
 
 
 def normalize_class_section(value: object) -> tuple[int, str] | None:
-    """'10/A', '10-A', '10 A' → (10, 'A'); 9-12 dışı veya ayrıştırılamazsa None."""
+    """'10/A', '10-A', '10 ç' → (10, 'A') / (10, 'Ç'); 9-12 dışı veya ayrıştırılamazsa None."""
     if value is None:
         return None
     s = str(value).strip()
@@ -131,7 +144,7 @@ def normalize_class_section(value: object) -> tuple[int, str] | None:
     level = int(level_m.group())
     if level < 9 or level > 12:
         return None
-    section = _ascii_upper(section_m.group())
+    section = section_upper(section_m.group())
     return level, section
 
 
