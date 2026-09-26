@@ -60,7 +60,7 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 168/5 uyarısı** (md. 166 kapandı),
+- **M3 onur kurulu üyelik düşmesi/kompozisyon**, 
   **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**:
   her biri ayrı ve dikkat isteyen iş.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
@@ -99,6 +99,9 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
    varsa ondan ağır olmayan ceza (kayıt veya düzenlemede) yalnız "md. 166 gerekçesi"
    yazılarak girilir; gerekçe karar kaydında kalır, evraka basılmaz. Cezasız karar ve
    üst kurulun itiraz/onay değişiklikleri kural dışıdır. Migrasyon: `disiplin 0007`.
+
+9. **md. 168/5 (zihinsel engel/otizm) programa eklenmedi:** bilgi e-Okul/RAM kaydında;
+   kurul kendisi dikkate alır. Özel nitelikli kişisel veri (KVKK md. 6) toplanmaz.
 
 ## Geçiş notları (kullanıcıya etkisi)
 
