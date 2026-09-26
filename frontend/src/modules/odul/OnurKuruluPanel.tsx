@@ -13,8 +13,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { ApiError } from "../../lib/api";
-import { getGradeLevels, gradeLevelLabel } from "../../lib/gradeLevels";
-import type { GradeLevelOption } from "../../lib/gradeLevels";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import { okulApi } from "../okul/api";
 import Autocomplete from "../../ui/Autocomplete";
 import Button from "../../ui/Button";
@@ -23,7 +22,6 @@ import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import { personnelLookupApi, studentLookupApi } from "../disiplin/api";
 import type { PersonnelSearchRow } from "../disiplin/api";
@@ -508,31 +506,13 @@ function AddMemberForm({
 }) {
   const snackbar = useSnackbar();
   const [student, setStudent] = useState<StudentOption | null>(null);
-  const [gradeLevel, setGradeLevel] = useState("");
   const [isSecondChair, setIsSecondChair] = useState(false);
   const [isSubstitute, setIsSubstitute] = useState(false);
   const [order, setOrder] = useState("0");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [levels, setLevels] = useState<GradeLevelOption[]>([]);
   const [assemblyMembers, setAssemblyMembers] = useState<HonorGeneralAssemblyMember[]>([]);
-
-  // Seçilebilir seviyeler (Hazırlık opt-in iken 0 dahil; Tur 120). Uç erişilemezse
-  // 9-12'ye düş (Hazırlık görünmez ama form çalışır).
-  useEffect(() => {
-    let active = true;
-    getGradeLevels()
-      .then((r) => {
-        if (active) setLevels(r.levels);
-      })
-      .catch(() => {
-        if (active) setLevels([9, 10, 11, 12].map((v) => ({ value: v, label: String(v) })));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     odulApi
@@ -554,6 +534,10 @@ function AddMemberForm({
         }));
     });
 
+  const selectedLevel = student
+    ? (assemblyMembers.find((member) => member.member_student === student.id)?.class_level ?? null)
+    : null;
+
   const submit = async () => {
     if (!student) {
       setError("Bir öğrenci seçilmelidir.");
@@ -567,7 +551,8 @@ function AddMemberForm({
         student_id: student.id,
         assembly_member_id:
           assemblyMembers.find((member) => member.member_student === student.id)?.id ?? null,
-        grade_level: gradeLevel ? Number(gradeLevel) : null,
+        // md. 180: sınıf seviyesi öğrencinin sicilinden (backend türetir ve doğrular).
+        grade_level: null,
         is_second_chair: isSecondChair,
         is_substitute: isSubstitute,
         order: Number(order) || 0,
@@ -600,15 +585,11 @@ function AddMemberForm({
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Select
+        <TextField
           label="Sınıf seviyesi"
-          value={gradeLevel}
-          onChange={(e) => setGradeLevel(e.target.value)}
-          options={[
-            { value: "", label: "— belirtilmemiş —" },
-            ...levels.map((l) => ({ value: String(l.value), label: gradeLevelLabel(l.value) })),
-          ]}
-          helperText="Temsil ettiği seviye (md. 180; Hazırlık opt-in ise listede)."
+          value={selectedLevel != null ? gradeLevelLabel(selectedLevel) : ""}
+          readOnly
+          helperText="Öğrencinin sicilinden (md. 180: her seviyeden bir asıl üye; ikinci başkan 11/12. sınıftan)."
         />
         <TextField
           label="Sıra"

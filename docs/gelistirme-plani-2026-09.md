@@ -60,8 +60,9 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M3 onur kurulu kompozisyonu** (md. 181 üyelik düşmesi uyarısı kapandı), **M5 imha zamanı ve yedekler**,
-  **M8 onur kararı geri alma**: her biri ayrı ve dikkat isteyen iş.
+- **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**: her biri ayrı ve dikkat
+  isteyen iş.
+- **M3 onur kurulu:** ✅ kapandı — md. 181/1 uyarısı + md. 180 kompozisyon kuralları.
 - **M4 md. 166 / 168/5:** ✅ kapandı — md. 166 gerekçeli kural; md. 168/5 bilinçli
   olarak programa alınmadı (KVKK md. 6).
 - **M6 şube Türkçe harf:** ✅ kapandı — `normalize.section_upper`.
@@ -108,6 +109,11 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 10. **md. 181/1 üyelik düşmesi — uyarı (B):** ceza alan aktif onur genel kurulu / onur
     kurulu üyesinin yanında "üyeliği düşmeli" uyarısı çıkar; program üyeliği kendisi
     sonlandırmaz. Genel kurulda "Görevi sonlandır" gerekçesi md. 181/1 atfıyla dolar.
+
+11. **md. 180 onur kurulu kompozisyonu — engel (A):** üyenin sınıf seviyesi sicilden
+    alınır; her seviyeden tek asıl üye; asıl ikinci başkan yalnız 11/12. sınıftan.
+    Yedek üyeler bu sınırların dışında. Mevcut kurullardaki kayıtlar değiştirilmez;
+    kurallar yeni üye eklemede uygulanır.
 
 ## Geçiş notları (kullanıcıya etkisi)
 

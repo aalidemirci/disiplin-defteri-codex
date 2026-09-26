@@ -263,3 +263,38 @@ def test_md181_cezali_uye_uyarisi_uyelik_elle_sonlandirilir() -> None:
         assembly, effective_until=date(2026, 5, 21), reason="md. 181: disiplin cezası"
     )
     assert assembly_row()["md181_penalty"] is None
+
+
+def test_md180_onur_kurulu_kompozisyonu() -> None:
+    """md. 180/1: her sınıf seviyesinden bir asıl üye; ikinci başkan 11/12. sınıftan;
+    sınıf seviyesi sicilden (kullanıcı kararı 26.09.2026 — A: engelle)."""
+    year = SchoolYearFactory()
+    board = services.create_honor_board(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
+
+    def uye(level: int, section: str) -> int:
+        s = StudentFactory(class_level=level, class_section=section)
+        services.add_general_assembly_member(
+            school_year_id=year.pk, student_id=s.pk, effective_from=year.start_date
+        )
+        return int(s.pk)
+
+    onuncu = uye(10, "A")
+    with pytest.raises(ValueError, match="sicilindeki sınıftan"):
+        services.add_honor_board_member(board, student_id=onuncu, grade_level=12)
+    with pytest.raises(ValueError, match="İkinci başkan"):
+        services.add_honor_board_member(board, student_id=onuncu, is_second_chair=True)
+    m = services.add_honor_board_member(board, student_id=onuncu)
+    assert m.grade_level == 10  # sicilden
+
+    with pytest.raises(ValueError, match="10. sınıf seviyesinden zaten"):
+        services.add_honor_board_member(board, student_id=uye(10, "B"))
+    yedek = services.add_honor_board_member(board, student_id=uye(10, "C"), is_substitute=True)
+    assert yedek.grade_level == 10  # yedek sınırın dışında
+
+    ikinci_baskan = services.add_honor_board_member(
+        board, student_id=uye(11, "A"), is_second_chair=True
+    )
+    assert ikinci_baskan.is_second_chair and ikinci_baskan.grade_level == 11
+    # Görevi sonlanan üyenin yerine aynı seviyeden yenisi seçilebilir.
+    services.remove_honor_board_member(m)
+    services.add_honor_board_member(board, student_id=uye(10, "D"))

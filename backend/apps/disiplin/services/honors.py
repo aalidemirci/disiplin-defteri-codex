@@ -24,7 +24,7 @@ from apps.disiplin.models import (
     HonorProposerRole,
 )
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import SchoolYear
+from apps.okul.models import SchoolYear, Student
 
 
 def _validate_chair_outside_discipline_committee(*, school_year_id: int, personnel_id: int) -> None:
@@ -126,6 +126,48 @@ def set_honor_board_substitute_chair(
     return board
 
 
+# md. 180/1: ikinci başkan son sınıf veya on birinci sınıf üyesidir (lise 9-12).
+_SECOND_CHAIR_GRADES = frozenset({11, 12})
+
+
+def _validate_md180_composition(
+    board: HonorBoard,
+    *,
+    student: Student,
+    grade_level: int | None,
+    is_second_chair: bool,
+    is_substitute: bool,
+) -> int:
+    """md. 180 kompozisyonu (kullanıcı kararı 26.09.2026 — A: engelle).
+
+    - Sınıf seviyesi öğrencinin SİCİLİNDEKİ sınıftır (farklı değer reddedilir).
+    - Her sınıf seviyesinden tek ASIL üye (yedekler hariç).
+    - Asıl ikinci başkan yalnız 11. veya 12. sınıftan.
+    Döndürür: kaydedilecek sınıf seviyesi.
+    """
+    level = student.class_level
+    if level is None:
+        raise ValueError("Öğrencinin sicilinde sınıf bilgisi yok; önce öğrenci kartını düzeltin.")
+    if grade_level is not None and grade_level != level:
+        raise ValueError(
+            f"Sınıf seviyesi öğrencinin sicilindeki sınıftan ({level}) farklı olamaz (md. 180)."
+        )
+    if is_substitute:
+        return int(level)
+    if HonorBoardMember.objects.filter(
+        board=board, grade_level=level, is_substitute=False, effective_until__isnull=True
+    ).exists():
+        raise ValueError(
+            f"Onur kurulunda {level}. sınıf seviyesinden zaten bir asıl üye var; her sınıf "
+            "seviyesinden bir öğrenci seçilir (md. 180/1)."
+        )
+    if is_second_chair and level not in _SECOND_CHAIR_GRADES:
+        raise ValueError(
+            "İkinci başkan son sınıf veya on birinci sınıf üyesi olmalıdır (md. 180/1)."
+        )
+    return int(level)
+
+
 @transaction.atomic
 def add_honor_board_member(
     board: HonorBoard,
@@ -174,6 +216,13 @@ def add_honor_board_member(
         ).exists()
     ):
         raise ValueError("Onur kurulunda yalnız bir aktif ikinci başkan olabilir.")
+    grade_level = _validate_md180_composition(
+        board,
+        student=student,
+        grade_level=grade_level,
+        is_second_chair=is_second_chair,
+        is_substitute=is_substitute,
+    )
 
     member = HonorBoardMember(
         board=board,
