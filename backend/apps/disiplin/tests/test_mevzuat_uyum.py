@@ -602,3 +602,133 @@ def test_eski_surumde_onaysiz_teblig_edilmis_karar_sonradan_onaylanabilir() -> N
     assert selectors.decision_is_final(d, today=date(2026, 7, 1))[0] is False
     services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 5, 20))
     assert selectors.decision_is_final(d, today=date(2026, 7, 1))[0] is True
+
+
+# ---------------------------------------------------------------------------
+# md. 166 — aynı öğretim yılında tekrar: bir derece ağır ceza (kullanıcı kararı B)
+# ---------------------------------------------------------------------------
+def _second_case(sid: int) -> DisciplineCase:
+    case, _ = _case(student_ids=[sid])
+    return case
+
+
+def _approved_penalty(sid: int, penalty: str, on: date) -> DisciplineDecision:
+    case = _second_case(sid)
+    d = services.record_decision(case, student_id=sid, penalty_type=penalty, decision_date=on)
+    approve(d)
+    return d
+
+
+def test_md166_ayni_yilda_ayni_ceza_gerekcesiz_girilemez() -> None:
+    SchoolYearFactory()
+    sid = StudentFactory().pk
+    _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
+    case = _second_case(sid)
+    with pytest.raises(ValueError, match="md. 166"):
+        services.record_decision(
+            case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 1)
+        )
+    d = services.record_decision(
+        case,
+        student_id=sid,
+        penalty_type=PenaltyType.REPRIMAND,
+        decision_date=date(2026, 6, 1),
+        md166_override_reason="  Fiil farklı ve daha hafif nitelikte.  ",
+    )
+    assert d.md166_override_reason == "Fiil farklı ve daha hafif nitelikte."
+
+
+def test_md166_bir_derece_agir_ceza_ve_cezasiz_karar_serbest() -> None:
+    SchoolYearFactory()
+    sid = StudentFactory().pk
+    _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
+    heavier = services.record_decision(
+        _second_case(sid),
+        student_id=sid,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        suspension_days=2,
+        decision_date=date(2026, 6, 1),
+    )
+    assert heavier.md166_override_reason == ""
+    services.record_decision(
+        _second_case(sid),
+        student_id=sid,
+        penalty_type=PenaltyType.NO_PENALTY,
+        decision_date=date(2026, 6, 1),
+    )
+
+
+def test_md166_onaysiz_bozulan_ve_gecen_yil_cezasi_sayilmaz() -> None:
+    SchoolYearFactory()
+    SchoolYear.objects.create(
+        name="2024-2025", start_date=date(2024, 9, 9), end_date=date(2025, 6, 20)
+    )
+    sid = StudentFactory().pk
+    old = _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
+    DisciplineDecision.objects.filter(pk=old.pk).update(decision_date=date(2025, 3, 3))
+    pending_case = _second_case(sid)
+    services.record_decision(
+        pending_case,
+        student_id=sid,
+        penalty_type=PenaltyType.REPRIMAND,
+        decision_date=date(2026, 5, 21),
+    )  # onaysız → ceza değil
+    services.record_decision(
+        _second_case(sid),
+        student_id=sid,
+        penalty_type=PenaltyType.REPRIMAND,
+        decision_date=date(2026, 6, 1),
+    )
+
+
+def test_md166_duzenlemede_hafiflestirme_gerekce_ister() -> None:
+    SchoolYearFactory()
+    sid = StudentFactory().pk
+    _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
+    d = services.record_decision(
+        _second_case(sid),
+        student_id=sid,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        suspension_days=2,
+        decision_date=date(2026, 6, 1),
+    )
+    with pytest.raises(ValueError, match="md. 166"):
+        services.update_decision(
+            d, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 1)
+        )
+    services.update_decision(
+        d,
+        penalty_type=PenaltyType.REPRIMAND,
+        decision_date=date(2026, 6, 1),
+        md166_override_reason="Kurul takdiri.",
+    )
+    # Gerekçe verilmeden yapılan sonraki düzenleme mevcut gerekçeyi korur.
+    services.update_decision(
+        d, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 1), notes="not"
+    )
+    d.refresh_from_db()
+    assert d.md166_override_reason == "Kurul takdiri."
+
+
+def test_md166_api_on_bilgi_ve_400() -> None:
+    from rest_framework.test import APIClient
+
+    SchoolYearFactory()
+    sid = StudentFactory().pk
+    prior = _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
+    case = _second_case(sid)
+    client = APIClient()
+    url = f"/api/v1/discipline/cases/{case.pk}/decisions/"
+    from unittest import mock
+
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 6, 1)):
+        data = client.get(url).json()
+    assert data["md166_priors"][str(sid)]["penalty_type"] == PenaltyType.REPRIMAND
+    assert data["md166_priors"][str(sid)]["decision_no"] == prior.decision_no
+    body = {"student": sid, "penalty_type": "REPRIMAND", "decision_date": "2026-06-01"}
+    resp = client.post(url, body, format="json")
+    assert resp.status_code == 400
+    assert "md. 166" in str(resp.json())
+    resp = client.post(url, {**body, "md166_override_reason": "Takdir."}, format="json")
+    assert resp.status_code == 201
+    assert resp.json()["md166_override_reason"] == "Takdir."

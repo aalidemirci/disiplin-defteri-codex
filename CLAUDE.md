@@ -27,6 +27,11 @@
    `discipline_periods.py`, `shared/working_days.py`, `shared/letterhead.py` —
    bunlar OYS'den birebir taşındı ve F3'te PDF çıktısı OYS ile **5/5 birebir**
    doğrulandı. Buradaki bir "iyileştirme" sessizce resmî evrak paritesini bozar.
+   **Bilinçli istisnalar (kullanıcı kararı, 24-26.09.2026):** `precaution_notice`,
+   `appeal_letter` (Form-18), `penalty_notice_parent` / `penalty_days_notice_parent`
+   (Form-15/17), `deadline_extension_record` (Form-12) ve `ek1_committee_decision`
+   (müdür onay kutusu) metinleri mevzuata göre değiştirildi — bunları OYS'ye "geri
+   döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek
    kusur bu iki sınıftan çıktı.
@@ -218,7 +223,8 @@ basar. Daha önce 18 formda aynı anda yakalandı.
 Python'da çıplak `.upper()`/`.lower()` Türkçe metne uygulanıyorsa şüphelen: doğru
 yol `apps/okul/normalize.py` içindeki `_TR_UPPER_MAP` çevirisidir (`ı/İ → I`),
 ki o da **eşleştirme/karşılaştırma** içindir — kullanıcıya veya evraka basılacak
-metne uygulanmaz.
+metne uygulanmaz. Şube adı için doğru yol `normalize.section_upper` (Türkçe büyük harf,
+katlama YOK — "10/Ç" ≠ "10/C", borç M6).
 
 ### 7.3 İş günü vs takvim günü
 Yasal sürelerin **hepsi iş günü** (`shared/working_days.py` + `is_working_day`
@@ -270,6 +276,9 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - **Müdür uyarısı (md. 157/7) ceza değildir**, davranış puanı düşürmez; geçmişte
   ceza/uyarı (uyarıyla kapanmış Dal A dosyası dahil) varsa yazılı uyarı yolu
   override'sız kapalıdır (md. 157/7-e, 166).
+- **md. 166:** öğrencinin aynı öğretim yılında yürürlükte cezası varsa ondan ağır
+  olmayan ceza yalnız gerekçeyle (`md166_override_reason`) girilir; sıralama
+  `selectors.decisions.PENALTY_SEVERITY`. Cezasız karar kural dışı.
 - Dosya başına öğrenciye **tek canlı karar**. Puan ve onay/itiraz mercii cezadan
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
@@ -285,6 +294,9 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.
+- **Onur kurulu (md. 180-181):** üye sınıf seviyesi sicilden, seviye başına tek asıl
+  üye, asıl ikinci başkan 11/12. sınıftan; onur belgesi müdür onayında uygunluk
+  yeniden denetlenir, müdür onayı geri alınamaz (öncesi gerekçeyle geri alınır).
 
 Süre matrisi (iş günü): itiraz tebliğ+5, sevk+5, kurul 10 (+1 uzatma), tedbir ≤10
 (+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri

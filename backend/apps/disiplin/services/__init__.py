@@ -65,6 +65,7 @@ from apps.disiplin.services.honors import (
     remove_honor_board_member,
     set_honor_board_chair,
     set_honor_board_substitute_chair,
+    undo_honor_certificate_step,
 )
 from apps.disiplin.services.participants import (
     add_participant,
@@ -122,6 +123,7 @@ __all__ = [
     "record_meeting",
     "record_principal_review",
     "reject_honor_certificate",
+    "undo_honor_certificate_step",
     "reject_honor_proposal_by_principal",
     "remove_committee_member",
     "remove_honor_board_member",

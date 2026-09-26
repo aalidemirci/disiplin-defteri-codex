@@ -2,7 +2,9 @@
 {% comment %}Form-12 Disiplin Kurulu Süre Uzatma Karar Tutanağı (ara karar) — kanonik metin
 data/sablonlar/disiplin-kurulu/form-12-sure-uzatma-ara-karar.md; md. 192/3. Kurulun süre
 uzatma ara kararı; üye + başkan imzalı (EK-1 deseni). Veri DisciplineDeadlineExtension'dan
-(dosya başına tek). Öğrenci künyesi dosyanın ilk öğrencisinden. Antet shared; unit = kurul.{% endcomment %}
+(dosya başına tek). Öğrenci künyesi dosyanın ilk öğrencisinden. Antet shared; unit = kurul.
+26.09.2026 (kullanıcı kararı): "oy birliği / oy çoğunluğu" üretimde seçilir (md. 191/1;
+GEÇİCİ alan `vote_basis`, DB'ye yazılmaz). Varsayılan oy birliği.{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN KURULU SÜRE UZATMA KARAR TUTANAĞI</div>
 <div class="doc-subtitle">Form-12 · MEB Ortaöğretim Kurumları Yönetmeliği md. 192/3</div>
@@ -44,7 +46,7 @@ uzatma ara kararı; üye + başkan imzalı (EK-1 deseni). Veri DisciplineDeadlin
     olan disiplin soruşturmasının <strong>{{ extension.requested_days|default:'……' }} iş günü</strong>
     süre ile uzatılmasına{% if extension.new_deadline %} (uzatma sonrası kurul karar son günü:
     <strong>{{ extension.new_deadline|date:'d.m.Y' }}</strong>){% endif %}, kararın Okul Müdürlüğü
-    makamına onaya sunulmasına oy birliği ile karar verilmiştir.
+    makamına onaya sunulmasına {% if vote_majority %}oy çoğunluğu{% else %}oy birliği{% endif %} ile karar verilmiştir.
   </div>
 </div>
 

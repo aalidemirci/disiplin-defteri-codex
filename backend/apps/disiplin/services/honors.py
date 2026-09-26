@@ -24,7 +24,7 @@ from apps.disiplin.models import (
     HonorProposerRole,
 )
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import SchoolYear
+from apps.okul.models import SchoolYear, Student
 
 
 def _validate_chair_outside_discipline_committee(*, school_year_id: int, personnel_id: int) -> None:
@@ -126,6 +126,48 @@ def set_honor_board_substitute_chair(
     return board
 
 
+# md. 180/1: ikinci başkan son sınıf veya on birinci sınıf üyesidir (lise 9-12).
+_SECOND_CHAIR_GRADES = frozenset({11, 12})
+
+
+def _validate_md180_composition(
+    board: HonorBoard,
+    *,
+    student: Student,
+    grade_level: int | None,
+    is_second_chair: bool,
+    is_substitute: bool,
+) -> int:
+    """md. 180 kompozisyonu (kullanıcı kararı 26.09.2026 — A: engelle).
+
+    - Sınıf seviyesi öğrencinin SİCİLİNDEKİ sınıftır (farklı değer reddedilir).
+    - Her sınıf seviyesinden tek ASIL üye (yedekler hariç).
+    - Asıl ikinci başkan yalnız 11. veya 12. sınıftan.
+    Döndürür: kaydedilecek sınıf seviyesi.
+    """
+    level = student.class_level
+    if level is None:
+        raise ValueError("Öğrencinin sicilinde sınıf bilgisi yok; önce öğrenci kartını düzeltin.")
+    if grade_level is not None and grade_level != level:
+        raise ValueError(
+            f"Sınıf seviyesi öğrencinin sicilindeki sınıftan ({level}) farklı olamaz (md. 180)."
+        )
+    if is_substitute:
+        return int(level)
+    if HonorBoardMember.objects.filter(
+        board=board, grade_level=level, is_substitute=False, effective_until__isnull=True
+    ).exists():
+        raise ValueError(
+            f"Onur kurulunda {level}. sınıf seviyesinden zaten bir asıl üye var; her sınıf "
+            "seviyesinden bir öğrenci seçilir (md. 180/1)."
+        )
+    if is_second_chair and level not in _SECOND_CHAIR_GRADES:
+        raise ValueError(
+            "İkinci başkan son sınıf veya on birinci sınıf üyesi olmalıdır (md. 180/1)."
+        )
+    return int(level)
+
+
 @transaction.atomic
 def add_honor_board_member(
     board: HonorBoard,
@@ -174,6 +216,13 @@ def add_honor_board_member(
         ).exists()
     ):
         raise ValueError("Onur kurulunda yalnız bir aktif ikinci başkan olabilir.")
+    grade_level = _validate_md180_composition(
+        board,
+        student=student,
+        grade_level=grade_level,
+        is_second_chair=is_second_chair,
+        is_substitute=is_substitute,
+    )
 
     member = HonorBoardMember(
         board=board,
@@ -318,6 +367,7 @@ def _record_event(
     elif event_type in {
         HonorCertificateEventType.PRINCIPAL_APPROVED,
         HonorCertificateEventType.PRINCIPAL_REJECTED,
+        HonorCertificateEventType.UNDONE,
     }:
         meetings = meetings.none()
     if meeting_id is not None:
@@ -473,10 +523,21 @@ def approve_honor_proposal_by_principal(
     decided_on: date,
     explanation: str = "",
 ) -> HonorCertificate:
-    """Ödül-disiplin kurulu kararını okul müdürü onayına bağlar."""
+    """Ödül-disiplin kurulu kararını okul müdürü onayına bağlar.
+
+    Uygunluk yeniden denetlenir (M8): kurul kabulü ile müdür onayı arasında ceza
+    alan / puanı düşen öğrenciye onur belgesi onaylanmaz (md. 161, 181/1).
+    """
+    from apps.disiplin.selectors import is_eligible_for_honor
+
     if certificate.status != HonorCertificateStatus.AWARDED:
         raise ValueError(
             "Yalnız ödül ve disiplin kurulunca kabul edilen teklif okul müdürünce onaylanabilir."
+        )
+    if not is_eligible_for_honor(certificate.student_id, certificate.school_year_id):
+        raise ValueError(
+            "Öğrenci kurul kararından sonra disiplin cezası almış veya davranış puanı "
+            "düşmüş; onur belgesi onaylanamaz (md. 161, 181/1)."
         )
     certificate.status = HonorCertificateStatus.PRINCIPAL_APPROVED
     certificate.principal_decided_at = decided_on
@@ -562,6 +623,60 @@ def reject_honor_certificate(
         event_type=HonorCertificateEventType.REJECTED,
         event_date=decided_on,
         meeting_id=meeting_id,
+        explanation=reason,
+    )
+    return certificate
+
+
+@transaction.atomic
+def undo_honor_certificate_step(
+    certificate: HonorCertificate, *, reason: str, undone_on: date | None = None
+) -> HonorCertificate:
+    """Onur belgesi sürecinin SON adımını gerekçeyle geri alır (kullanıcı kararı M8).
+
+    RECOMMENDED → PROPOSED, AWARDED → RECOMMENDED, PRINCIPAL_REJECTED → AWARDED,
+    REJECTED → (uygun görüş varsa) RECOMMENDED / PROPOSED. Müdür onayı (belge
+    verilmiş sayılır) ve teklif aşaması geri alınamaz. Geri alınan adımın tarihleri
+    temizlenir; iz `UNDONE` olayı olarak gerekçesiyle kalır.
+    """
+    from django.utils import timezone
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("Geri alma gerekçesi zorunludur.")
+    status = certificate.status
+    fields = ["status", "updated_at"]
+    if status == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED:
+        certificate.status = HonorCertificateStatus.PROPOSED
+        certificate.recommended_at = None
+        fields.append("recommended_at")
+    elif status == HonorCertificateStatus.AWARDED:
+        certificate.status = HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+        certificate.awarded_at = None
+        fields.append("awarded_at")
+    elif status == HonorCertificateStatus.PRINCIPAL_REJECTED:
+        certificate.status = HonorCertificateStatus.AWARDED
+        certificate.principal_decided_at = None
+        certificate.principal_decision_reason = ""
+        fields += ["principal_decided_at", "principal_decision_reason"]
+    elif status == HonorCertificateStatus.REJECTED:
+        certificate.status = (
+            HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+            if certificate.recommended_at is not None
+            else HonorCertificateStatus.PROPOSED
+        )
+        certificate.rejected_at = None
+        certificate.rejection_reason = ""
+        fields += ["rejected_at", "rejection_reason"]
+    elif status == HonorCertificateStatus.PRINCIPAL_APPROVED:
+        raise ValueError("Okul müdürünce onaylanmış onur belgesi geri alınamaz.")
+    else:
+        raise ValueError("Teklif aşamasında geri alınacak adım yok.")
+    certificate.save(update_fields=fields)
+    _record_event(
+        certificate,
+        event_type=HonorCertificateEventType.UNDONE,
+        event_date=undone_on or timezone.localdate(),
         explanation=reason,
     )
     return certificate

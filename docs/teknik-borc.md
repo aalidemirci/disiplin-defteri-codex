@@ -37,19 +37,26 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | # | Kalem | Neden bırakıldı |
 |---|---|---|
-| M1 | **AYNEN şablon metinleri:** Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor ve merciyi ceza türünden türetiyor (md. 197 sevkinde "ilçe" — doğrusu il); Form-15/17 savunmasız dosyada da "savunması alınmış"; Form-12 hep "oy birliği"; EK-1 cezasız kararda md. 197 iadesini dışlıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi |
+| M1 | ~~AYNEN şablon metinleri~~ | KAPANDI 26.09.2026 — kullanıcı kararlarıyla Form-18, Form-15/17, Form-12 ve EK-1 müdür onay kutusu düzeltildi (ayrıntı aşağıda "Kapanmış"). Bu dört formda OYS birebir paritesi bilinçli olarak bırakıldı |
 | M2 | **Eksik resmî belgeler:** 157/7-a Form-01, 157/7-b veli davet/görüşme/gelmeme tutanağı, 158/3 arama tutanağı, 195 tespit tutanağı, 197 iade/sevk yazıları, 169/1 onaya sevk yazısı, 175 MEM bilgilendirme/onay yazıları, 192/3 müdür OLUR bloğu | Yeni şablon + saha örneği gerektirir |
-| M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
-| M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
+| M3 | ~~md. 180/181 onur kurulu~~ | KAPANDI 26.09.2026 — md. 181/1 üyelik düşmesi uyarısı ve md. 180 kompozisyon kuralları eklendi (aşağıda) |
+| M4 | ~~md. 166 / 168/5 uyarıları~~ | KAPANDI 26.09.2026 — md. 166 kuralı eklendi (aşağıda); md. 168/5 (zihinsel engel/otizm) için bilinçli olarak alan EKLENMEDİ: kullanıcı kararıyla bu bilgi e-Okul/RAM kaydında tutulur ve kurulca dikkate alınır; özel nitelikli kişisel veri (KVKK md. 6) programda toplanmaz |
 | M5 | **İmha:** ders yılı ortasında imha yalnız rozetle uyarılıyor; imha edilen veri 14 günlük yedeklerde kalıyor; tekil (nakil) imha çok öğrencili dosyada eksik | Geri dönüşsüz araç — ayrı ve dikkatli iş |
-| M6 | **Şube adı Türkçe harf:** "10/Ç" kayda "10/C" olarak geçiyor | Mevcut kayıtların eşleştirme göçü gerekir |
+| M6 | ~~Şube adı Türkçe harf~~ | KAPANDI 26.09.2026 — kullanıcı kararıyla şube Türkçe büyük harfle saklanıyor (`normalize.section_upper`); eski "C" kayıtları otomatik dönüştürülmez (C mi Ç mi ayırt edilemez), yeniden içe aktarmayla TCKN üzerinden düzelir |
 | M7 | ~~Tedbir toplam süresi~~ | KAPANDI 24.09.2026 — kullanıcı (okul yönetimi) teyidi: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez, MEM onayı zorunlu |
-| M8 | **Onur kararlarında geri alma yok**; onur uygunluğu müdür onayı adımında yeniden denetlenmiyor | Ayrı iş |
+| M8 | ~~Onur kararlarında geri alma yok; müdür onayında uygunluk denetimi yok~~ | KAPANDI 26.09.2026 — kullanıcı kararıyla (A) müdür onayında uygunluk yeniden denetlenir; müdür onayından önceki son adım gerekçeyle geri alınır (`UNDONE` olayı iz bırakır); müdür onayı kesindir |
 
 ## Kapanmış
 
 | Kalem | Kapanış |
 |---|---|
+| md. 180: onur kurulu kompozisyonu doğrulanmıyordu (sınıf seviyesi elle, aynı seviyeden iki asıl üye, 9/10. sınıftan ikinci başkan) (M3 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla (A) engellenir: seviye sicilden, her seviyeden tek asıl üye, asıl ikinci başkan yalnız 11/12. sınıftan; yedekler sınır dışı |
+| md. 181/1: ceza alan öğrencinin onur genel kurulu / onur kurulu üyeliği düşmüyordu (M3 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla (B) otomatik düşürülmez; aktif üyede bu ders yılında yürürlükte ceza varsa `md181_penalty` uyarısı gösterilir, sonlandırma gerekçesi "md. 181/1: disiplin cezası (karar no)" olarak önerilir |
+| md. 166: aynı öğretim yılında tekrar için "bir derece ağır ceza" hiç hatırlatılmıyordu (M4 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla (B) öğrencinin bu öğretim yılında yürürlükte cezası varsa ondan ağır olmayan ceza yalnız kurul gerekçesiyle girilir (`md166_override_reason`, evraka basılmaz); cezasız karar ve üst kurulun itiraz/onay değişiklikleri kural dışı |
+| EK-1 müdür onay kutusu cezasız kararda yalnız "GÖRÜLMÜŞTÜR" basıyor, md. 197 iadesini dışlıyor ve "onay ve itiraz gerektirmez" için md. 191'e atıf yapıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla cezasız kararda da "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılıyor; md. 191 atfı bu cümleden kaldırıldı |
+| Form-12 süre uzatma tutanağı hep "oy birliği" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla üretimde "oy birliği / oy çoğunluğu" seçiliyor (md. 191/1; geçici alan, DB'ye yazılmaz) |
+| Form-15/17 savunma alınmamış dosyada da "öğrencinin savunması alınmış" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla ifade yalnız dosya kütüğünde öğrencinin savunma tutanağı (Form-11) varsa basılıyor (md. 194/1) |
+| Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor, merciyi ceza türünden türetiyordu (md. 197 sevkinde "ilçe" — doğrusu il) (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla OYS paritesi bu formda bırakıldı: itiraz eden, süre durumu, tebliğ tarihi, onay makamı ve itiraz mercii kayıttan basılıyor; müdür itirazında "orantılı" görüşü basılmıyor |
 | Tedbir bildirimi uzatılmış tedbirde toplam süreyi "en fazla 10 iş günü" notuyla basıyordu (M1 alt kalemi) | KAPANDI 24.09.2026 — kullanıcı onayıyla şablon notu uzatma sayısını basıyor |
 | SPA hiç servis edilmiyordu (`GET /` → 404; paket açılmazdı) | KAPANDI 24.07.2026 · `5d4c175` |
 | Erişim logu PII sızdırıyordu (`?search=<öğrenci adı>`) | KAPANDI 24.07.2026 · `bbbca99` (ayrıca `django.setup()` susturmayı siliyordu) |

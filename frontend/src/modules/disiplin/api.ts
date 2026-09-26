@@ -410,6 +410,7 @@ export interface DecisionNarrative {
 export interface DisciplineDecision extends DecisionNarrative {
   id: number;
   student: number;
+  md166_override_reason?: string;
   student_name: string;
   event: number | null;
   meeting: number | null;
@@ -455,6 +456,31 @@ export interface DisciplineDecision extends DecisionNarrative {
 export interface DecisionsResponse {
   decisions: DisciplineDecision[];
   behavior_points: Record<number, number>;
+  // md. 166: öğrenci başına bu öğretim yılında yürürlükteki en ağır ceza (yoksa anahtar yok).
+  md166_priors?: Record<string, Md166Prior>;
+}
+
+export interface Md166Prior {
+  penalty_type: PenaltyType;
+  penalty_type_display: string;
+  decision_no: string;
+  decision_date: string;
+}
+
+// md. 166 "bir derece ağır ceza" sıralaması (md. 164 fıkra sırası; backend
+// selectors.decisions.PENALTY_SEVERITY ile birebir). Cezasız karar sıralamada yok.
+export const PENALTY_SEVERITY: Partial<Record<PenaltyType, number>> = {
+  REPRIMAND: 1,
+  SHORT_TERM_SUSPENSION: 2,
+  SCHOOL_CHANGE: 3,
+  EXPULSION: 4,
+};
+
+// Seçilen ceza, aynı yıldaki önceki cezadan ağır değilse gerekçe gerekir (md. 166).
+export function md166NeedsReason(prior: Md166Prior | undefined, penalty: PenaltyType): boolean {
+  const rank = PENALTY_SEVERITY[penalty];
+  if (!prior || rank === undefined) return false;
+  return rank <= (PENALTY_SEVERITY[prior.penalty_type] ?? 0);
 }
 
 export interface DecisionCreateBody {
@@ -467,6 +493,7 @@ export interface DecisionCreateBody {
   penalty_detail?: string;
   decision_no?: string;
   notes?: string;
+  md166_override_reason?: string; // md. 166 gerekçesi (gerekmiyorsa backend boşaltır)
 }
 
 // Karar düzenleme gövdesi (yalnız PENDING; öğrenci bağı değişmez).
@@ -763,6 +790,7 @@ export type DocumentRecipient = "student" | "parent";
 // Form-7/8 bilgi toplama varyantı (öğrenciden / öğretmenden).
 // student/teacher: INFO_GATHERING (Form-7/8); record/petition: DEADLINE_EXTENSION (F-12/13).
 export type DocumentVariant = "student" | "teacher" | "record" | "petition";
+export type VoteBasis = "UNANIMITY" | "MAJORITY";
 
 export interface DocumentGenerateBody {
   document_type: DocumentType;
@@ -783,6 +811,8 @@ export interface DocumentGenerateBody {
   // loglanmaz; boşsa backend uyarı kaydının özetine düşer, ikisi de boşsa 400 döner.
   behavior_summary?: string;
   variant?: DocumentVariant; // yalnız INFO_GATHERING (Form-7/8) + DEADLINE_EXTENSION
+  // Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF'e basılır.
+  vote_basis?: VoteBasis;
   source_label?: string; // bilgi alma "kaynak" seçimi; diğerlerinde yok sayılır
   document_no?: string;
   title?: string;

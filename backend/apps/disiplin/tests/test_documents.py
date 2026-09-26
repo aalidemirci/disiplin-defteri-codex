@@ -30,6 +30,7 @@ from apps.disiplin.tests.factories import (
     StudentFactory,
     approve,
 )
+from apps.okul.models import Student
 from apps.okul.services import setup as okul_setup
 
 pytestmark = pytest.mark.django_db
@@ -590,3 +591,176 @@ def test_uzatilmis_tedbir_bildirimi_uzatmayi_basar() -> None:
     text = " ".join(_pdf_text(pdf_bytes).split())
     assert "15 iş günü" in text
     assert "1 kez uzatıldı" in text
+
+
+def _appeal_letter_text(case: DisciplineCase, sid: int) -> str:
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.APPEAL_LETTER,
+        generated_on=date(2026, 6, 15),
+        student_id=sid,
+    )
+    return " ".join(_pdf_text(pdf_bytes).split())
+
+
+def test_form18_itiraz_eden_ve_sure_kayittan() -> None:
+    """Form-18: itiraz eden (18+ öğrenci), süre dışı başvuru ve tebliğ tarihi kayıttan;
+    itiraz derdestken karar "kesinleşmiş" yazılmaz (md. 169/3)."""
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    Student.objects.filter(pk=sid).update(birth_date=date(2008, 1, 1))
+    services.file_appeal(
+        d, filed_on=date(2026, 6, 10), filed_by_role="STUDENT_ADULT", filed_by_name="EMRE CAN"
+    )
+    text = _appeal_letter_text(case, sid)
+    assert "18 yaşını tamamlamış öğrenci EMRE CAN" in text
+    assert "geçtikten sonra" in text
+    assert "22.05.2026 tarihinde usulüne uygun" in text
+    assert "kesinleşmiştir" not in text
+    assert "tarafımdan onaylanmıştır" in text
+    assert "ilçe öğrenci disiplin kurulunca" in text  # kınama → md. 169/3-a
+
+
+def test_form18_mudur_itirazi_orantililik_gorusu_basmaz() -> None:
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PRINCIPAL")
+    text = _appeal_letter_text(case, sid)
+    assert "Okul müdürü olarak tarafımdan" in text
+    assert "içerisinde" in text
+    assert "orantılı" not in text
+    assert "itiraz yazısı" in text
+
+
+def test_form18_md197_ilce_kararinda_itiraz_il_kurulunda() -> None:
+    """md. 169/4, 202/1-b: ilçe kurulunun bağladığı karara itiraz il kurulunda."""
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
+    )
+    services.record_principal_review(d, action="RETURN", reason="a", decided_on=date(2026, 5, 21))
+    services.record_principal_review(d, action="REFER", reason="b", decided_on=date(2026, 5, 26))
+    services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 6, 5))
+    services.notify_decision(d, notified_on=date(2026, 6, 8))
+    services.file_appeal(d, filed_on=date(2026, 6, 9), filed_by_role="PARENT")
+    text = _appeal_letter_text(case, sid)
+    assert "197. maddesi uyarınca gönderildiği ilçe" in text
+    assert "il öğrenci disiplin kurulunca" in text
+    assert "169. maddesi 3. fıkrası (a)" not in text
+
+
+def test_form15_17_savunma_ifadesi_yalniz_savunma_tutanagiyla() -> None:
+    """md. 194/1: "savunması alınmış" ancak savunma tutanağı (Form-11) kaydı varsa basılır."""
+    from apps.disiplin.models import DisciplineParticipant, ParticipantRole
+
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case,
+        student_id=sid,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        decision_date=date(2026, 5, 22),
+        suspension_days=2,
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    from apps.disiplin.services.decisions import update_decision_narrative
+
+    update_decision_narrative(d, fields={}, enforcement_start_date=date(2026, 6, 8))
+
+    def texts() -> list[str]:
+        out = []
+        for doc_type in (DocumentType.PENALTY_NOTICE, DocumentType.PENALTY_DAYS_NOTICE):
+            pdf_bytes, _ = doc_engine.generate_document(
+                case,
+                document_type=doc_type,
+                recipient=doc_engine.RECIPIENT_PARENT,
+                generated_on=date(2026, 6, 8),
+                student_id=sid,
+                log=False,
+            )
+            out.append(" ".join(_pdf_text(pdf_bytes).split()))
+        return out
+
+    for text in texts():
+        assert "savunması alınmış" not in text
+        assert "sonucunda; olayla ilgili bilgi ve belgeler incelenmiştir" in text
+
+    participant = DisciplineParticipant.objects.filter(
+        case=case, student_id=sid, role=ParticipantRole.ACCUSED
+    ).first() or services.add_participant(
+        case, role=ParticipantRole.ACCUSED, person_type="STUDENT", person_id=sid
+    )
+    doc_engine.generate_document(
+        case,
+        document_type=DocumentType.DEFENSE_RECORD,
+        generated_on=date(2026, 5, 21),
+        participant_id=participant.pk,
+    )
+    for text in texts():
+        assert "öğrencinin savunması alınmış, olayla ilgili" in text
+
+
+def test_form12_oylama_esasi_secilir() -> None:
+    """md. 191/1: kurul oy çoğunluğuyla karar alır — Form-12 hep "oy birliği" basmaz."""
+    case, _sid = _committee_case()
+
+    def text(vote_basis: str = "") -> str:
+        pdf_bytes, _ = doc_engine.generate_document(
+            case,
+            document_type=DocumentType.DEADLINE_EXTENSION,
+            generated_on=date(2026, 5, 25),
+            vote_basis=vote_basis,
+            log=False,
+        )
+        return " ".join(_pdf_text(pdf_bytes).split())
+
+    assert "oy birliği ile karar verilmiştir" in text()
+    majority = text("MAJORITY")
+    assert "oy çoğunluğu ile karar verilmiştir" in majority
+    assert "oy birliği" not in majority
+    with pytest.raises(ValueError, match="oylama esası"):
+        text("HEPSI")
+
+
+def test_generate_ucu_oylama_esasini_iletir(client: APIClient) -> None:
+    case, _sid = _committee_case()
+    resp = client.post(
+        f"/api/v1/discipline/cases/{case.pk}/documents/generate/",
+        {
+            "document_type": DocumentType.DEADLINE_EXTENSION,
+            "generated_on": "2026-05-25",
+            "vote_basis": "MAJORITY",
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    pdf = b"".join(resp.streaming_content)  # type: ignore[attr-defined]
+    assert "oy çoğunluğu ile" in " ".join(_pdf_text(pdf).split())
+
+
+def test_ek1_cezasiz_kararda_md197_iade_kutusu() -> None:
+    """md. 197: müdür uygun bulmadığı her kararı (cezasız dahil) bir kez kurula iade eder."""
+    case, sid = _committee_case()
+    services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.NO_PENALTY, decision_date=date(2026, 5, 22)
+    )
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.COMMITTEE_DECISION,
+        generated_on=date(2026, 5, 22),
+        student_id=sid,
+        log=False,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "GÖRÜLMÜŞTÜR" in text
+    assert "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" in text
+    assert "gerektirmez (md. 191)" not in text
+    assert "UYGUNDUR" not in text

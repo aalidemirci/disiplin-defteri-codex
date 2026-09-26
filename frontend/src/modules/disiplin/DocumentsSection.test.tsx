@@ -28,6 +28,8 @@ const dapi = vi.hoisted(() => ({
 
 // Yalnız API çağrıları taklit edilir; belge türü kataloğu (GENERATABLE_DOCUMENT_TYPES)
 // gerçek kalır — workflow.ts onu içe aktarır ve test asıl davranışı ölçer.
+vi.mock("../../lib/download", () => ({ saveBlob: vi.fn() }));
+
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
   return { ...actual, disiplinApi: dapi };
@@ -245,5 +247,34 @@ describe("DocumentsSection — saklanan PDF kopyaları", () => {
     await user.click(deletedButton);
     expect(await screen.findByText(/Silinen evraklar \(1\)/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Tekrar indir" })).toHaveLength(2);
+  });
+});
+
+describe("DocumentsSection — Form-12 oylama esası", () => {
+  it("süre uzatma tutanağında oy çoğunluğu seçimi üretim isteğine gider", async () => {
+    const user = userEvent.setup();
+    dapi.generateDocument.mockResolvedValue(new Blob(["%PDF-test"]));
+    renderSection();
+    await openGenerateForm(user, "DEADLINE_EXTENSION");
+
+    const vote = screen.getByLabelText(/Kurul kararı nasıl alındı/);
+    expect(vote).toHaveValue("UNANIMITY");
+    await user.selectOptions(vote, "MAJORITY");
+    await user.click(screen.getByRole("button", { name: /Üret ve indir/ }));
+
+    await waitFor(() => expect(dapi.generateDocument).toHaveBeenCalled());
+    expect(dapi.generateDocument.mock.calls[0][1]).toMatchObject({
+      document_type: "DEADLINE_EXTENSION",
+      variant: "record",
+      vote_basis: "MAJORITY",
+    });
+  });
+
+  it("müdürlüğe dilekçede (Form-13) oylama seçimi gösterilmez", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await openGenerateForm(user, "DEADLINE_EXTENSION");
+    await user.selectOptions(screen.getByLabelText(/Form sürümü/), "petition");
+    expect(screen.queryByLabelText(/Kurul kararı nasıl alındı/)).not.toBeInTheDocument();
   });
 });

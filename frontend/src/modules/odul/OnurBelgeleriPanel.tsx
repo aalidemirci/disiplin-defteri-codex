@@ -158,7 +158,7 @@ export default function OnurBelgeleriPanel() {
       ) : (
         <ul className="space-y-2">
           {items.map((proposal) => (
-            <ProposalRow key={proposal.id} proposal={proposal} />
+            <ProposalRow key={proposal.id} proposal={proposal} onChanged={load} />
           ))}
         </ul>
       )}
@@ -175,7 +175,45 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-function ProposalRow({ proposal }: { proposal: HonorCertificate }) {
+// M8 (kullanıcı kararı 26.09.2026): müdür onayından önceki son adım gerekçeyle geri alınır.
+const UNDOABLE_STATUSES = new Set<HonorCertificate["status"]>([
+  "HONOR_BOARD_RECOMMENDED",
+  "AWARDED",
+  "PRINCIPAL_REJECTED",
+  "REJECTED",
+]);
+
+function ProposalRow({
+  proposal,
+  onChanged,
+}: {
+  proposal: HonorCertificate;
+  onChanged: () => void;
+}) {
+  const [undoing, setUndoing] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const undo = async () => {
+    if (!reason.trim()) {
+      setError("Geri alma gerekçesi zorunludur.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await odulApi.undoCertificateStep(proposal.id, { reason: reason.trim() });
+      setUndoing(false);
+      setReason("");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Geri alınamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <li>
       <Card elevation={1} className="p-4">
@@ -197,6 +235,32 @@ function ProposalRow({ proposal }: { proposal: HonorCertificate }) {
           Teklif eden: {proposal.proposer_role_display}
           {proposal.proposer_name ? ` (${proposal.proposer_name})` : ""}
         </p>
+        {UNDOABLE_STATUSES.has(proposal.status) &&
+          (undoing ? (
+            <div className="mt-3 space-y-2">
+              <TextField
+                label="Geri alma gerekçesi"
+                required
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              {error && <ErrorBanner message={error} />}
+              <div className="flex justify-end gap-2">
+                <Button variant="text" onClick={() => setUndoing(false)} disabled={busy}>
+                  Vazgeç
+                </Button>
+                <Button icon="undo" onClick={() => void undo()} disabled={busy}>
+                  {busy ? "Geri alınıyor…" : "Geri al"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 flex justify-end">
+              <Button variant="text" icon="undo" onClick={() => setUndoing(true)}>
+                Son adımı geri al
+              </Button>
+            </div>
+          ))}
       </Card>
     </li>
   );

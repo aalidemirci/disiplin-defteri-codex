@@ -21,7 +21,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 | # | Kusur | Mevzuat | Durum |
 |---|---|---|---|
-| 7 | md. 197 ile ilçeye giden kararda itiraz mercii "ilçe" (doğrusu il) | 169/4, 202/1-b | ✅ Kayıt: onaylayan merciin bir üstü. ⏸ Form-18 şablon metni (M1) |
+| 7 | md. 197 ile ilçeye giden kararda itiraz mercii "ilçe" (doğrusu il) | 169/4, 202/1-b | ✅ Kayıt: onaylayan merciin bir üstü; Form-18 metni de kayıttan (26.09.2026) |
 | 8 | Uzaklaştırma günleri ara tatile/hafta sonuna düşüyordu | 172/1-a | ✅ `is_school_open_day` + `SCHOOL_BREAK` tatil türü; başlangıç günü doğrulanır |
 | 9 | Form-16/17 kınamada da üretilebiliyordu | 164/2, 172/1 | ✅ Yalnız kısa süreli uzaklaştırma |
 | 10 | EK-1 imzası toplantıya katılanları değil, aktif yılın kurulunu basıyordu | 196/1, 185/4 | ✅ Dosyanın yılının kurulu + toplantı katılımcıları |
@@ -58,13 +58,67 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
-- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister.
+- **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
-  **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
-  her biri ayrı ve dikkat isteyen iş.
+- **M5 imha zamanı ve yedekler**: ayrı ve dikkat isteyen iş.
+- **M8 onur kararı geri alma:** ✅ kapandı — müdür onayında denetim + son adımı geri alma.
+- **M3 onur kurulu:** ✅ kapandı — md. 181/1 uyarısı + md. 180 kompozisyon kuralları.
+- **M4 md. 166 / 168/5:** ✅ kapandı — md. 166 gerekçeli kural; md. 168/5 bilinçli
+  olarak programa alınmadı (KVKK md. 6).
+- **M6 şube Türkçe harf:** ✅ kapandı — `normalize.section_upper`.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
   süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
+
+## Okul yönetimi kararları (26.09.2026)
+
+Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek tek alınan kararlar:
+
+1. **Ara tatil yasal sürelerde iş günü sayılır** (tedbir, itiraz, sevk): yönetmelik
+   süreleri "iş günü" diye tanımlar; ara tatil resmî tatil değildir. Kod değişmedi.
+2. **Uzaklaştırma başlangıcı okulun kapalı olduğu güne girilemez** (md. 172/1-a):
+   mevcut ret davranışı korundu. Kod değişmedi.
+3. **Form-18 metni kayıttan doldurulur:** itiraz eden (veli / 18 yaşını tamamlamış
+   öğrenci / müdür), süre içi/dışı, tebliğ tarihi, onay makamı ve itiraz mercii
+   (md. 197 sevkinde il kurulu, md. 169/4, 202/1-b). "Kesinleşmiştir" ifadesi
+   kaldırıldı. Bu formda OYS paritesi bilinçli olarak bırakıldı.
+
+4. **Form-15/17 "savunması alınmış" ifadesi kayda bağlandı:** yalnız dosya kütüğünde
+   öğrencinin savunma tutanağı (Form-11) varsa basılır (md. 194/1); yoksa cümle
+   "olayla ilgili bilgi ve belgeler incelenmiştir" diye sürer. Savunmayı elle yazdıysanız
+   tutanağı kütüğe ekleyin (tek öğrencili dosyada öğrenci seçmeden eklenen de sayılır).
+
+5. **Form-12 oylama esası seçilir:** süre uzatma tutanağı üretilirken "oy birliği /
+   oy çoğunluğu" seçilir (md. 191/1); varsayılan oy birliği. Seçim DB'ye yazılmaz.
+
+6. **EK-1 müdür onay kutusu:** "ceza verilmesine yer olmadığına" kararında da
+   "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılır; "onay ve itiraz
+   gerektirmez (md. 191)" cümlesindeki atıf kaldırıldı.
+
+7. **Şube harfi Türkçe saklanır (M6 kapandı):** "10/Ç" artık "10/C"ye katlanmaz;
+   içe aktarma, elle giriş ve süzgeç aynı dönüşümü kullanır. Eski kayıtlar öğrenci
+   listesi yeniden içe aktarılınca düzelir; eski "10/C" eşleştirme satırı elle silinir.
+
+8. **md. 166 zorunlu kural (B):** öğrencinin aynı öğretim yılında yürürlükte cezası
+   varsa ondan ağır olmayan ceza (kayıt veya düzenlemede) yalnız "md. 166 gerekçesi"
+   yazılarak girilir; gerekçe karar kaydında kalır, evraka basılmaz. Cezasız karar ve
+   üst kurulun itiraz/onay değişiklikleri kural dışıdır. Migrasyon: `disiplin 0007`.
+
+9. **md. 168/5 (zihinsel engel/otizm) programa eklenmedi:** bilgi e-Okul/RAM kaydında;
+   kurul kendisi dikkate alır. Özel nitelikli kişisel veri (KVKK md. 6) toplanmaz.
+
+10. **md. 181/1 üyelik düşmesi — uyarı (B):** ceza alan aktif onur genel kurulu / onur
+    kurulu üyesinin yanında "üyeliği düşmeli" uyarısı çıkar; program üyeliği kendisi
+    sonlandırmaz. Genel kurulda "Görevi sonlandır" gerekçesi md. 181/1 atfıyla dolar.
+
+11. **md. 180 onur kurulu kompozisyonu — engel (A):** üyenin sınıf seviyesi sicilden
+    alınır; her seviyeden tek asıl üye; asıl ikinci başkan yalnız 11/12. sınıftan.
+    Yedek üyeler bu sınırların dışında. Mevcut kurullardaki kayıtlar değiştirilmez;
+    kurallar yeni üye eklemede uygulanır.
+
+12. **Onur belgesi (M8 — A):** müdür onayında uygunluk yeniden denetlenir (kurul
+    kabulünden sonra ceza alan öğrenciye onay yok); müdür onayından önceki son adım
+    ("uygun gördü", "kabul etti", "uygun görülmedi", "müdür onaylamadı") gerekçeyle
+    geri alınır. Migrasyon: `disiplin 0008` (olay türü seçeneği).
 
 ## Geçiş notları (kullanıcıya etkisi)
 
@@ -73,5 +127,6 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
   ilçe / il kurulu onay tarihi) girin.
 - Kasım/nisan ara tatilini Ayarlar > Tatiller'den **"Ara tatil (okul kapalı)"**
   türüyle girin; yalnız uzaklaştırma günlerinde atlanır, yasal süreleri etkilemez.
-- Migrasyonlar: `disiplin 0006_decision_legal_fields`, `okul 0005_holiday_school_break`
-  (yalnız alan ekleme / seçenek; veri dönüştürmez).
+- Migrasyonlar: `disiplin 0006_decision_legal_fields`, `disiplin 0007_decision_md166_override`,
+  `disiplin 0008_honor_event_undone`,
+  `okul 0005_holiday_school_break` (yalnız alan ekleme / seçenek; veri dönüştürmez).

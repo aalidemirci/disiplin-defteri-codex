@@ -2,7 +2,9 @@
 {% comment %}Form-15 Veliye Disiplin Cezası Tebliği — kanonik metinle birebir
 (data/sablonlar/disiplin-kurulu/form-15-...md); ön-doldurulmuş resmî yazı, modern
 tasarım (Tur 100, md. 169/5). Sorumlu veli (PRIMARY) ön-doldurulur; adres modelde
-tutulmaz → elle. Antet shared (Kaymakamlık ev stili). Form-14 (öğrenci) ayrı belge.{% endcomment %}
+tutulmaz → elle. Antet shared (Kaymakamlık ev stili). Form-14 (öğrenci) ayrı belge.
+26.09.2026 (kullanıcı kararı): "savunması alınmış" yalnız dosyada öğrencinin
+savunma tutanağı (Form-11) kaydı varsa basılır (md. 194/1).{% endcomment %}
 {% block content %}
 <div class="doc-title">{% if decision.penalty_type == 'NO_PENALTY' %}VELİYE DİSİPLİN KURULU KARARI TEBLİĞİ{% else %}VELİYE DİSİPLİN CEZASI TEBLİĞİ{% endif %}</div>
 <div class="doc-subtitle">Form-15 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169/5</div>
@@ -29,7 +31,7 @@ Karar no/tarih sistemden. "İtiraz için son gün" çıkarıldı.{% endcomment %
   Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
   <strong>{{ student.full_name }}</strong> hakkında …/…/202… tarihinde meydana gelen ve tutanak
   altına alınan disiplin olayı ile ilgili olarak yapılan inceleme ve değerlendirme sonucunda;
-  öğrencinin savunması alınmış, olayla ilgili bilgi ve belgeler incelenmiştir.
+  {% if defense_taken %}öğrencinin savunması alınmış, {% endif %}olayla ilgili bilgi ve belgeler incelenmiştir.
 </p>
 
 <p class="para">

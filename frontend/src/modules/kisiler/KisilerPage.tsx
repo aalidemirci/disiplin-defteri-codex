@@ -494,7 +494,7 @@ function OgrenciFormDialog({
             value={section}
             onChange={(e) => setSection(e.target.value)}
             error={errors.class_section}
-            helperText="Türkçe harfler ASCII'ye katlanır (ş → S)."
+            helperText="Türkçe harf korunur (ç → Ç); 10/C ile 10/Ç ayrı şubedir."
           />
           <TextField
             label="Doğum tarihi"
