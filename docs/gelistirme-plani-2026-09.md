@@ -60,9 +60,11 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M3 onur kurulu üyelik düşmesi/kompozisyon**, 
-  **M5 imha zamanı ve yedekler**, **M8 onur kararı geri alma**:
-  her biri ayrı ve dikkat isteyen iş.
+- **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M5 imha zamanı ve yedekler**,
+  **M8 onur kararı geri alma**: her biri ayrı ve dikkat isteyen iş.
+- **M4 md. 166 / 168/5:** ✅ kapandı — md. 166 gerekçeli kural; md. 168/5 bilinçli
+  olarak programa alınmadı (KVKK md. 6).
+- **M6 şube Türkçe harf:** ✅ kapandı — `normalize.section_upper`.
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
   süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
 
