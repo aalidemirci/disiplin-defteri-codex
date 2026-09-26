@@ -22,7 +22,7 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
 
 pytestmark = pytest.mark.django_db
 
@@ -72,6 +72,7 @@ def test_uygulama_baslangici_onay_sonrasi_narrative_ile_girilir(client: APIClien
     services.set_decision_approval(
         d, approval_status=DecisionApprovalStatus.APPROVED, approved_on=date(2026, 5, 23)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 23))
     resp = client.post(
         f"/api/v1/discipline/cases/{case.pk}/decisions/{d.pk}/narrative/",
@@ -322,6 +323,7 @@ def test_sure_disi_bekleyen_itiraz_kapanisi_bloke_eder() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     gec = services.file_appeal(d, filed_on=date(2026, 6, 15), filed_by_role="PARENT")
     assert gec.within_deadline is False

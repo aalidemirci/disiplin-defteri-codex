@@ -160,6 +160,30 @@ def add_event(
             raise ValueError("Override işleminde gerekçe (override_reason) zorunludur.") from exc
         is_override = True
 
+    # Kapanış olayı `close_case` ile AYNI uygunluk kuralına bağlıdır: aşama
+    # olayıyla CLOSED'a geçmek tebliğ/itiraz/e-Okul denetimini delmemeli (md. 169).
+    # Uygun değilse yalnız gerekçeli override ile — ve override izi kaydedilir.
+    if stage == CaseStage.CLOSED:
+        is_override = _closing_needs_override(case, override, override_reason) or is_override
+
+    # md. 157/7: müdür yazılı uyarısı yalnız DAHA ÖNCE CEZA/UYARI almamış öğrenciye;
+    # ikinci kınamalık davranışta öğrenci doğrudan kurula gönderilir (157/7-e, 166).
+    if stage == CaseStage.DECIDED and PrincipalDecision.WRITTEN_WARNING in (
+        principal_decisions or []
+    ):
+        blocked = _students_needing_committee(case)
+        if blocked:
+            if not override:
+                raise ValueError(
+                    "Yazılı uyarı yolu yalnız daha önce disiplin cezası/uyarısı olmayan "
+                    f"öğrenciye uygulanır (md. 157/7, 157/7-e): {', '.join(blocked)} "
+                    "için geçmiş kayıt var — dosyayı disiplin kuruluna sevk edin "
+                    "veya gerekçeyle override kullanın."
+                )
+            if not (override_reason or "").strip():
+                raise ValueError("Override işleminde gerekçe (override_reason) zorunludur.")
+            is_override = True
+
     event = DisciplineEvent(
         case=case,
         stage=stage,
@@ -195,6 +219,34 @@ def add_event(
         update_fields.append("closed_at")
     case.save(update_fields=update_fields)
     return event
+
+
+def _closing_needs_override(case: DisciplineCase, override: bool, override_reason: str) -> bool:
+    """CLOSED olayı için kapanış uygunluğu; uygunsuzsa override+gerekçe şart → True."""
+    from apps.disiplin import selectors
+
+    if case.current_stage not in (CaseStage.DECIDED, CaseStage.COMMITTEE_DONE):
+        return False  # durum makinesi zaten override'a zorladı
+    eligible, eligible_on, reason = selectors.close_eligibility_details(case)
+    if eligible:
+        return False
+    if not override:
+        detail = f"en erken {eligible_on:%d.%m.%Y}" if eligible_on else reason
+        raise ValueError(f"Dosya henüz kapatılamaz ({detail}). Erken kapatma gerekçe gerektirir.")
+    if not (override_reason or "").strip():
+        raise ValueError("Erken kapatma için gerekçe (override_reason) zorunludur.")
+    return True
+
+
+def _students_needing_committee(case: DisciplineCase) -> list[str]:
+    """Dosyada daha önce ceza/uyarı almış (md. 157/7-e) öğrencilerin adları."""
+    from apps.disiplin import selectors
+
+    names: list[str] = []
+    for link in case.case_students.select_related("student"):
+        if selectors.should_route_to_committee(link.student_id, exclude_case_id=case.pk):
+            names.append(link.student.full_name or f"#{link.student_id}")
+    return names
 
 
 @transaction.atomic

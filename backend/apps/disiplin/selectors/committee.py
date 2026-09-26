@@ -37,6 +37,28 @@ def get_active_committee() -> DisciplineCommittee | None:
     return DisciplineCommittee.objects.filter(school_year=year).prefetch_related("members").first()
 
 
+def committee_for_case(case: DisciplineCase) -> DisciplineCommittee | None:
+    """Dosyayı görüşen kurul: kurula sevk (yoksa dilekçe) tarihinin ders yılının kurulu.
+
+    md. 185/4: kurulun görevi yeni kurul oluşuncaya kadar sürer. Yıl devrinden
+    sonra eski yılın dosyasının evrakı YENİ yılın kurulunu basmamalı; o yılın
+    kurulu yoksa (henüz kurulmamışsa) aktif kurula, o da yoksa en son kurula düşülür.
+    """
+    from apps.disiplin.selectors.precautions import committee_referred_on
+
+    anchor = committee_referred_on(case) or case.petition_date
+    qs = DisciplineCommittee.objects.prefetch_related("members")
+    own: DisciplineCommittee | None = qs.filter(
+        school_year__start_date__lte=anchor, school_year__end_date__gte=anchor
+    ).first()
+    if own is not None:
+        return own
+    fallback: DisciplineCommittee | None = (
+        get_active_committee() or qs.order_by("-school_year__start_date").first()
+    )
+    return fallback
+
+
 def get_committee(committee_id: int) -> DisciplineCommittee | None:
     """Tek kurul (id ile, silinmemiş) — üyeleriyle birlikte. Yoksa None."""
     return DisciplineCommittee.objects.filter(pk=committee_id).prefetch_related("members").first()

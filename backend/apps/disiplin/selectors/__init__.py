@@ -18,6 +18,7 @@ from apps.disiplin.selectors.cases import (
 )
 from apps.disiplin.selectors.committee import (
     committee_cases_for_minutes,
+    committee_for_case,
     committee_members,
     get_active_committee,
     get_active_honor_board,
@@ -54,6 +55,7 @@ from apps.disiplin.selectors.decisions import (
     get_decision,
     get_decision_by_id,
     latest_resolved_appeal,
+    penalties_in_force,
 )
 from apps.disiplin.selectors.document_log import (
     deleted_documents,
@@ -92,6 +94,7 @@ __all__ = [
     "appeals_awaiting_forward",
     "appeals_for_decision",
     "behavior_point_for_student",
+    "penalties_in_force",
     "case_student_ids",
     "cases_awaiting_committee_decision",
     "cases_for_student",
@@ -114,6 +117,7 @@ __all__ = [
     "decisions_for_student",
     "deleted_decisions",
     "extensions_for_case",
+    "committee_for_case",
     "get_active_committee",
     "get_active_honor_board",
     "get_any_decision",

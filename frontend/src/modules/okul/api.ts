@@ -75,12 +75,15 @@ export type SchoolConfigBody = Partial<Omit<SchoolConfig, "setup_completed">>;
 // Tatil takvimi
 // ---------------------------------------------------------------------------
 
-export type HolidayKind = "OFFICIAL" | "RELIGIOUS" | "OTHER";
+export type HolidayKind = "OFFICIAL" | "RELIGIOUS" | "OTHER" | "SCHOOL_BREAK";
 
 export const HOLIDAY_KIND_TR: Record<HolidayKind, string> = {
   OFFICIAL: "Resmî tatil",
   RELIGIOUS: "Dini bayram",
   OTHER: "İdari/diğer",
+  // Okul kapalı ama idari iş günü sürer: yasal süreleri ETKİLEMEZ, yalnız
+  // uzaklaştırma günlerinde atlanır (md. 172/1-a).
+  SCHOOL_BREAK: "Ara tatil (okul kapalı)",
 };
 
 export interface Holiday {

@@ -405,11 +405,37 @@ def _parent_context(student: Any) -> dict[str, Any] | None:
     }
 
 
+class _Signer:
+    """Toplantıya katılan üyeyi imza ızgarasına ASIL üye olarak sunar.
+
+    AYNEN şablon yedekleri (`is_substitute`) gizler; toplantıya asıl üyenin
+    yerine katılan yedek de kararı imzalamak zorundadır (md. 186, 196/1).
+    """
+
+    is_substitute = False
+
+    def __init__(self, member: Any) -> None:
+        self.member_name = member.member_name
+        self.title = member.title
+        self._member = member
+
+    def get_member_type_display(self) -> str:
+        return str(self._member.get_member_type_display())
+
+
 def _ek1_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
     """EK-1 kurul kararı bağlamı — karar + anlatı alanları + kurul üyeleri (TAM-OTO)."""
     decision = case.decisions.filter(student_id=student.pk).first()
-    committee = selectors.get_active_committee()
-    members = list(selectors.committee_members(committee)) if committee else []
+    committee = selectors.committee_for_case(case)
+    members: list[Any] = list(selectors.committee_members(committee)) if committee else []
+    # md. 196/1 "karar bütün üyelerce imzalanır": imzayı kararı ALAN heyet atar.
+    # Dosyanın kurul toplantısı kaydı varsa katılanlar basılır (şikâyetçi üyenin
+    # yerine gelen yedek dahil — md. 191/2, 186); yoksa kurulun asıl üyeleri.
+    meeting = selectors.meetings_for_case(case).first()
+    if meeting is not None:
+        attendees = list(meeting.attendees.all())
+        if attendees:
+            members = [_Signer(m) for m in attendees]
     return {
         **_common_context(case),
         "student": _student_context(student),
@@ -434,8 +460,12 @@ _BRANCH_A_ALLOWED: frozenset[str] = frozenset(
 
 
 def _case_referred_to_committee(case: DisciplineCase) -> bool:
-    """Dosya kurula sevk edildi mi? (Dal B) — DECIDED olayının müdür kararından (Tur 109)."""
-    decided = case.events.filter(stage=CaseStage.DECIDED).order_by("event_date").first()
+    """Dosya kurula sevk edildi mi? (Dal B) — EN SON DECIDED olayının müdür kararından.
+
+    Yanlış "yazılı uyarı" seçimi aşama geri alınıp kurula sevkle düzeltildiğinde
+    dal da düzelmeli; ilk olay esas alınsaydı dosya Dal A'da kilitli kalırdı.
+    """
+    decided = case.events.filter(stage=CaseStage.DECIDED).order_by("-recorded_at", "-id").first()
     pds = (decided.principal_decisions or []) if decided else []
     return any(
         d in (PrincipalDecision.HONOR_COMMITTEE, PrincipalDecision.DISCIPLINE_COMMITTEE)
@@ -461,7 +491,7 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
         "total_pages": total_pages,
     }
     if referred:
-        committee = selectors.get_active_committee()
+        committee = selectors.committee_for_case(case)
         chair = committee.chair if committee else None
         ctx["compiler_name"] = chair.full_name if chair else ""
         ctx["compiler_role"] = "Düzenleyen / Disiplin Kurulu Başkanı"
@@ -471,9 +501,9 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
     return ctx
 
 
-def _committee_context() -> dict[str, Any]:
-    """Tebliğ eden (müdür yrd. / kurul başkanı) için aktif kurul bağlamı."""
-    committee = selectors.get_active_committee()
+def _committee_context(case: DisciplineCase) -> dict[str, Any]:
+    """Tebliğ eden (müdür yrd. / kurul başkanı) için dosyanın kurulu (md. 185/4)."""
+    committee = selectors.committee_for_case(case)
     return {"committee": committee}
 
 
@@ -486,7 +516,7 @@ def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any
         ensure_decision_no(decision)
     return {
         **_common_context(case),
-        **_committee_context(),
+        **_committee_context(case),
         "student": _student_context(student),
         "parent": _parent_context(student),
         "decision": decision,
@@ -502,13 +532,21 @@ def _suspension_dates(decision: Any) -> dict[str, Any]:
     (resmî/idari tatilleri atlar; ADR-0002 açık servis arayüzü, Tur 90 deseni).
     """
     from apps.disiplin import discipline_periods
-    from apps.okul.services.calendar import is_working_day
+    from apps.okul.services.calendar import is_school_open_day
 
     start = getattr(decision, "enforcement_start_date", None) if decision else None
     days = getattr(decision, "suspension_days", None) if decision else None
     if start is None or not days:
         return {"enforcement_start": None, "enforcement_end": None, "school_return": None}
-    pred = is_working_day
+    # md. 172/1-a: uzaklaştırma "okulun AÇIK olduğu sürede" çekilir — ara tatil,
+    # yarıyıl ve yaz günleri (idari iş günü olsalar da) ceza günü sayılmaz; okula
+    # başlama da okulun açık olduğu ilk gündür.
+    pred = is_school_open_day
+    if not pred(start):
+        raise ValueError(
+            "Uzaklaştırma başlangıcı okulun açık olduğu bir gün değil (hafta sonu, tatil "
+            "veya ara tatil); EK-1 anlatısından uygulama başlangıcını düzeltin (md. 172/1-a)."
+        )
     end = discipline_periods.suspension_end_date(start, days, is_working_day=pred)
     return {
         "enforcement_start": start,
@@ -531,7 +569,7 @@ def _penalty_days_notice_context(case: DisciplineCase, student: Any) -> dict[str
     days = getattr(decision, "suspension_days", None) if decision else None
     return {
         **_common_context(case),
-        **_committee_context(),
+        **_committee_context(case),
         "student": _student_context(student),
         "parent": _parent_context(student),
         "decision": decision,
@@ -676,7 +714,7 @@ def _board_decision_notice_context(
     next_board = _NEXT_BOARD.get(authority)
     return {
         **_common_context(case),
-        **_committee_context(),
+        **_committee_context(case),
         "student": _student_context(student),
         "parent": _parent_context(student),
         "decision": decision,
@@ -708,9 +746,9 @@ def _precaution_notice_context(case: DisciplineCase, student: Any) -> dict[str, 
 # --- Dal B ifade/savunma/bilgi formları (Tur 106) — katılımcı + kurul + geçici alanlar ---
 
 
-def _committee_with_members_context() -> dict[str, Any]:
-    """Aktif kurul + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni)."""
-    committee = selectors.get_active_committee()
+def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
+    """Dosyanın kurulu + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni)."""
+    committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
     return {"committee": committee, "members": members}
 
@@ -762,7 +800,7 @@ def _statement_call_context(
     """İfadeye çağrı pusulası (Form-3, md. 194-195) — katılımcı + tebliğ/tebellüğ + zaman."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "participant": _participant_context(participant),
         **_schedule_context(extra),
     }
@@ -779,7 +817,7 @@ def _statement_record_context(
     """
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "participant": _participant_context(participant),
         "statement_subject": (extra.get("statement_subject") or "").strip(),
         "statement_body": (extra.get("statement_body") or "").strip(),
@@ -792,7 +830,7 @@ def _info_gathering_context(
     """Bilgi toplama (Form-7/8) — variant 'student'/'teacher' gövdeyi belirler (hakkında işlem yapılan öğrenci)."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "participant": _participant_context(participant),
         "variant": (extra.get("variant") or "student").strip() or "student",
     }
@@ -804,7 +842,7 @@ def _defense_call_context(
     """Savunmaya çağrı (Form-9, md. 194) — suçlanan + tebliğ/tebellüğ + zaman."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "participant": _participant_context(participant),
         **_schedule_context(extra),
     }
@@ -822,7 +860,7 @@ def _defense_record_context(
     """
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "participant": _participant_context(participant),
         "statement_subject": (extra.get("statement_subject") or "").strip(),
         "statement_body": (extra.get("statement_body") or "").strip(),
@@ -834,7 +872,7 @@ def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[s
     """Kurul toplantı çağrısı (Form-10, md. 190-191) — üye listesi + toplantı zamanı."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         **_schedule_context(extra),
     }
 
@@ -849,7 +887,7 @@ def _deadline_extension_context(case: DisciplineCase) -> dict[str, Any]:
     student = case.students.first()
     return {
         **_common_context(case),
-        **_committee_with_members_context(),
+        **_committee_with_members_context(case),
         "extension": extension,
         "student": _student_context(student) if student is not None else None,
     }
@@ -960,7 +998,9 @@ def generate_document(
     # kurula sevk yok) kurul formları üretilmez — Tur 213 (3c) UI filtresinin
     # sunucu karşılığı. DECIDED öncesi (dal belirsiz) ve Dal B'de tam liste.
     if document_type not in _BRANCH_A_ALLOWED:
-        decided = case.events.filter(stage=CaseStage.DECIDED).order_by("event_date").first()
+        decided = (
+            case.events.filter(stage=CaseStage.DECIDED).order_by("-recorded_at", "-id").first()
+        )
         pds = (decided.principal_decisions or []) if decided else []
         if pds and not _case_referred_to_committee(case):
             raise ValueError(
@@ -985,6 +1025,9 @@ def generate_document(
         days_decision = case.decisions.filter(student_id=student_id).first()
         if days_decision is None:
             final, reason = False, "dosyada bu öğrenci için resmî karar yok"
+        elif days_decision.penalty_type != PenaltyType.SHORT_TERM_SUSPENSION:
+            # Form-16/17 "… gün kısa süreli uzaklaştırma" basar (md. 164/2, 172/1).
+            final, reason = False, "ceza günleri tebliği yalnız kısa süreli uzaklaştırmada üretilir"
         else:
             final, reason = selectors.decision_is_final(days_decision)
         if not final:

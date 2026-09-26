@@ -59,22 +59,24 @@ class TestSeedOfficialHolidays:
     def test_yil_araligindaki_sabit_tatiller_eklenir(self) -> None:
         year = self._year()
         created, skipped = calendar_service.seed_official_holidays(year)
-        # 2026-09-01..2027-06-19 aralığına düşen sabit tatiller:
-        # 29 Ekim 2026, 1 Ocak 2027, 23 Nisan 2027, 1 Mayıs 2027, 19 Mayıs 2027.
-        assert created == 5
+        # 2026-09-01..2027-08-31 (yaz dahil) aralığına düşen sabit tatiller:
+        # 29 Ekim 2026, 1 Ocak, 23 Nisan, 1 Mayıs, 19 Mayıs, 15 Temmuz, 30 Ağustos 2027.
+        assert created == 7
         assert skipped == 0
         names = set(Holiday.objects.values_list("name", flat=True))
         assert "Cumhuriyet Bayramı" in names
         assert "Yılbaşı" in names
-        # Yaz tatilleri (15 Temmuz, 30 Ağustos) ders yılı dışı — eklenmez.
-        assert "Zafer Bayramı" not in names
+        # Yaz tatilleri (15 Temmuz, 30 Ağustos) de eklenir: yıl sonu kararlarının
+        # tebliğ/itiraz süreleri yazın işler.
+        assert "Zafer Bayramı" in names
+        assert "Demokrasi ve Millî Birlik Günü" in names
 
     def test_ikinci_kosut_idempotent(self) -> None:
         year = self._year()
         calendar_service.seed_official_holidays(year)
         created, skipped = calendar_service.seed_official_holidays(year)
         assert created == 0
-        assert skipped == 5
+        assert skipped == 7
 
     def test_sabit_tatil_kind_official(self) -> None:
         calendar_service.seed_official_holidays(self._year())
@@ -121,13 +123,16 @@ class TestSeedReligiousHolidays:
         assert calendar_service.seed_religious_holidays(year) == (0, 0)
 
     def test_kesisim_siniri_bayram_baslangic_gunu(self) -> None:
-        """Yıl tam bayramın ilk günü bitiyorsa bayram DAHİL (kesişim, kapsama değil)."""
+        """Aralık tam bayramın son günü başlıyorsa bayram DAHİL (kesişim, kapsama değil)."""
         year = SchoolYear.objects.create(
-            name="kesisim", start_date=date(2026, 9, 1), end_date=date(2027, 3, 9)
+            name="kesisim", start_date=date(2027, 3, 11), end_date=date(2027, 4, 30)
         )
         created, _ = calendar_service.seed_religious_holidays(year)
-        assert created == 1
-        assert Holiday.objects.get().start_date == date(2027, 3, 9)
+        # Ramazan 09-11.03.2027 (son günü kesişir) + seed penceresi 31 Ağustos'a
+        # uzandığından Kurban 16-19.05.2027 de girer.
+        assert created == 2
+        first = Holiday.objects.order_by("start_date").first()
+        assert first is not None and first.start_date == date(2027, 3, 9)
 
 
 @pytest.mark.django_db
@@ -137,7 +142,7 @@ class TestSeedHolidaysBilesik:
             name="2026-2027", start_date=date(2026, 9, 1), end_date=date(2027, 6, 19)
         )
         created, skipped = calendar_service.seed_holidays(year)
-        assert created == 7  # 5 sabit resmî + Ramazan/Kurban 2027
+        assert created == 9  # 7 sabit resmî (yaz dahil) + Ramazan/Kurban 2027
         assert skipped == 0
         assert set(Holiday.objects.values_list("kind", flat=True)) == {
             HolidayKind.OFFICIAL,

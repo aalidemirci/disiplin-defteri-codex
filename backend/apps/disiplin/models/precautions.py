@@ -116,7 +116,7 @@ class DisciplinePrecaution(BaseModel):
     start_date = models.DateField("tedbir başlangıç tarihi")
     requested_days = models.PositiveSmallIntegerField(
         "tedbir süresi (iş günü)",
-        help_text="md. 175/1: en fazla 10 iş günü.",
+        help_text="md. 175/1: ilk karar en fazla 10 iş günü; md. 175/2 uzatmalarıyla toplam.",
     )
     end_date = models.DateField(
         "tedbir bitiş günü",
@@ -174,10 +174,12 @@ class DisciplinePrecaution(BaseModel):
         return f"{self.case_id}/{self.student_id} tedbir ({self.get_status_display()})"
 
     def clean(self) -> None:
-        """Tedbir süresi 1-10 iş günü olmalıdır (md. 175/1)."""
+        """Tedbir süresi: ilk karar 1-10 iş günü (md. 175/1); her uzatma ayrıca en fazla
+        10 iş günü ekler (md. 175/2 — "iki kez daha uzatılabilir")."""
         from apps.disiplin import discipline_periods
 
-        if not (1 <= self.requested_days <= discipline_periods.PRECAUTION_MAX_WORKING_DAYS):
+        limit = discipline_periods.PRECAUTION_MAX_WORKING_DAYS * (1 + self.extension_count)
+        if not (1 <= self.requested_days <= limit):
             raise ValidationError(
                 {
                     "requested_days": (

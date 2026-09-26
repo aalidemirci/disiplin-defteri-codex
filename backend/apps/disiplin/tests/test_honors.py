@@ -14,7 +14,12 @@ from apps.disiplin.models import (
     HonorProposerRole,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    approve,
+)
 from apps.okul.models import SchoolTerm
 
 pytestmark = pytest.mark.django_db
@@ -84,9 +89,12 @@ def test_davranis_puani_dusen_ogrenciye_teklif_edilemez() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    services.record_decision(
+    decision = services.record_decision(
         case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
+    # Onaysız kurul kararı henüz ceza değildir (md. 163/2) — puan düşmez.
+    assert selectors.is_eligible_for_honor(student.pk) is True
+    approve(decision)
     assert selectors.is_eligible_for_honor(student.pk) is False
     with pytest.raises(ValueError, match="davranış puanı"):
         services.propose_honor_certificate(

@@ -24,7 +24,12 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    approve,
+)
 from apps.okul.services import setup as okul_setup
 
 pytestmark = pytest.mark.django_db
@@ -198,6 +203,7 @@ def test_form16_kesinlesme_kilidi() -> None:
             student_id=sid,
         )
     # Tebliğ + itiraz süresi (29.05.2026) bugünden önce doldu → kesin → üretilir.
+    approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     d.refresh_from_db()
     from apps.disiplin.services.decisions import update_decision_narrative
@@ -559,3 +565,28 @@ def test_reorder_dogrulamalari(client: APIClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()[0]["sort_order"] == 10
+
+
+def test_uzatilmis_tedbir_bildirimi_uzatmayi_basar() -> None:
+    """md. 175/2: uzatılmış tedbirde toplam süre "en fazla 10 iş günü" notuyla çelişmez."""
+    case, sid = _committee_case()
+    p = services.create_precaution(
+        case, student_id=sid, start_date=date(2026, 5, 20), requested_days=10
+    )
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.PRECAUTION_NOTICE,
+        generated_on=date(2026, 5, 20),
+        student_id=sid,
+    )
+    assert "en fazla 10 iş günü" in _pdf_text(pdf_bytes)
+    services.extend_precaution(p, additional_days=5, mne_notified=True)
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.PRECAUTION_NOTICE,
+        generated_on=date(2026, 5, 27),
+        student_id=sid,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "15 iş günü" in text
+    assert "1 kez uzatıldı" in text

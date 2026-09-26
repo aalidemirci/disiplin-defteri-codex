@@ -138,8 +138,10 @@ class AppealSerializer(serializers.ModelSerializer[DisciplineAppeal]):
             "result_display",
             "resulted_on",
             "result_notes",
+            "previous_penalty_type",
         ]
         read_only_fields = [
+            "previous_penalty_type",
             "decision",
             "within_deadline",
             "appeal_authority",
@@ -203,6 +205,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "appeal_deadline",
             "e_school_processed_on",
             "is_enforced",
+            "referred_to_district",
+            "penalty_removed_on",
+            "penalty_removal_note",
             "notes",
             "deleted_at",
             "appeals",
@@ -239,6 +244,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "appeal_deadline",
             "e_school_processed_on",
             "is_enforced",
+            "referred_to_district",
+            "penalty_removed_on",
+            "penalty_removal_note",
             "deleted_at",
         ]
 

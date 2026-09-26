@@ -41,7 +41,7 @@ değiştirilmelidir. Antet shared; modern tasarım.{% endcomment %}
   </tr>
   <tr>
     <td class="label">Süre</td>
-    <td>{% if precaution %}{{ precaution.requested_days }}{% else %}……{% endif %} iş günü (md. 175/1: en fazla 10 iş günü)</td>
+    <td>{% if precaution %}{{ precaution.requested_days }}{% else %}……{% endif %} iş günü {% if precaution and precaution.extension_count %}(ilk tedbir en fazla 10 iş günü, md. 175/1; Millî Eğitim Müdürü onayıyla {{ precaution.extension_count }} kez uzatıldı, md. 175/2){% else %}(md. 175/1: en fazla 10 iş günü){% endif %}</td>
   </tr>
   <tr>
     <td class="label">İşleme Başlama Son Günü</td>

@@ -163,20 +163,29 @@ def extend_precaution(
 ) -> DisciplinePrecaution:
     """Tedbir süresini uzatır (md. 175/2 — milli eğitim müdürü onayıyla iki kez daha).
 
-    Toplam süre md. 175/1 sınırını (10 iş günü) aşamaz; en fazla iki uzatma.
+    Her uzatma AYRI bir süredir: en fazla 10 iş günü (md. 175/1 sınırı her tedbir
+    kararı için geçerli), en fazla iki uzatma. Uzatma mevcut bitiş gününden sonra
+    başlar. Haklı ve zorlayıcı sebeplerin devamı + Millî Eğitim Müdürünün onayı
+    şarttır (`mne_notified=True` bu uçta onayın alındığını kaydeder).
     """
     if precaution.status != PrecautionStatus.ACTIVE:
         raise ValueError("Yalnızca yürürlükteki bir tedbir uzatılabilir.")
-    if additional_days < 1:
-        raise ValueError("Uzatma süresi en az 1 iş günü olmalıdır.")
+    if not (1 <= additional_days <= discipline_periods.PRECAUTION_MAX_WORKING_DAYS):
+        raise ValueError(
+            "Her uzatma 1-"
+            f"{discipline_periods.PRECAUTION_MAX_WORKING_DAYS} iş günü olmalıdır (md. 175/1-2)."
+        )
     if precaution.extension_count >= discipline_periods.PRECAUTION_EXTENSION_MAX_COUNT:
         raise ValueError("Tedbir en fazla iki kez uzatılabilir (md. 175/2).")
-    if precaution.requested_days + additional_days > discipline_periods.PRECAUTION_MAX_WORKING_DAYS:
-        raise ValueError("Toplam tedbir süresi 10 iş gününü aşamaz (md. 175/1).")
+    if not mne_notified:
+        raise ValueError(
+            "Tedbirin uzatılması Millî Eğitim Müdürünün onayına bağlıdır (md. 175/2); "
+            "onay alındığını işaretleyin."
+        )
 
     precaution.requested_days += additional_days
-    precaution.end_date = discipline_periods.precaution_end_date(
-        precaution.start_date, precaution.requested_days, is_working_day=is_working_day
+    precaution.end_date = discipline_periods.add_working_days(
+        precaution.end_date, additional_days, is_working_day=is_working_day
     )
     precaution.extension_count += 1
     if mne_notified:

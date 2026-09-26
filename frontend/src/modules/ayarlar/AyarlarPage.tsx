@@ -514,6 +514,7 @@ const KIND_CHIP: Record<HolidayKind, string> = {
   OFFICIAL: "bg-primary-container text-on-primary-container",
   RELIGIOUS: "bg-tertiary-container text-on-tertiary-container",
   OTHER: "bg-secondary-container text-on-secondary-container",
+  SCHOOL_BREAK: "bg-surface-container-high text-on-surface-variant",
 };
 
 /** Tatil kaydı ders yılına BAĞLANMAZ; yıl eşleşmesi tarih kapsamasıyla bulunur. */
@@ -574,10 +575,12 @@ function TatillerPanel({
       {error && <ErrorBanner message={error} />}
 
       <InfoNote>
-        Buraya YALNIZ resmî ve idari tatiller girilir; ara tatil / yarıyıl tatili{" "}
-        <strong>girilmez</strong> — o günlerde memur çalışır ve yasal disiplin süreleri işlemeye
-        devam eder. Dini bayramlar Diyanet ilanından önce <strong>tahmini</strong> olarak yüklenir,
-        gerekirse silip yeniden girebilirsiniz.
+        Resmî ve idari tatiller yasal süre hesabından düşülür. Kasım/nisan ara tatilini yalnız{" "}
+        <strong>&quot;Ara tatil (okul kapalı)&quot;</strong> türüyle girin: o günlerde memur çalışır
+        ve yasal disiplin süreleri işlemeye devam eder, ama okul kapalı olduğundan kısa süreli
+        uzaklaştırma günü sayılmaz (md. 172/1-a). Yarıyıl tatili dönem tarihlerinden anlaşılır. Dini
+        bayramlar Diyanet ilanından önce <strong>tahmini</strong> olarak yüklenir, gerekirse silip
+        yeniden girebilirsiniz.
       </InfoNote>
 
       <Card elevation={1} className="p-6">

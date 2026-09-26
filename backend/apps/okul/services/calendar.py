@@ -44,7 +44,21 @@ RELIGIOUS_HOLIDAYS: tuple[tuple[str, date, date, bool], ...] = (
     ("Kurban Bayramı", date(2028, 5, 5), date(2028, 5, 8), True),
     ("Ramazan Bayramı", date(2029, 2, 14), date(2029, 2, 16), True),
     ("Kurban Bayramı", date(2029, 4, 24), date(2029, 4, 27), True),
+    ("Ramazan Bayramı", date(2030, 2, 4), date(2030, 2, 6), True),
+    ("Kurban Bayramı", date(2030, 4, 13), date(2030, 4, 16), True),
+    ("Ramazan Bayramı", date(2031, 1, 24), date(2031, 1, 26), True),
+    ("Kurban Bayramı", date(2031, 4, 2), date(2031, 4, 5), True),
 )
+
+
+def _seed_window(school_year: SchoolYear) -> tuple[date, date]:
+    """Tatil seed aralığı: ders yılı başından ERTESİ 31 Ağustos'a kadar.
+
+    Ders yılı (varsayılan 01.09-30.06) yazı kapsamaz; ama yıl sonu kararlarının
+    tebliğ/itiraz/sevk süreleri Temmuz-Ağustos'ta işleyebilir. 15 Temmuz ve
+    30 Ağustos seed edilmezse bu süreler bir iş günü KISA hesaplanır.
+    """
+    return school_year.start_date, max(school_year.end_date, date(school_year.end_date.year, 8, 31))
 
 
 def is_working_day(day: date) -> bool:
@@ -56,7 +70,34 @@ def is_working_day(day: date) -> bool:
     """
     if day.weekday() >= 5:  # 5=Cumartesi, 6=Pazar
         return False
-    return not Holiday.objects.filter(start_date__lte=day, end_date__gte=day).exists()
+    return (
+        not Holiday.objects.filter(start_date__lte=day, end_date__gte=day)
+        .exclude(kind=HolidayKind.SCHOOL_BREAK)
+        .exists()
+    )
+
+
+def is_school_open_day(day: date) -> bool:
+    """Okulun AÇIK olduğu gün mü? (md. 172/1-a — kısa süreli uzaklaştırma günleri.)
+
+    İş günü olmak YETMEZ: ara tatil (`SCHOOL_BREAK` kaydı) ve — dönemler
+    tanımlıysa — iki dönem arasındaki yarıyıl boşluğu ile ders yılı dışı
+    günler okulun kapalı olduğu günlerdir. Yasal süreler bu yüklemi KULLANMAZ
+    (onlar `is_working_day`); yalnız cezanın fiilen çekildiği günler için.
+    """
+    if not is_working_day(day):
+        return False
+    if Holiday.objects.filter(
+        kind=HolidayKind.SCHOOL_BREAK, start_date__lte=day, end_date__gte=day
+    ).exists():
+        return False
+    year = SchoolYear.objects.filter(start_date__lte=day, end_date__gte=day).first()
+    if year is None:
+        return False  # ders yılı dışı (yaz tatili)
+    terms = list(year.terms.all())
+    if terms and not any(t.start_date <= day <= t.end_date for t in terms):
+        return False  # yarıyıl boşluğu
+    return True
 
 
 def _add_holiday_if_missing(
@@ -75,15 +116,17 @@ def _add_holiday_if_missing(
 def seed_official_holidays(school_year: SchoolYear) -> tuple[int, int]:
     """Yıl aralığına düşen sabit resmî tatilleri ekler → (eklenen, zaten_var).
 
-    İdempotent: aynı (ad, başlangıç) canlı kayıt varsa atlar. Ders yılı dışına
-    düşen tatiller (yaz: 15 Temmuz, 30 Ağustos) yazılmaz — OYS davranış paritesi.
+    İdempotent: aynı (ad, başlangıç) canlı kayıt varsa atlar. Aralık ders yılı
+    başından ertesi 31 Ağustos'a kadardır (`_seed_window`) — yaz tatilindeki 15
+    Temmuz / 30 Ağustos da yasal süre hesabına girer.
     """
     created = 0
     skipped = 0
-    for cal_year in sorted({school_year.start_date.year, school_year.end_date.year}):
+    window_start, window_end = _seed_window(school_year)
+    for cal_year in sorted({window_start.year, window_end.year}):
         for month, day, name in FIXED_OFFICIAL_HOLIDAYS:
             holiday = date(cal_year, month, day)
-            if not (school_year.start_date <= holiday <= school_year.end_date):
+            if not (window_start <= holiday <= window_end):
                 continue
             if _add_holiday_if_missing(
                 name=name,
@@ -103,8 +146,9 @@ def seed_religious_holidays(school_year: SchoolYear) -> tuple[int, int]:
     """Yıl aralığıyla kesişen dini bayramları gömülü tablodan ekler → (eklenen, zaten_var)."""
     created = 0
     skipped = 0
+    window_start, window_end = _seed_window(school_year)
     for name, start, end, is_estimated in RELIGIOUS_HOLIDAYS:
-        if end < school_year.start_date or start > school_year.end_date:
+        if end < window_start or start > window_end:
             continue
         if _add_holiday_if_missing(
             name=name,

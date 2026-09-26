@@ -13,14 +13,33 @@ from django.db import transaction
 from apps.okul.models import Personnel, Student
 
 
+def _assert_tckn_unique(tckn: object, *, exclude_pk: int | None = None) -> None:
+    """TCKN tekilliği — şifreli kipte DB kısıtı etkisizdir (borç K1), servis korur.
+
+    Aynı TCKN'li ikinci kayıt öğrencinin disiplin geçmişini böler (md. 157/7,
+    166 tekrar triajı, davranış puanı, onur uygunluğu yanlış hesaplanır).
+    """
+    from apps.okul import selectors
+
+    value = str(tckn or "").strip()
+    if not value:
+        return
+    existing = selectors.find_student_by_tckn(value)
+    if existing is not None and existing.pk != exclude_pk:
+        raise ValueError("Bu T.C. kimlik numarasıyla kayıtlı bir öğrenci zaten var.")
+
+
 @transaction.atomic
 def create_student(**fields: Any) -> Student:
+    _assert_tckn_unique(fields.get("tckn"))
     student: Student = Student.objects.create(**fields)
     return student
 
 
 @transaction.atomic
 def update_student(student: Student, **fields: Any) -> Student:
+    if "tckn" in fields and fields["tckn"] != student.tckn:
+        _assert_tckn_unique(fields["tckn"], exclude_pk=student.pk)
     changed = [name for name, value in fields.items() if getattr(student, name) != value]
     if changed:
         for name in changed:

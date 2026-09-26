@@ -20,10 +20,32 @@ from apps.disiplin.models import (
     DisciplineAppeal,
     DisciplineCase,
     DisciplineDecision,
+    PenaltyType,
 )
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import SchoolYear
 from apps.okul.services.calendar import is_working_day
+
+
+def penalties_in_force(qs: QuerySet[DisciplineDecision]) -> QuerySet[DisciplineDecision]:
+    """Hukuken VAR sayılan cezalar: onaylı, gerçek ceza, bozulmamış, kaldırılmamış.
+
+    - Onaysız (PENDING/iade/ilçede) karar henüz ceza değildir (md. 163/2, 169/2
+      "onayından sonra uygulanır").
+    - "Ceza verilmesine yer olmadığı" ceza değildir.
+    - İtirazla bozulan (REJECTED/OVERTURNED) ve öğretmenler kurulunca kaldırılan
+      (md. 171/2) ceza "bulunmadığı" kabul edilir (md. 171/3).
+
+    Davranış puanı, triaj (md. 157/7, 166) ve EK-1 "önceki cezalar" bunu kullanır.
+    """
+    overturned = DisciplineAppeal.objects.filter(result=AppealResult.OVERTURNED).values_list(
+        "decision_id", flat=True
+    )
+    return (
+        qs.filter(approval_status=DecisionApprovalStatus.APPROVED, penalty_removed_on__isnull=True)
+        .exclude(penalty_type=PenaltyType.NO_PENALTY)
+        .exclude(pk__in=overturned)
+    )
 
 
 def decisions_for_case(case: DisciplineCase) -> QuerySet[DisciplineDecision]:
@@ -63,6 +85,8 @@ def close_eligibility_details(
             continue  # itiraz kesinleşti → bu karar kapanışa engel değil
         if d.approval_status == DecisionApprovalStatus.REJECTED:
             continue  # itiraz bozması ile kaldırılmış → kesin
+        if d.approval_status != DecisionApprovalStatus.APPROVED:
+            return (False, None, "Karar henüz onaylanmadı (md. 163/2).")
         if d.notified_at is None or d.appeal_deadline is None:
             return (False, None, "Karar önce öğrenciye/veliye tebliğ edilmelidir.")
         eligible_dates.append(
@@ -113,6 +137,9 @@ def decision_is_final(
         return (False, "karar müdür incelemesinde/ilçe kurulunda (md. 197)")
     if decision.approval_status == DecisionApprovalStatus.REJECTED:
         return (False, "karar itiraz sonucu bozulmuş/kaldırılmış")
+    if decision.approval_status != DecisionApprovalStatus.APPROVED:
+        # md. 163/2, 169/2: ceza ONAYINDAN sonra uygulanır — onaysız karar kesinleşemez.
+        return (False, "karar henüz onaylanmadı (md. 163/2)")
     appeals = list(decision.appeals.all())
     if any(a.result == AppealResult.PENDING for a in appeals):
         return (False, "itiraz incelemesi sürüyor (md. 172/2-ç)")
@@ -181,11 +208,11 @@ def decisions_for_student(student_id: int) -> QuerySet[DisciplineDecision]:
 
 
 def behavior_point_for_student(student_id: int, school_year_id: int | None = None) -> int:
-    """Öğrencinin güncel davranış puanı (md. 170): 100 − bozulmamış kararların indirimi.
+    """Öğrencinin güncel davranış puanı (md. 170): 100 − yürürlükteki cezaların indirimi.
 
-    Ders yılı `decision_date` aralığından çözülür (verilmezse aktif yıl). İtirazı
-    "bozuldu" (OVERTURNED) ile sonuçlanan kararlar puan iadesi gereği hariç
-    tutulur (md. 171). Aktif yıl yoksa tüm kararlar dikkate alınır.
+    Ders yılı `decision_date` aralığından çözülür (verilmezse aktif yıl). Yalnız
+    `penalties_in_force` sayılır: onaysız, cezasız, itirazla bozulmuş ve md. 171/2
+    ile kaldırılmış kararlar puan düşürmez. Aktif yıl yoksa tüm kararlar dikkate alınır.
     """
     year: SchoolYear | None
     if school_year_id is not None:
@@ -195,10 +222,7 @@ def behavior_point_for_student(student_id: int, school_year_id: int | None = Non
     qs = DisciplineDecision.objects.filter(student_id=student_id)
     if year is not None:
         qs = qs.filter(decision_date__gte=year.start_date, decision_date__lte=year.end_date)
-    overturned = DisciplineAppeal.objects.filter(result=AppealResult.OVERTURNED).values_list(
-        "decision_id", flat=True
-    )
-    qs = qs.exclude(pk__in=overturned)
+    qs = penalties_in_force(qs)
     total = qs.aggregate(s=Sum("behavior_point_deduction"))["s"] or 0
     return max(0, BEHAVIOR_POINT_START - int(total))
 

@@ -262,7 +262,8 @@ class StudentListCreateView(generics.ListCreateAPIView[Student]):
         )
 
     def perform_create(self, serializer: serializers.BaseSerializer[Student]) -> None:
-        serializer.instance = persons_service.create_student(**dict(serializer.validated_data))
+        with _service_errors():
+            serializer.instance = persons_service.create_student(**dict(serializer.validated_data))
 
 
 class StudentDetailView(generics.RetrieveUpdateDestroyAPIView[Student]):
@@ -273,9 +274,10 @@ class StudentDetailView(generics.RetrieveUpdateDestroyAPIView[Student]):
 
     def perform_update(self, serializer: serializers.BaseSerializer[Student]) -> None:
         assert serializer.instance is not None
-        serializer.instance = persons_service.update_student(
-            serializer.instance, **dict(serializer.validated_data)
-        )
+        with _service_errors():
+            serializer.instance = persons_service.update_student(
+                serializer.instance, **dict(serializer.validated_data)
+            )
 
     def perform_destroy(self, instance: Student) -> None:
         persons_service.delete_student(instance)

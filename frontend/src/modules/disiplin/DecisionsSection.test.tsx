@@ -82,6 +82,9 @@ function makeDecision(over: Partial<DisciplineDecision> = {}): DisciplineDecisio
     notification_method: "",
     appeal_deadline: null,
     is_enforced: false,
+    referred_to_district: false,
+    penalty_removed_on: null,
+    penalty_removal_note: "",
     is_final: false,
     student_birth_date: null,
     notes: "",
@@ -103,6 +106,25 @@ function makeCase(over: Partial<DisciplineCase> = {}): DisciplineCase {
     current_stage_display: "Karar verildi",
     closed_at: null,
     students: [{ id: 3, full_name: "Zeynep Yılmaz", student_number: "123", class_label: "10-A" }],
+    // Kurula sevkli dosya (md. 163/2 — karar girişi yalnız burada açık).
+    events: [
+      {
+        id: 1,
+        stage: "DECIDED",
+        stage_display: "Müdür değerlendirmesi",
+        event_date: "2026-03-01",
+        recorded_at: "2026-03-01T09:00:00Z",
+        notes: "",
+        assigned_guidance_name: "",
+        guidance_outcome: "",
+        principal_decisions: ["DISCIPLINE_COMMITTEE"],
+        committee_decision_type: null,
+        committee_decision_type_name: null,
+        committee_decision_text: "",
+        is_override: false,
+        override_reason: "",
+      },
+    ],
     ...over,
   };
 }
@@ -216,7 +238,16 @@ describe("DecisionsSection — silme/geri alma", () => {
 
 describe("DecisionsSection — mevzuat atfı", () => {
   it("itiraz son günü md. 169/3'e atıfla anlatılır (169/5 tebliğdir)", async () => {
-    dapi.listDecisions.mockResolvedValue({ decisions: [makeDecision()], behavior_points: {} });
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approval_status_display: "Onaylandı",
+          approved_at: "2026-03-02",
+        }),
+      ],
+      behavior_points: {},
+    });
     const user = userEvent.setup();
     renderSection();
 
@@ -226,6 +257,64 @@ describe("DecisionsSection — mevzuat atfı", () => {
     expect(
       screen.getByText(/itiraz son günü otomatik hesaplanır \(md\. 169\/3\)/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("DecisionsSection — mevzuat kilitleri (md. 163/2, 169/4, 197)", () => {
+  it("onaysız kararda tebliğ düğmesi yok; bir kez iade edilmiş kararda yeniden iade yok", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ returned_at: "2026-03-03" })],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByRole("button", { name: "Onay durumu" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tebliğ kaydet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kurula iade" })).not.toBeInTheDocument();
+  });
+
+  it("kurula sevksiz dosyada karar eklenemez", async () => {
+    dapi.listDecisions.mockResolvedValue({ decisions: [], behavior_points: {} });
+    renderSection(makeCase({ events: [] }));
+    expect(
+      await screen.findByText(/yalnız okul öğrenci ödül ve disiplin kuruluna sevk/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Karar ekle" })).not.toBeInTheDocument();
+  });
+
+  it("itirazı sonuçlanmış kararda yeniden itiraz düğmesi yok", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approval_status_display: "Onaylandı",
+          notified_at: "2026-03-03",
+          appeal_deadline: "2026-03-10",
+          appeals: [
+            {
+              id: 9,
+              decision: 5,
+              filed_on: "2026-03-04",
+              filed_by_role: "PARENT",
+              filed_by_name: "Veli",
+              within_deadline: true,
+              appeal_authority: "DISTRICT_BOARD",
+              appeal_authority_display: "İlçe öğrenci disiplin kurulu",
+              forward_deadline: "2026-03-11",
+              forwarded_on: "2026-03-05",
+              result: "UPHELD",
+              result_display: "Onandı (ceza aynen)",
+              resulted_on: "2026-03-12",
+              result_notes: "",
+              previous_penalty_type: "",
+            },
+          ],
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText("Zeynep Yılmaz")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "İtiraz ekle" })).not.toBeInTheDocument();
   });
 });
 

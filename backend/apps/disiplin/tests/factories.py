@@ -14,6 +14,7 @@ from apps.disiplin.models import (
     CaseStage,
     DisciplineCase,
     DisciplineCommittee,
+    DisciplineDecision,
     DisciplineDecisionType,
     PetitionerRole,
 )
@@ -81,3 +82,12 @@ class DisciplineCommitteeFactory(factory.django.DjangoModelFactory):  # type: ig
 
     school_year = factory.SubFactory(SchoolYearFactory)
     chair = factory.SubFactory(PersonnelFactory)
+
+
+def approve(decision: DisciplineDecision) -> DisciplineDecision:
+    """Kararı karar tarihinde onaylar — tebliğden önce ZORUNLU adım (md. 163/2, 169/2)."""
+    from apps.disiplin import services
+
+    return services.set_decision_approval(
+        decision, approval_status="APPROVED", approved_on=decision.decision_date
+    )

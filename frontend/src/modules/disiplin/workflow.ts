@@ -19,14 +19,23 @@ export const BRANCH_TR: Record<"A" | "B", string> = {
   B: "Dal B · kurul",
 };
 
-/** DECIDED olayının müdür kararlarından dalı türetir. Karar yoksa null. */
+/** EN SON DECIDED olayının müdür kararlarından dalı türetir. Karar yoksa null.
+ * (Yanlış "yazılı uyarı" aşama geri alınıp kurula sevkle düzeltilince dal da düzelir.) */
 export function caseBranch(events: DisciplineEvent[] | undefined): CaseBranch {
   if (!events) return null;
-  const decided = events.find((e) => e.stage === "DECIDED");
+  const decided = [...events].reverse().find((e) => e.stage === "DECIDED");
   const pds = decided?.principal_decisions;
   if (!pds || pds.length === 0) return null;
   if (pds.includes("DISCIPLINE_COMMITTEE") || pds.includes("HONOR_COMMITTEE")) return "B";
   return "A"; // yalnız WRITTEN_WARNING
+}
+
+/** Dosya okul öğrenci ödül ve disiplin kuruluna sevk edildi mi? Ceza kararı yalnız
+ * kurulda görüşülüp karara bağlanan dosyaya girilir (md. 163/2; backend de zorlar). */
+export function isDisciplineCommitteeReferred(events: DisciplineEvent[] | undefined): boolean {
+  return (events ?? []).some(
+    (e) => e.stage === "DECIDED" && (e.principal_decisions ?? []).includes("DISCIPLINE_COMMITTEE"),
+  );
 }
 
 // Dal A (yalnız yazılı uyarı) dosyasında üretilebilir belge türleri: kurul formları
@@ -313,7 +322,7 @@ export function nextStepFor(
       return {
         title: "Sıradaki: müdür onayı / itiraz, sonra kapanış",
         description:
-          "Kurul kararı müdür onayına sunuldu. Müdür onaylar (kınama/kısa süreli uzaklaştırma) ya da uygun bulmazsa gerekçeyle kurula iade eder; yetki dışı cezada üst mercie gönderir (md. 197). Onay ve tebliğden sonra dosya kapatılır.",
+          "Kurul kararı müdür onayına sunuldu. Müdür onaylar (kınama/kısa süreli uzaklaştırma) ya da uygun bulmazsa gerekçeyle bir kez kurula iade eder (md. 197); okul değiştirme ilçe, örgün eğitim dışına çıkarma il kurulu onayına gönderilir (md. 163/2, 169/1-2). Onay ve tebliğden sonra dosya kapatılır.",
         ownerNote:
           mudur && chair
             ? undefined

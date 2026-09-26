@@ -51,7 +51,7 @@ import type {
   DisciplineDecision,
   PenaltyType,
 } from "./api";
-import { ALL_CAPABILITIES } from "./workflow";
+import { ALL_CAPABILITIES, isDisciplineCommitteeReferred } from "./workflow";
 import type { DisciplineCapabilities } from "./workflow";
 
 // Dosyadaki öğrenci id → ad eşlemesi (karar/itiraz gösterimi).
@@ -168,6 +168,9 @@ export default function DecisionsSection({
 }) {
   // Kurul kararı girişi başkana aittir (md. 196 — başkan kararı müdüre sunar).
   const canEnterDecision = caps.isChair || caps.isAdmin;
+  // md. 163/2: ceza yalnız kurula sevkli ve açık dosyada girilir (backend de zorlar).
+  const decisionEntryOpen =
+    caseObj.closed_at === null && isDisciplineCommitteeReferred(caseObj.events);
   const [decisions, setDecisions] = useState<DisciplineDecision[] | null>(null);
   const [behaviorPoints, setBehaviorPoints] = useState<Record<number, number>>({});
   const [hidden, setHidden] = useState(false);
@@ -266,7 +269,7 @@ export default function DecisionsSection({
         <p className="text-title-medium text-on-surface">
           Resmî kararlar ({decisions?.length ?? 0})
         </p>
-        {canEnterDecision && !adding && (
+        {canEnterDecision && decisionEntryOpen && !adding && (
           <Button variant="tonal" icon="gavel" onClick={() => setAdding(true)}>
             Karar ekle
           </Button>
@@ -276,6 +279,13 @@ export default function DecisionsSection({
         Md. 163 ceza türleri; davranış puanı indirimi (md. 170), onay mercii (md. 163/2) ve itiraz
         son günü (md. 169/3) otomatik hesaplanır.
       </p>
+      {canEnterDecision && !decisionEntryOpen && (
+        <p className="mt-1 text-body-small text-on-surface-variant">
+          {caseObj.closed_at !== null
+            ? "Dosya kapalı; yeni resmî karar girilemez."
+            : 'Ceza kararı yalnız okul öğrenci ödül ve disiplin kuruluna sevk edilen dosyada girilir (md. 163/2). Önce müdür değerlendirmesinde "Disiplin Kuruluna Sevk" seçin.'}
+        </p>
+      )}
 
       {/* Davranış puanı özeti (md. 170 — 100 üzerinden, bozulmamış indirimler düşülür) */}
       {pointEntries.some((e) => e.point !== undefined) && (
@@ -386,7 +396,16 @@ export default function DecisionsSection({
 // ===========================================================================
 
 type CardPanel =
-  "approve" | "notify" | "e-school" | "narrative" | "appeal" | "return" | "refer" | "edit" | null;
+  | "approve"
+  | "notify"
+  | "e-school"
+  | "narrative"
+  | "appeal"
+  | "return"
+  | "refer"
+  | "edit"
+  | "remove"
+  | null;
 
 function DecisionCard({
   caseObj,
@@ -472,6 +491,27 @@ function DecisionCard({
             e-Okul: {formatDate(d.e_school_processed_on)}
           </span>
         )}
+        {d.penalty_removed_on && (
+          <span className="inline-flex items-center gap-1 rounded-shape-xl bg-success-container px-2.5 py-0.5 text-on-success-container">
+            <Icon name="restart_alt" size="xs" />
+            Ceza kaldırıldı (md. 171/2): {formatDate(d.penalty_removed_on)}
+            {d.penalty_removal_note && ` · ${d.penalty_removal_note}`}
+            {canManageAppeal && (
+              <button
+                type="button"
+                className="ml-1 underline"
+                onClick={() => {
+                  disiplinApi
+                    .undoPenaltyRemoval(caseObj.id, d.id)
+                    .then(onChanged)
+                    .catch(() => undefined);
+                }}
+              >
+                geri al
+              </button>
+            )}
+          </span>
+        )}
       </div>
 
       {/* e-Okul uyarısı (Tur 218, talep 8): kesinleşmemiş ceza e-Okul'a İŞLENMEZ —
@@ -544,23 +584,28 @@ function DecisionCard({
       {panel === null &&
         (canApprove || canNotify || canEditNarrative || canManageAppeal || canEditDelete) && (
           <div className="mt-3 flex flex-wrap gap-1">
-            {canApprove && d.approval_status !== "REJECTED" && d.approval_status !== "REFERRED" && (
-              <Button variant="text" icon="approval" onClick={() => setPanel("approve")}>
-                Onay durumu
-              </Button>
-            )}
+            {/* Tebliğden sonra onay değişmez; eski sürümde onaysız tebliğ edilmiş karar
+                için onayın sonradan girilebilmesi açık kalır. */}
             {canApprove &&
-              (d.approval_status === "PENDING" || d.approval_status === "RETURNED") && (
-                <Button variant="text" icon="undo" onClick={() => setPanel("return")}>
-                  Kurula iade
+              d.approval_status !== "REJECTED" &&
+              (!d.notified_at || d.approval_status !== "APPROVED") && (
+                <Button variant="text" icon="approval" onClick={() => setPanel("approve")}>
+                  {d.approval_status === "REFERRED" ? "İlçe kurulu kararı" : "Onay durumu"}
                 </Button>
               )}
+            {/* md. 197: "bir defa daha görüşülmek üzere" — yalnız bir kez iade. */}
+            {canApprove && d.approval_status === "PENDING" && !d.returned_at && !d.notified_at && (
+              <Button variant="text" icon="undo" onClick={() => setPanel("return")}>
+                Kurula iade
+              </Button>
+            )}
             {canApprove && d.approval_status === "RETURNED" && (
               <Button variant="text" icon="forward" onClick={() => setPanel("refer")}>
                 İlçe kuruluna gönder
               </Button>
             )}
-            {canNotify && !d.notified_at && (
+            {/* md. 163/2, 169/2: ceza onaydan sonra uygulanır — onaysız karar tebliğ edilmez. */}
+            {canNotify && !d.notified_at && d.approval_status === "APPROVED" && (
               <Button variant="text" icon="mark_email_read" onClick={() => setPanel("notify")}>
                 Tebliğ kaydet
               </Button>
@@ -578,11 +623,24 @@ function DecisionCard({
                 EK-1 anlatı
               </Button>
             )}
-            {canManageAppeal && d.notified_at && (
-              <Button variant="text" icon="balance" onClick={() => setPanel("appeal")}>
-                İtiraz ekle
-              </Button>
-            )}
+            {/* md. 169/4: itiraz sonucu kesindir — sonuçlanmış itirazdan sonra yeni itiraz yok. */}
+            {canManageAppeal &&
+              d.notified_at &&
+              d.penalty_type !== "NO_PENALTY" &&
+              !d.appeals.some((a) => a.resulted_on) && (
+                <Button variant="text" icon="balance" onClick={() => setPanel("appeal")}>
+                  İtiraz ekle
+                </Button>
+              )}
+            {/* md. 171/2: öğretmenler kurulunca ceza kaldırma + davranış puanı iadesi. */}
+            {canManageAppeal &&
+              d.penalty_type !== "NO_PENALTY" &&
+              d.is_final &&
+              !d.penalty_removed_on && (
+                <Button variant="text" icon="restart_alt" onClick={() => setPanel("remove")}>
+                  Cezayı kaldır (md. 171/2)
+                </Button>
+              )}
             {canEditDelete && (
               <Button variant="text" icon="edit" onClick={() => setPanel("edit")}>
                 Düzenle
@@ -635,7 +693,12 @@ function DecisionCard({
           caseClosed={caseObj.closed_at !== null}
           decision={d}
           studentName={studentName}
-          onCancel={() => setPanel(null)}
+          onCancel={() => {
+            // Otomatik kaydedilmiş alanlar kartta görünsün; aksi hâlde form yeniden
+            // açılınca BAYAT değerler gelir ve "kaydet" sunucudaki metni ezerdi.
+            setPanel(null);
+            onChanged();
+          }}
           onDone={() => {
             setPanel(null);
             onChanged();
@@ -644,6 +707,17 @@ function DecisionCard({
       )}
       {panel === "appeal" && (
         <AddAppealForm
+          caseId={caseObj.id}
+          decision={d}
+          onCancel={() => setPanel(null)}
+          onDone={() => {
+            setPanel(null);
+            onChanged();
+          }}
+        />
+      )}
+      {panel === "remove" && (
+        <PenaltyRemovalForm
           caseId={caseObj.id}
           decision={d}
           onCancel={() => setPanel(null)}
@@ -791,7 +865,7 @@ function AddDecisionForm({
             required
             value={suspensionDays}
             onChange={(e) => setSuspensionDays(e.target.value)}
-            helperText="Md. 163 — kısa süreli uzaklaştırma 1-5 gün."
+            helperText="Md. 164/2 — kısa süreli uzaklaştırma 1-5 gün; başlangıç okulun açık olduğu bir gün olmalı (md. 172/1-a)."
           />
         )}
       </div>
@@ -954,7 +1028,7 @@ function EditDecisionForm({
             required
             value={suspensionDays}
             onChange={(e) => setSuspensionDays(e.target.value)}
-            helperText="Md. 163 — kısa süreli uzaklaştırma 1-5 gün."
+            helperText="Md. 164/2 — kısa süreli uzaklaştırma 1-5 gün; başlangıç okulun açık olduğu bir gün olmalı (md. 172/1-a)."
           />
           <TextField
             label="Uzaklaştırma uygulama başlangıcı (opsiyonel)"
@@ -1048,6 +1122,11 @@ function ApprovalForm({
     d.approval_status === "APPROVED" ? "APPROVED" : "PENDING",
   );
   const [approvedOn, setApprovedOn] = useState(d.approved_at ?? today);
+  // Onay mercii bir KURULSA (okul değiştirme → ilçe, örgün dışı → il; md. 197 ile
+  // ilçeye giden karar) kurul "onaylar veya değiştirir" (md. 200/1-a, 202/1-a).
+  const boardApproves = d.approval_authority !== "PRINCIPAL" || d.approval_status === "REFERRED";
+  const [modifiedPenalty, setModifiedPenalty] = useState<PenaltyType | "">("");
+  const [modifiedDays, setModifiedDays] = useState("1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
@@ -1056,9 +1135,17 @@ function ApprovalForm({
     setBusy(true);
     setError(null);
     try {
+      const modifying = boardApproves && status === "APPROVED" && modifiedPenalty !== "";
       await disiplinApi.approveDecision(caseId, d.id, {
         approval_status: status,
         approved_on: status === "PENDING" ? null : approvedOn,
+        ...(modifying
+          ? {
+              modified_penalty_type: modifiedPenalty,
+              modified_suspension_days:
+                modifiedPenalty === "SHORT_TERM_SUSPENSION" ? Number(modifiedDays) : null,
+            }
+          : {}),
       });
       snackbar.success("Onay durumu güncellendi.");
       onDone();
@@ -1077,7 +1164,11 @@ function ApprovalForm({
         options={(Object.entries(DECISION_APPROVAL_STATUS_TR) as [DecisionApprovalStatus, string][])
           .filter(([value]) => value === "PENDING" || value === "APPROVED")
           .map(([value, label]) => ({ value, label }))}
-        helperText="Müdür onaylar (kınama/kısa süreli uzaklaştırma) ya da yetki dışı cezada üst mercie gönderir. Müdürün kararı reddetme yetkisi yoktur; uygun bulmazsa gerekçeyle kurula iade eder (md. 197)."
+        helperText={
+          d.approval_status === "REFERRED"
+            ? "İlçe öğrenci disiplin kurulunun kararını kaydedin (md. 197). Karara itiraz il kurulunda görülür (md. 169/4)."
+            : "Kınama ve kısa süreli uzaklaştırmayı müdür, okul değiştirmeyi ilçe, örgün eğitim dışına çıkarmayı il kurulu onaylar (md. 163/2). Karar onaylanmadan tebliğ edilemez. Müdür kararı reddedemez; uygun bulmazsa bir kez kurula iade eder (md. 197)."
+        }
       />
       {status !== "PENDING" && (
         <TextField
@@ -1085,6 +1176,31 @@ function ApprovalForm({
           type="date"
           value={approvedOn}
           onChange={(e) => setApprovedOn(e.target.value)}
+        />
+      )}
+      {status === "APPROVED" && boardApproves && (
+        <Select
+          label="Kurul cezayı değiştirdi mi?"
+          value={modifiedPenalty}
+          onChange={(e) => setModifiedPenalty(e.target.value as PenaltyType | "")}
+          options={[
+            { value: "", label: "Hayır — aynen onaylandı" },
+            ...(Object.entries(PENALTY_TYPE_TR) as [PenaltyType, string][])
+              .filter(([value]) => value !== d.penalty_type)
+              .map(([value, label]) => ({ value, label: `Değiştirildi: ${label}` })),
+          ]}
+          helperText="Üst kurul kararı değiştirdiyse yeni cezayı seçin; davranış puanı buna göre hesaplanır (md. 170, 200/1-a)."
+        />
+      )}
+      {status === "APPROVED" && boardApproves && modifiedPenalty === "SHORT_TERM_SUSPENSION" && (
+        <TextField
+          label="Uzaklaştırma süresi (gün)"
+          type="number"
+          min={1}
+          max={5}
+          value={modifiedDays}
+          onChange={(e) => setModifiedDays(e.target.value)}
+          helperText="1-5 gün (md. 164/2)."
         />
       )}
       <FormError error={error} />
@@ -1230,6 +1346,64 @@ function NotifyForm({
         value={method}
         onChange={(e) => setMethod(e.target.value)}
         placeholder="Örn. elden, iadeli taahhütlü"
+      />
+      <FormError error={error} />
+      <PanelActions busy={busy} onCancel={onCancel} onSubmit={submit} />
+    </PanelShell>
+  );
+}
+
+// md. 171/2 — öğretmenler kurulunca ceza kaldırma + davranış puanı iadesi.
+function PenaltyRemovalForm({
+  caseId,
+  decision: d,
+  onCancel,
+  onDone,
+}: {
+  caseId: number;
+  decision: DisciplineDecision;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const [removedOn, setRemovedOn] = useState(todayIso());
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const snackbar = useSnackbar();
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await disiplinApi.removePenalty(caseId, d.id, { removed_on: removedOn, note: note.trim() });
+      snackbar.success("Ceza kaldırıldı; davranış puanı iade edildi.");
+      onDone();
+    } catch (err) {
+      setError(asMessage(err, "Ceza kaldırılamadı."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PanelShell title="Cezayı kaldır (md. 171/2)" icon="restart_alt">
+      <p className="text-body-small text-on-surface-variant">
+        Davranışları olumlu yönde değişen öğrencinin cezası okul öğrenci ödül ve disiplin kurulunun
+        değerlendirmesi üzerine öğretmenler kurulunca kaldırılır. Kaldırılan ceza davranış
+        puanından, triajdan ve EK-1 önceki cezalarından düşer; e-Okul&apos;dan 5 iş günü içinde
+        çıkarılmalıdır (md. 171/2-3).
+      </p>
+      <TextField
+        label="Öğretmenler kurulu karar tarihi"
+        type="date"
+        required
+        value={removedOn}
+        onChange={(e) => setRemovedOn(e.target.value)}
+      />
+      <TextField
+        label="Açıklama (opsiyonel)"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Örn. öğretmenler kurulu karar sayısı"
       />
       <FormError error={error} />
       <PanelActions busy={busy} onCancel={onCancel} onSubmit={submit} />
@@ -1862,6 +2036,9 @@ function ResolveAppealForm({
   const [result, setResult] = useState<AppealResult>("UPHELD");
   const [resultedOn, setResultedOn] = useState(today);
   const [notes, setNotes] = useState("");
+  // "Değiştirildi" → itiraz kurulunun verdiği YENİ ceza (md. 200/Ç); puan buna göre.
+  const [newPenalty, setNewPenalty] = useState<PenaltyType | "">("");
+  const [newDays, setNewDays] = useState("1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
@@ -1880,6 +2057,12 @@ function ResolveAppealForm({
         result,
         resulted_on: resultedOn,
         result_notes: notes.trim(),
+        ...(result === "REDUCED"
+          ? {
+              new_penalty_type: newPenalty,
+              new_suspension_days: newPenalty === "SHORT_TERM_SUSPENSION" ? Number(newDays) : null,
+            }
+          : {}),
       });
       snackbar.success("Sonuç kaydedildi.");
       onDone();
@@ -1909,6 +2092,29 @@ function ResolveAppealForm({
           value={resultedOn}
           onChange={(e) => setResultedOn(e.target.value)}
         />
+        {result === "REDUCED" && (
+          <Select
+            label="Kurulun verdiği yeni ceza"
+            required
+            placeholder="Seçiniz…"
+            value={newPenalty}
+            onChange={(e) => setNewPenalty(e.target.value as PenaltyType | "")}
+            options={(Object.entries(PENALTY_TYPE_TR) as [PenaltyType, string][]).map(
+              ([value, label]) => ({ value, label }),
+            )}
+            helperText="Karar ve davranış puanı yeni cezaya göre güncellenir (md. 170)."
+          />
+        )}
+        {result === "REDUCED" && newPenalty === "SHORT_TERM_SUSPENSION" && (
+          <TextField
+            label="Uzaklaştırma süresi (gün)"
+            type="number"
+            min={1}
+            max={5}
+            value={newDays}
+            onChange={(e) => setNewDays(e.target.value)}
+          />
+        )}
       </div>
       <div>
         <label

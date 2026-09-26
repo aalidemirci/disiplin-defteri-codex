@@ -167,7 +167,12 @@ describe("okulApi — tatiller", () => {
   });
 
   it("HOLIDAY_KIND_TR — backend HolidayKind ile birebir", () => {
-    expect(Object.keys(HOLIDAY_KIND_TR)).toEqual(["OFFICIAL", "RELIGIOUS", "OTHER"]);
+    expect(Object.keys(HOLIDAY_KIND_TR)).toEqual([
+      "OFFICIAL",
+      "RELIGIOUS",
+      "OTHER",
+      "SCHOOL_BREAK",
+    ]);
   });
 });
 

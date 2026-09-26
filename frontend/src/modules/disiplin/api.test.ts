@@ -66,8 +66,22 @@ describe("disiplinApi — dosya + liste uçları", () => {
     apiMock.get.mockResolvedValueOnce({ count: 0, next: null, previous: null, results: [] });
     await disiplinApi.listCases({ stage: "PETITION", search: "ali" });
     expect(apiMock.get).toHaveBeenCalledWith(
-      "/discipline/cases/?limit=200&stage=PETITION&search=ali",
+      "/discipline/cases/?limit=200&stage=PETITION&search=ali&offset=0",
     );
+  });
+
+  it("listCases → sayfalar `next` bitene dek toplanır (200. kayıttan sonrası kesilmez)", async () => {
+    apiMock.get
+      .mockResolvedValueOnce({
+        count: 3,
+        next: "x",
+        previous: null,
+        results: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({ count: 3, next: null, previous: "x", results: [{ id: 3 }] });
+    const items = await disiplinApi.listCases();
+    expect(items.map((c) => c.id)).toEqual([1, 2, 3]);
+    expect(apiMock.get).toHaveBeenLastCalledWith("/discipline/cases/?limit=200&offset=2");
   });
 
   it("listCases onlyOpen → kapalı dosyalar istemcide süzülür", async () => {

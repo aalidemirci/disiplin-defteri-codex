@@ -15,3 +15,20 @@ export interface Paginated<T> {
 export function unwrap<T>(data: Paginated<T> | T[]): T[] {
   return Array.isArray(data) ? data : data.results;
 }
+
+/** Sayfalı ucu `next` bitene dek dolaşıp TÜM kayıtları toplar (LimitOffset).
+ * Tek sayfalık `limit=N` çağrısı N'den sonrasını sessizce kesiyordu (ör. 200.
+ * dosyadan sonrası listede/aramada görünmüyordu). */
+export async function collectPages<T>(
+  fetchPage: (offset: number) => Promise<Paginated<T> | T[]>,
+): Promise<T[]> {
+  const items: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const data = await fetchPage(offset);
+    if (Array.isArray(data)) return [...items, ...data];
+    items.push(...data.results);
+    if (!data.next || data.results.length === 0) return items;
+    offset += data.results.length;
+  }
+}
