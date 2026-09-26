@@ -58,7 +58,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
-- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18, Form-15/17 ve Form-12 kapandı).
+- **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
   **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
@@ -86,6 +86,10 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 
 5. **Form-12 oylama esası seçilir:** süre uzatma tutanağı üretilirken "oy birliği /
    oy çoğunluğu" seçilir (md. 191/1); varsayılan oy birliği. Seçim DB'ye yazılmaz.
+
+6. **EK-1 müdür onay kutusu:** "ceza verilmesine yer olmadığına" kararında da
+   "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılır; "onay ve itiraz
+   gerektirmez (md. 191)" cümlesindeki atıf kaldırıldı.
 
 ## Geçiş notları (kullanıcıya etkisi)
 

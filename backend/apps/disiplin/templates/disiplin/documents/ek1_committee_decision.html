@@ -127,25 +127,26 @@ elle doldurulur. Başlıklar doğrudan büyük harf (Türkçe İ korunur).{% end
 onay-durumundan BAĞIMSIZ; müdür kâğıt üzerinde işaretler. Onay mercii müdür olmayan
 cezalarda (md. 169/2-b/c) "Onaylıyorum" yerine uygun görüşle sevk ifadesi (yalnız
 ceza türünden türer). md. 197: uygun bulmazsa gerekçesiyle kurula iade. NO_PENALTY
-onay/itiraz gerektirmez (Tur 181) → yalnız GÖRÜLMÜŞTÜR.{% endcomment %}
+onay/itiraz gerektirmez (Tur 181) → GÖRÜLMÜŞTÜR. 26.09.2026 (kullanıcı kararı): md. 197
+her karar için geçerli — cezasız kararda da "yeniden görüşülmesi" kutusu basılır; yanlış
+md. 191 atfı kaldırıldı.{% endcomment %}
 {% comment %}Tur 220 (talep 2): onay kutusu kurul imza ızgarasından ~3cm aşağıda;
 "ONAYLIYORUM" → "UYGUNDUR"; müdür imza bloğu sayfada ORTALANIR.{% endcomment %}
 <div class="section" style="margin-top: 3cm;">
   <div class="section-title">OKUL MÜDÜRÜNÜN ONAYI (md. 169/2 · md. 197)</div>
   <div class="field-box" style="white-space: normal;">
   {% if decision and decision.penalty_type == 'NO_PENALTY' %}
-    <p style="margin: 0;">GÖRÜLMÜŞTÜR — "Ceza verilmesine yer olmadığına" dair karar;
-    onay ve itiraz gerektirmez (md. 191).</p>
-  {% else %}
-    {% if decision and decision.penalty_type == 'SCHOOL_CHANGE' %}
+    <p style="margin: 0 0 6pt;">☐ <strong>GÖRÜLMÜŞTÜR</strong> — "Ceza verilmesine yer
+    olmadığına" dair karar; ceza onayı ve itiraz gerektirmez.</p>
+  {% elif decision and decision.penalty_type == 'SCHOOL_CHANGE' %}
     <p style="margin: 0 0 6pt;">☐ Uygun görüşle, onaylanmak üzere <strong>İLÇE ÖĞRENCİ
     DİSİPLİN KURULUNA</strong> sevkini uygun buluyorum (md. 169/2-b).</p>
-    {% elif decision and decision.penalty_type == 'EXPULSION' %}
+  {% elif decision and decision.penalty_type == 'EXPULSION' %}
     <p style="margin: 0 0 6pt;">☐ Uygun görüşle, onaylanmak üzere <strong>İL ÖĞRENCİ
     DİSİPLİN KURULUNA</strong> sevkini uygun buluyorum (md. 169/2-c).</p>
-    {% else %}
+  {% else %}
     <p style="margin: 0 0 6pt;">☐ <strong>UYGUNDUR</strong> (md. 169/2-a).</p>
-    {% endif %}
+  {% endif %}
     {% comment %}Tur 234 (talep 1): "YENİDEN GÖRÜŞÜLMESİNİ İSTİYORUM" →
     "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" (kullanıcı talebi).{% endcomment %}
     <p style="margin: 0 0 2pt;">☐ <strong>YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA</strong>
@@ -153,7 +154,6 @@ onay/itiraz gerektirmez (Tur 181) → yalnız GÖRÜLMÜŞTÜR.{% endcomment %}
     <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
     <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
     <p style="margin: 9pt 0 0;">…………………………………………………………………………………………………………………………</p>
-  {% endif %}
   </div>
 </div>
 

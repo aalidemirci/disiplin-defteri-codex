@@ -37,7 +37,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | # | Kalem | Neden bırakıldı |
 |---|---|---|
-| M1 | **AYNEN şablon metinleri:** EK-1 cezasız kararda md. 197 iadesini dışlıyor | Şablonlar OYS ile 5/5 birebir; metin değişikliği pariteyi bozar → bilinçli karar gerekir. Kayıt tarafı (itiraz mercii vb.) düzeltildi; Form-18, Form-15/17 ve Form-12 kapandı (aşağıda) |
+| M1 | ~~AYNEN şablon metinleri~~ | KAPANDI 26.09.2026 — kullanıcı kararlarıyla Form-18, Form-15/17, Form-12 ve EK-1 müdür onay kutusu düzeltildi (ayrıntı aşağıda "Kapanmış"). Bu dört formda OYS birebir paritesi bilinçli olarak bırakıldı |
 | M2 | **Eksik resmî belgeler:** 157/7-a Form-01, 157/7-b veli davet/görüşme/gelmeme tutanağı, 158/3 arama tutanağı, 195 tespit tutanağı, 197 iade/sevk yazıları, 169/1 onaya sevk yazısı, 175 MEM bilgilendirme/onay yazıları, 192/3 müdür OLUR bloğu | Yeni şablon + saha örneği gerektirir |
 | M3 | **md. 181/180 onur kurulu:** ceza alan öğrencinin onur kurulu/ödül-disiplin kurulu üyeliği otomatik düşmüyor; sınıf seviyesi/ikinci başkan kompozisyonu doğrulanmıyor | Model değişikliği + UI |
 | M4 | **md. 166 / 168/5 uyarıları:** aynı öğretim yılında tekrar için "bir derece ağır ceza" ve zihinsel engel/otizm için "ceza uygulanmaz" uyarısı yok | Öğrenci kartında özel eğitim alanı yok |
@@ -50,6 +50,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| EK-1 müdür onay kutusu cezasız kararda yalnız "GÖRÜLMÜŞTÜR" basıyor, md. 197 iadesini dışlıyor ve "onay ve itiraz gerektirmez" için md. 191'e atıf yapıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla cezasız kararda da "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA (md. 197)" kutusu basılıyor; md. 191 atfı bu cümleden kaldırıldı |
 | Form-12 süre uzatma tutanağı hep "oy birliği" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla üretimde "oy birliği / oy çoğunluğu" seçiliyor (md. 191/1; geçici alan, DB'ye yazılmaz) |
 | Form-15/17 savunma alınmamış dosyada da "öğrencinin savunması alınmış" basıyordu (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla ifade yalnız dosya kütüğünde öğrencinin savunma tutanağı (Form-11) varsa basılıyor (md. 194/1) |
 | Form-18 itiraz edeni hep "veli", süreyi hep "süresinde", kararı "kesinleşmiştir" yazıyor, merciyi ceza türünden türetiyordu (md. 197 sevkinde "ilçe" — doğrusu il) (M1 alt kalemi) | KAPANDI 26.09.2026 — kullanıcı kararıyla OYS paritesi bu formda bırakıldı: itiraz eden, süre durumu, tebliğ tarihi, onay makamı ve itiraz mercii kayıttan basılıyor; müdür itirazında "orantılı" görüşü basılmıyor |

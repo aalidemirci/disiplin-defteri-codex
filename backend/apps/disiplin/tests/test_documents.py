@@ -744,3 +744,23 @@ def test_generate_ucu_oylama_esasini_iletir(client: APIClient) -> None:
     assert resp.status_code == 200
     pdf = b"".join(resp.streaming_content)  # type: ignore[attr-defined]
     assert "oy çoğunluğu ile" in " ".join(_pdf_text(pdf).split())
+
+
+def test_ek1_cezasiz_kararda_md197_iade_kutusu() -> None:
+    """md. 197: müdür uygun bulmadığı her kararı (cezasız dahil) bir kez kurula iade eder."""
+    case, sid = _committee_case()
+    services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.NO_PENALTY, decision_date=date(2026, 5, 22)
+    )
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.COMMITTEE_DECISION,
+        generated_on=date(2026, 5, 22),
+        student_id=sid,
+        log=False,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "GÖRÜLMÜŞTÜR" in text
+    assert "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" in text
+    assert "gerektirmez (md. 191)" not in text
+    assert "UYGUNDUR" not in text
