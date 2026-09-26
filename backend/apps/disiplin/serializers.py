@@ -448,8 +448,30 @@ class CommitteeSerializer(serializers.ModelSerializer[DisciplineCommittee]):
         fields = ["id", "school_year", "chair", "chair_name", "notes", "members"]
 
 
+def _md181_penalty(student_id: int | None, since: Any, active: bool) -> dict[str, str] | None:
+    """md. 181/1: aktif üyenin bu ders yılında yürürlükte cezası varsa özet (uyarı için)."""
+    from apps.disiplin import selectors
+
+    if not active or student_id is None or since is None:
+        return None
+    d = selectors.latest_penalty_since(student_id, since)
+    if d is None:
+        return None
+    return {
+        "penalty_type_display": d.get_penalty_type_display(),
+        "decision_no": d.decision_no,
+        "decision_date": d.decision_date.isoformat(),
+    }
+
+
 class HonorBoardMemberSerializer(serializers.ModelSerializer[HonorBoardMember]):
     is_active = serializers.BooleanField(read_only=True)
+    md181_penalty = serializers.SerializerMethodField()
+
+    def get_md181_penalty(self, obj: HonorBoardMember) -> dict[str, str] | None:
+        return _md181_penalty(
+            obj.member_student_id, obj.board.school_year.start_date, obj.is_active
+        )
 
     class Meta:
         model = HonorBoardMember
@@ -467,6 +489,7 @@ class HonorBoardMemberSerializer(serializers.ModelSerializer[HonorBoardMember]):
             "effective_until",
             "end_reason",
             "is_active",
+            "md181_penalty",
         ]
 
 
@@ -495,6 +518,10 @@ class HonorBoardSerializer(serializers.ModelSerializer[HonorBoard]):
 
 class HonorGeneralAssemblyMemberSerializer(serializers.ModelSerializer[HonorGeneralAssemblyMember]):
     is_active = serializers.BooleanField(read_only=True)
+    md181_penalty = serializers.SerializerMethodField()
+
+    def get_md181_penalty(self, obj: HonorGeneralAssemblyMember) -> dict[str, str] | None:
+        return _md181_penalty(obj.member_student_id, obj.school_year.start_date, obj.is_active)
 
     class Meta:
         model = HonorGeneralAssemblyMember
@@ -510,6 +537,7 @@ class HonorGeneralAssemblyMemberSerializer(serializers.ModelSerializer[HonorGene
             "end_reason",
             "replaced_member",
             "is_active",
+            "md181_penalty",
         ]
 
 

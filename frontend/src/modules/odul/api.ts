@@ -110,6 +110,14 @@ export function groupProposalsByProposer(
 
 // --- Veri modelleri (serializers.py ile birebir) ---
 
+// md. 181/1: aktif üyenin bu ders yılında yürürlükte cezası (üyelik düşmeli — uyarı;
+// kullanıcı kararı 26.09.2026: otomatik düşürülmez, kullanıcı sonlandırır).
+export interface Md181Penalty {
+  penalty_type_display: string;
+  decision_no: string;
+  decision_date: string;
+}
+
 export interface HonorBoardMember {
   id: number;
   member_student: number;
@@ -124,6 +132,7 @@ export interface HonorBoardMember {
   effective_until: string | null;
   end_reason: string;
   is_active: boolean;
+  md181_penalty?: Md181Penalty | null;
 }
 
 export interface HonorBoard {
@@ -149,6 +158,7 @@ export interface HonorGeneralAssemblyMember {
   end_reason: string;
   replaced_member: number | null;
   is_active: boolean;
+  md181_penalty?: Md181Penalty | null;
 }
 
 export interface HonorComplianceMonth {

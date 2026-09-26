@@ -202,3 +202,64 @@ def test_donemli_teklif_kurul_karari_ve_mudur_onayi() -> None:
     proposal.refresh_from_db()
     assert proposal.status == HonorCertificateStatus.PRINCIPAL_APPROVED
     assert proposal.principal_decided_at == date(2026, 6, 19)
+
+
+def test_md181_cezali_uye_uyarisi_uyelik_elle_sonlandirilir() -> None:
+    """md. 181/1: disiplin cezası alan öğrencinin üyeliği düşer — kullanıcı kararı (B):
+    otomatik sonlandırılmaz, aktif üye kaydında uyarı (md181_penalty) döner."""
+    from rest_framework.test import APIClient
+
+    from apps.disiplin.serializers import HonorBoardMemberSerializer
+
+    year = SchoolYearFactory()
+    board = services.create_honor_board(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
+    student = StudentFactory(class_level=11, class_section="A")
+    assembly = services.add_general_assembly_member(
+        school_year_id=year.pk, student_id=student.pk, effective_from=year.start_date
+    )
+    board_member = services.add_honor_board_member(
+        board, student_id=student.pk, grade_level=11, assembly_member_id=assembly.pk
+    )
+    client = APIClient()
+
+    def assembly_row() -> dict[str, object]:
+        rows = client.get("/api/v1/honor/general-assembly/").json()
+        return next(r for r in rows if r["id"] == assembly.pk)
+
+    assert assembly_row()["md181_penalty"] is None
+
+    case = services.create_case(
+        petition_date=date(2026, 5, 18),
+        petitioner_name="İdare",
+        petitioner_role="IDARE",
+        summary="olay",
+        student_ids=[student.pk],
+    )
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 19),
+        override=True,
+        override_reason="atla",
+        principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
+    )
+    d = services.record_decision(
+        case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 20)
+    )
+    assert assembly_row()["md181_penalty"] is None  # onaysız karar ceza değil
+    approve(d)
+
+    warning = assembly_row()["md181_penalty"]
+    assert warning == {
+        "penalty_type_display": "Kınama",
+        "decision_no": d.decision_no,
+        "decision_date": "2026-05-20",
+    }
+    assert assembly_row()["is_active"] is True  # otomatik düşürülmez
+    board_member.refresh_from_db()
+    assert HonorBoardMemberSerializer(board_member).data["md181_penalty"] is not None
+
+    services.end_general_assembly_membership(
+        assembly, effective_until=date(2026, 5, 21), reason="md. 181: disiplin cezası"
+    )
+    assert assembly_row()["md181_penalty"] is None

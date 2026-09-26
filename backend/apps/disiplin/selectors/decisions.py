@@ -82,6 +82,21 @@ def same_year_prior_penalty(
     return max(candidates, key=lambda d: PENALTY_SEVERITY.get(d.penalty_type, 0))
 
 
+def latest_penalty_since(student_id: int, since: date) -> DisciplineDecision | None:
+    """md. 181/1: öğrencinin `since`ten bu yana verilmiş, yürürlükteki en son cezası.
+
+    Onur genel kurulu / onur kurulu üyeliğinin düşmesi gerektiğini göstermek için
+    (kullanıcı kararı 26.09.2026: uyarı gösterilir, üyelik elle sonlandırılır).
+    """
+    return (
+        penalties_in_force(
+            DisciplineDecision.objects.filter(student_id=student_id, decision_date__gte=since)
+        )
+        .order_by("-decision_date", "-created_at")
+        .first()
+    )
+
+
 def decisions_for_case(case: DisciplineCase) -> QuerySet[DisciplineDecision]:
     """Bir dosyanın resmî kararları (itirazları + öğrenci önceden çekilir)."""
     return case.decisions.select_related("student").prefetch_related("appeals")

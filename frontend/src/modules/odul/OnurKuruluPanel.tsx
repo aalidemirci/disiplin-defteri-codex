@@ -28,6 +28,7 @@ import TextField from "../../ui/TextField";
 import { personnelLookupApi, studentLookupApi } from "../disiplin/api";
 import type { PersonnelSearchRow } from "../disiplin/api";
 import { odulApi } from "./api";
+import Md181Warning from "./Md181Warning";
 import type { HonorBoard, HonorBoardMember, HonorGeneralAssemblyMember } from "./api";
 
 const TEXTAREA_CLASS =
@@ -478,6 +479,7 @@ function MemberRow({ member: m, onRemoved }: { member: HonorBoardMember; onRemov
           {m.member_name}
         </p>
         {m.title && <p className="text-label-small text-on-surface-variant">{m.title}</p>}
+        {m.md181_penalty && <Md181Warning penalty={m.md181_penalty} />}
         {err && <p className="text-label-small text-error">{err}</p>}
       </div>
       <Button variant="text" icon="person_remove" onClick={remove} disabled={busy}>

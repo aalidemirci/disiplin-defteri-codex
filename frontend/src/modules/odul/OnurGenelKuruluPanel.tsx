@@ -14,6 +14,7 @@ import TextField from "../../ui/TextField";
 import { studentLookupApi } from "../disiplin/api";
 import { okulApi } from "../okul/api";
 import { odulApi } from "./api";
+import Md181Warning, { md181EndReason } from "./Md181Warning";
 import type { HonorCompliance, HonorGeneralAssemblyMember } from "./api";
 
 interface StudentOption {
@@ -114,7 +115,7 @@ export default function OnurGenelKuruluPanel() {
     try {
       await odulApi.endGeneralAssemblyMember(member.id, {
         effective_until: todayIso(),
-        reason: "Görev değişikliği",
+        reason: md181EndReason(member.md181_penalty),
       });
       snackbar.success("Temsilcilik görevi sonlandırıldı.");
       await load();
@@ -221,6 +222,7 @@ export default function OnurGenelKuruluPanel() {
                         {member.class_level}/{member.class_section} ·{" "}
                         {formatDate(member.effective_from)}
                       </p>
+                      {member.md181_penalty && <Md181Warning penalty={member.md181_penalty} />}
                     </div>
                     <Button variant="text" onClick={() => void endMember(member)} disabled={busy}>
                       Görevi sonlandır
