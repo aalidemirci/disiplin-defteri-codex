@@ -655,3 +655,54 @@ def test_form18_md197_ilce_kararinda_itiraz_il_kurulunda() -> None:
     assert "197. maddesi uyarınca gönderildiği ilçe" in text
     assert "il öğrenci disiplin kurulunca" in text
     assert "169. maddesi 3. fıkrası (a)" not in text
+
+
+def test_form15_17_savunma_ifadesi_yalniz_savunma_tutanagiyla() -> None:
+    """md. 194/1: "savunması alınmış" ancak savunma tutanağı (Form-11) kaydı varsa basılır."""
+    from apps.disiplin.models import DisciplineParticipant, ParticipantRole
+
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case,
+        student_id=sid,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        decision_date=date(2026, 5, 22),
+        suspension_days=2,
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 22))
+    from apps.disiplin.services.decisions import update_decision_narrative
+
+    update_decision_narrative(d, fields={}, enforcement_start_date=date(2026, 6, 8))
+
+    def texts() -> list[str]:
+        out = []
+        for doc_type in (DocumentType.PENALTY_NOTICE, DocumentType.PENALTY_DAYS_NOTICE):
+            pdf_bytes, _ = doc_engine.generate_document(
+                case,
+                document_type=doc_type,
+                recipient=doc_engine.RECIPIENT_PARENT,
+                generated_on=date(2026, 6, 8),
+                student_id=sid,
+                log=False,
+            )
+            out.append(" ".join(_pdf_text(pdf_bytes).split()))
+        return out
+
+    for text in texts():
+        assert "savunması alınmış" not in text
+        assert "sonucunda; olayla ilgili bilgi ve belgeler incelenmiştir" in text
+
+    participant = DisciplineParticipant.objects.filter(
+        case=case, student_id=sid, role=ParticipantRole.ACCUSED
+    ).first() or services.add_participant(
+        case, role=ParticipantRole.ACCUSED, person_type="STUDENT", person_id=sid
+    )
+    doc_engine.generate_document(
+        case,
+        document_type=DocumentType.DEFENSE_RECORD,
+        generated_on=date(2026, 5, 21),
+        participant_id=participant.pk,
+    )
+    for text in texts():
+        assert "öğrencinin savunması alınmış, olayla ilgili" in text

@@ -58,6 +58,7 @@ from apps.disiplin.selectors.decisions import (
     penalties_in_force,
 )
 from apps.disiplin.selectors.document_log import (
+    defense_recorded,
     deleted_documents,
     document_timeline,
     documents_for_case,
@@ -111,6 +112,7 @@ __all__ = [
     "documents_for_student",
     "documents_for_case",
     "document_timeline",
+    "defense_recorded",
     "deleted_documents",
     "decisions_awaiting_notification",
     "decisions_for_case",

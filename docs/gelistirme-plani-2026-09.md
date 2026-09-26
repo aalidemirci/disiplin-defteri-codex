@@ -58,7 +58,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
-- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18 kapandı).
+- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18 ve Form-15/17 kapandı).
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
   **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
@@ -66,9 +66,9 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 - **M7 tedbir toplam süresi:** ✅ kapandı — okul yönetimi teyidiyle her uzatma ayrı
   süre (≤10 iş günü), en fazla iki kez; uzatma MEM onayı işaretlenmeden kaydedilmez.
 
-## Ara tatil kararları (26.09.2026, okul yönetimi)
+## Okul yönetimi kararları (26.09.2026)
 
-Ara tatilde uzaklaştırma araştırmasının ardından tek tek alınan kararlar:
+Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek tek alınan kararlar:
 
 1. **Ara tatil yasal sürelerde iş günü sayılır** (tedbir, itiraz, sevk): yönetmelik
    süreleri "iş günü" diye tanımlar; ara tatil resmî tatil değildir. Kod değişmedi.
@@ -78,6 +78,11 @@ Ara tatilde uzaklaştırma araştırmasının ardından tek tek alınan kararlar
    öğrenci / müdür), süre içi/dışı, tebliğ tarihi, onay makamı ve itiraz mercii
    (md. 197 sevkinde il kurulu, md. 169/4, 202/1-b). "Kesinleşmiştir" ifadesi
    kaldırıldı. Bu formda OYS paritesi bilinçli olarak bırakıldı.
+
+4. **Form-15/17 "savunması alınmış" ifadesi kayda bağlandı:** yalnız dosya kütüğünde
+   öğrencinin savunma tutanağı (Form-11) varsa basılır (md. 194/1); yoksa cümle
+   "olayla ilgili bilgi ve belgeler incelenmiştir" diye sürer. Savunmayı elle yazdıysanız
+   tutanağı kütüğe ekleyin (tek öğrencili dosyada öğrenci seçmeden eklenen de sayılır).
 
 ## Geçiş notları (kullanıcıya etkisi)
 

@@ -521,6 +521,8 @@ def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any
         "parent": _parent_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
+        # md. 194/1: "savunması alınmış" yalnız Form-11 kaydı varsa basılır.
+        "defense_taken": selectors.defense_recorded(case, student.pk),
     }
 
 
@@ -574,6 +576,8 @@ def _penalty_days_notice_context(case: DisciplineCase, student: Any) -> dict[str
         "parent": _parent_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
+        # md. 194/1: "savunması alınmış" yalnız Form-11 kaydı varsa basılır.
+        "defense_taken": selectors.defense_recorded(case, student.pk),
         "suspension_days_text": _SUSPENSION_DAYS_TEXT.get(days) if days else None,
         **_suspension_dates(decision),
     }
