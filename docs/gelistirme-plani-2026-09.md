@@ -58,7 +58,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
-- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18 ve Form-15/17 kapandı).
+- **M1 AYNEN şablon metinleri:** OYS ile birebir parite bilinçli karar ister (Form-18, Form-15/17 ve Form-12 kapandı).
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
 - **M3 onur kurulu üyelik düşmesi/kompozisyon**, **M4 md. 166/168-5 uyarıları**,
   **M5 imha zamanı ve yedekler**, **M6 şube "Ç"**, **M8 onur kararı geri alma**:
@@ -83,6 +83,9 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
    öğrencinin savunma tutanağı (Form-11) varsa basılır (md. 194/1); yoksa cümle
    "olayla ilgili bilgi ve belgeler incelenmiştir" diye sürer. Savunmayı elle yazdıysanız
    tutanağı kütüğe ekleyin (tek öğrencili dosyada öğrenci seçmeden eklenen de sayılır).
+
+5. **Form-12 oylama esası seçilir:** süre uzatma tutanağı üretilirken "oy birliği /
+   oy çoğunluğu" seçilir (md. 191/1); varsayılan oy birliği. Seçim DB'ye yazılmaz.
 
 ## Geçiş notları (kullanıcıya etkisi)
 

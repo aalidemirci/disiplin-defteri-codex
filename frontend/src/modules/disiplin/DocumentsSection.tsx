@@ -43,6 +43,7 @@ import type {
   GeneratableDocType,
   GeneratedDocument,
   NoticeKind,
+  VoteBasis,
 } from "./api";
 import { ALL_DOCUMENT_TYPES_TR } from "./api";
 import { asMessage, FormError, PanelActions } from "./formHelpers";
@@ -789,6 +790,8 @@ function GenerateDocumentForm({
   const [behaviorSummary, setBehaviorSummary] = useState("");
   const [warningPrefillFor, setWarningPrefillFor] = useState<string | null>(null);
   const [variant, setVariant] = useState<DocumentVariant>("student");
+  // Form-12 "oy birliği / oy çoğunluğu" (md. 191/1) — GEÇİCİ, yalnız PDF.
+  const [voteBasis, setVoteBasis] = useState<VoteBasis>("UNANIMITY");
   const [sourceLabel, setSourceLabel] = useState(""); // bilgi alma "kaynak" (Tur 141)
   // Üst kurul kararı tebliği (Tur 220, talep 3) — hepsi GEÇİCİ (yalnız PDF'e basılır).
   const [noticeKind, setNoticeKind] = useState<NoticeKind>("approval");
@@ -806,6 +809,7 @@ function GenerateDocumentForm({
 
   const meta: GeneratableDocType =
     availableTypes.find((t) => t.value === docType) ?? availableTypes[0];
+  const isExtensionRecord = meta.value === "DEADLINE_EXTENSION" && variant === "record";
 
   // Katılımcı gerektiren bir tür seçilince dosya katılımcılarını bir kez çek.
   useEffect(() => {
@@ -961,6 +965,7 @@ function GenerateDocumentForm({
         body.behavior_summary = behaviorSummary.trim();
       }
       if (meta.variantOptions) body.variant = variant;
+      if (isExtensionRecord) body.vote_basis = voteBasis;
       if (meta.sourceOptions) body.source_label = sourceLabel;
       if (meta.boardDecisionNotice) {
         // GEÇİCİ alanlar: yalnız PDF'e basılır; merci/sonuç boşsa backend türetir.
@@ -1112,6 +1117,19 @@ function GenerateDocumentForm({
           value={variant}
           onChange={(e) => setVariant(e.target.value as DocumentVariant)}
           options={meta.variantOptions}
+        />
+      )}
+
+      {isExtensionRecord && (
+        <Select
+          label="Kurul kararı nasıl alındı? (md. 191/1)"
+          required
+          value={voteBasis}
+          onChange={(e) => setVoteBasis(e.target.value as VoteBasis)}
+          options={[
+            { value: "UNANIMITY", label: "Oy birliği" },
+            { value: "MAJORITY", label: "Oy çoğunluğu" },
+          ]}
         />
       )}
 

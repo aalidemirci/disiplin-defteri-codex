@@ -744,6 +744,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 board_outcome=str(data.get("board_outcome", "")),
                 result_summary=str(data.get("result_summary", "")),
                 variant=str(data.get("variant", "")),
+                vote_basis=str(data.get("vote_basis", "")),
                 document_no=str(data.get("document_no", "")),
                 title=str(data.get("title", "")),
                 source_label=str(data.get("source_label", "")),

@@ -40,6 +40,7 @@ from apps.disiplin.models import (
     AppealResult,
     ApprovalAuthority,
     CaseStage,
+    CouncilDecisionBasis,
     DisciplineCase,
     DocumentType,
     GeneratedDocument,
@@ -945,7 +946,7 @@ def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[s
     }
 
 
-def _deadline_extension_context(case: DisciplineCase) -> dict[str, Any]:
+def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """Süre uzatma (F-12 ara karar / F-13 dilekçe, md. 192/3) — uzatma kaydı + kurul + öğrenci.
 
     Uzatma dosya başına tektir (alive-unique) → `deadline_extensions.first()`. Öğrenci
@@ -958,6 +959,8 @@ def _deadline_extension_context(case: DisciplineCase) -> dict[str, Any]:
         **_committee_with_members_context(case),
         "extension": extension,
         "student": _student_context(student) if student is not None else None,
+        # Form-12 "oy birliği / oy çoğunluğu ile" (md. 191/1; kullanıcı kararı 26.09.2026).
+        "vote_majority": extra.get("vote_basis") == CouncilDecisionBasis.MAJORITY,
     }
 
 
@@ -1002,7 +1005,7 @@ def _build_context(
     if document_type == DocumentType.MEETING_CALL:
         return _meeting_call_context(case, extra)
     if document_type == DocumentType.DEADLINE_EXTENSION:
-        return _deadline_extension_context(case)
+        return _deadline_extension_context(case, extra)
     participant_builder = _PARTICIPANT_CONTEXT_BUILDERS.get(document_type)
     if participant_builder is not None:
         return participant_builder(case, participant, extra)
@@ -1033,6 +1036,7 @@ def generate_document(
     board_outcome: str = "",
     result_summary: str = "",
     variant: str = "",
+    vote_basis: str = "",
     document_no: str = "",
     title: str = "",
     source_label: str = "",
@@ -1062,6 +1066,8 @@ def generate_document(
     """
     if recipient not in VALID_RECIPIENTS:
         raise ValueError("Geçersiz tebliğ alıcısı (öğrenci/veli).")
+    if vote_basis and vote_basis not in CouncilDecisionBasis.values:
+        raise ValueError("Geçersiz oylama esası (oy birliği / oy çoğunluğu).")
     # Dal A koruması (Tur 214, F17): yalnız-uyarı dalında (DECIDED kararı var,
     # kurula sevk yok) kurul formları üretilmez — Tur 213 (3c) UI filtresinin
     # sunucu karşılığı. DECIDED öncesi (dal belirsiz) ve Dal B'de tam liste.
@@ -1118,6 +1124,8 @@ def generate_document(
         "board_outcome": board_outcome,
         "result_summary": result_summary,
         "variant": variant,
+        # Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF.
+        "vote_basis": vote_basis,
     }
     context = _build_context(case, document_type, student, participant, extra)
     # NOT: eski DOC_CODES/doc_code altbilgi kodu Talep 1g'de (Tur 181) PDF

@@ -763,6 +763,7 @@ export type DocumentRecipient = "student" | "parent";
 // Form-7/8 bilgi toplama varyantı (öğrenciden / öğretmenden).
 // student/teacher: INFO_GATHERING (Form-7/8); record/petition: DEADLINE_EXTENSION (F-12/13).
 export type DocumentVariant = "student" | "teacher" | "record" | "petition";
+export type VoteBasis = "UNANIMITY" | "MAJORITY";
 
 export interface DocumentGenerateBody {
   document_type: DocumentType;
@@ -783,6 +784,8 @@ export interface DocumentGenerateBody {
   // loglanmaz; boşsa backend uyarı kaydının özetine düşer, ikisi de boşsa 400 döner.
   behavior_summary?: string;
   variant?: DocumentVariant; // yalnız INFO_GATHERING (Form-7/8) + DEADLINE_EXTENSION
+  // Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF'e basılır.
+  vote_basis?: VoteBasis;
   source_label?: string; // bilgi alma "kaynak" seçimi; diğerlerinde yok sayılır
   document_no?: string;
   title?: string;

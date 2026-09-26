@@ -706,3 +706,41 @@ def test_form15_17_savunma_ifadesi_yalniz_savunma_tutanagiyla() -> None:
     )
     for text in texts():
         assert "öğrencinin savunması alınmış, olayla ilgili" in text
+
+
+def test_form12_oylama_esasi_secilir() -> None:
+    """md. 191/1: kurul oy çoğunluğuyla karar alır — Form-12 hep "oy birliği" basmaz."""
+    case, _sid = _committee_case()
+
+    def text(vote_basis: str = "") -> str:
+        pdf_bytes, _ = doc_engine.generate_document(
+            case,
+            document_type=DocumentType.DEADLINE_EXTENSION,
+            generated_on=date(2026, 5, 25),
+            vote_basis=vote_basis,
+            log=False,
+        )
+        return " ".join(_pdf_text(pdf_bytes).split())
+
+    assert "oy birliği ile karar verilmiştir" in text()
+    majority = text("MAJORITY")
+    assert "oy çoğunluğu ile karar verilmiştir" in majority
+    assert "oy birliği" not in majority
+    with pytest.raises(ValueError, match="oylama esası"):
+        text("HEPSI")
+
+
+def test_generate_ucu_oylama_esasini_iletir(client: APIClient) -> None:
+    case, _sid = _committee_case()
+    resp = client.post(
+        f"/api/v1/discipline/cases/{case.pk}/documents/generate/",
+        {
+            "document_type": DocumentType.DEADLINE_EXTENSION,
+            "generated_on": "2026-05-25",
+            "vote_basis": "MAJORITY",
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    pdf = b"".join(resp.streaming_content)  # type: ignore[attr-defined]
+    assert "oy çoğunluğu ile" in " ".join(_pdf_text(pdf).split())
