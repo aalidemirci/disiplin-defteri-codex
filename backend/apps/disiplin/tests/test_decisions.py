@@ -133,8 +133,13 @@ def test_onceki_cezalar_ek1_ozetine_derlenir() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
+    # md. 166: aynı yıl tekrarında bir derece ağır ceza (kınama → kısa süreli uzaklaştırma).
     d2 = services.record_decision(
-        case2, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 3)
+        case2,
+        student_id=sid,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        suspension_days=1,
+        decision_date=date(2026, 6, 3),
     )
     assert "22.05.2026" in d2.prior_penalties_summary
     assert "Kınama" in d2.prior_penalties_summary

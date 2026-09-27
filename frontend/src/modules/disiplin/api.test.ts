@@ -499,6 +499,22 @@ describe("disiplinApi — evrak üretimi + kütük", () => {
     expect(byValue.INDEX_SHEET).toBeUndefined();
   });
 
+  it("M2 Grup 1 süreç yazıları öğrenci-özgü; MEM yazısı iki sürümlü", () => {
+    const byValue = Object.fromEntries(GENERATABLE_DOCUMENT_TYPES.map((t) => [t.value, t]));
+    for (const v of [
+      "RETURN_LETTER",
+      "DISTRICT_REFERRAL_LETTER",
+      "APPROVAL_REQUEST_LETTER",
+      "PRECAUTION_MEM_LETTER",
+    ]) {
+      expect(byValue[v].studentRequired).toBe(true);
+    }
+    expect(byValue.PRECAUTION_MEM_LETTER.variantOptions?.map((o) => o.value)).toEqual([
+      "info",
+      "extension",
+    ]);
+  });
+
   it("GENERATABLE_DOCUMENT_TYPES — Dal B ifade/savunma/bilgi formları", () => {
     const byValue = Object.fromEntries(GENERATABLE_DOCUMENT_TYPES.map((t) => [t.value, t]));
     for (const v of [

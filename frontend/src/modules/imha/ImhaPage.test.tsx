@@ -250,3 +250,31 @@ describe("ImhaPage — nakil (tekil)", () => {
     expect(await screen.findByText("İmha tamamlandı")).toBeInTheDocument();
   });
 });
+
+describe("ImhaPage — md. 157/7-d zamanlaması (kullanıcı kararı A)", () => {
+  const BLOCKER = "Dosyanın ders yılı (2025-2026) henüz bitmedi (bitiş 26.06.2026)";
+
+  it("ders yılı bitmemiş dosya seçilemez ve gerekçesi görünür", async () => {
+    imha.preview.mockResolvedValue({
+      ...PREVIEW,
+      cases: [{ ...PREVIEW.cases[0], timing_blocker: BLOCKER }],
+    });
+    renderPage();
+    expect(await screen.findByText(BLOCKER)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /2025-2026-0004/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /2025-2026-0004/ })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /Tutanağı üret ve indir/ })).toBeDisabled();
+  });
+
+  it("nakil etmemiş öğrencide tekil imha tutanağı üretilemez", async () => {
+    const reason = 'Öğrenci sicilde "Ayrıldı" (nakil) olarak işaretli değil';
+    imha.previewStudent.mockResolvedValue({ ...STUDENT_PREVIEW, timing_blocker: reason });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("2025-2026-0004");
+    await user.click(screen.getByRole("tab", { name: /Nakil/ }));
+    await user.selectOptions(screen.getByLabelText("Öğrenci"), "11");
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tutanağı üret ve indir/ })).toBeDisabled();
+  });
+});

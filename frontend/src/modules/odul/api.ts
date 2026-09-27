@@ -110,6 +110,14 @@ export function groupProposalsByProposer(
 
 // --- Veri modelleri (serializers.py ile birebir) ---
 
+// md. 181/1: aktif üyenin bu ders yılında yürürlükte cezası (üyelik düşmeli — uyarı;
+// kullanıcı kararı 26.09.2026: otomatik düşürülmez, kullanıcı sonlandırır).
+export interface Md181Penalty {
+  penalty_type_display: string;
+  decision_no: string;
+  decision_date: string;
+}
+
 export interface HonorBoardMember {
   id: number;
   member_student: number;
@@ -124,6 +132,7 @@ export interface HonorBoardMember {
   effective_until: string | null;
   end_reason: string;
   is_active: boolean;
+  md181_penalty?: Md181Penalty | null;
 }
 
 export interface HonorBoard {
@@ -149,6 +158,7 @@ export interface HonorGeneralAssemblyMember {
   end_reason: string;
   replaced_member: number | null;
   is_active: boolean;
+  md181_penalty?: Md181Penalty | null;
 }
 
 export interface HonorComplianceMonth {
@@ -376,7 +386,11 @@ export const odulApi = {
   principalRejectCertificate: (id: number, body: HonorPrincipalDecisionBody) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/principal-reject/`, body),
 
-  // Uygun görülmedi (terminal red): PROPOSED|RECOMMENDED → REJECTED.
+  // Son adımı gerekçeyle geri al (müdür onayı hariç; kullanıcı kararı 26.09.2026, M8).
+  undoCertificateStep: (id: number, body: { reason: string }) =>
+    api.post<HonorCertificate>(`${BASE}/certificates/${id}/undo/`, body),
+
+  // Uygun görülmedi: PROPOSED|RECOMMENDED → REJECTED (son adım olarak geri alınabilir).
   rejectCertificate: (id: number, body: HonorCertificateRejectBody) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/reject/`, body),
 

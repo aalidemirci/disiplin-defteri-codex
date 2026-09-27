@@ -22,6 +22,7 @@ const dapi = vi.hoisted(() => ({
   updateDecisionNarrative: vi.fn(),
   approveDecision: vi.fn(),
   confirmESchoolEntry: vi.fn(),
+  createDecision: vi.fn(),
 }));
 
 // Yalnız tel katmanı (disiplinApi) mock'lanır; TR sözlükleri gerçek modülden gelir.
@@ -348,5 +349,52 @@ describe("DecisionsSection — e-Okul onayı", () => {
         processed_on: "2026-03-11",
       }),
     );
+  });
+});
+
+describe("DecisionsSection — md. 166 aynı yılda tekrar", () => {
+  const prior = {
+    penalty_type: "REPRIMAND" as const,
+    penalty_type_display: "Kınama",
+    decision_no: "2025-2026/0001",
+    decision_date: "2026-02-10",
+  };
+
+  it("aynı ceza için gerekçe ister, ağır cezada istemez; gerekçe gövdeye gider", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [],
+      behavior_points: {},
+      md166_priors: { "3": prior },
+    });
+    dapi.createDecision.mockResolvedValue(makeDecision());
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Karar ekle" }));
+
+    expect(screen.getByText(/md. 166: öğrencinin bu öğretim yılında/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Kararı kaydet" }));
+    expect(await screen.findByText("md. 166 gerekçesi zorunludur.")).toBeInTheDocument();
+    expect(dapi.createDecision).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getByLabelText(/Ceza türü/), "SHORT_TERM_SUSPENSION");
+    expect(screen.queryByText(/md. 166: öğrencinin bu öğretim yılında/)).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/Ceza türü/), "REPRIMAND");
+    await user.type(screen.getByLabelText("md. 166 gerekçesi"), "Fiil farklı.");
+    await user.click(screen.getByRole("button", { name: "Kararı kaydet" }));
+    await waitFor(() => expect(dapi.createDecision).toHaveBeenCalled());
+    expect(dapi.createDecision.mock.calls[0][1]).toMatchObject({
+      penalty_type: "REPRIMAND",
+      md166_override_reason: "Fiil farklı.",
+    });
+  });
+
+  it("kararda kayıtlı md. 166 gerekçesi kartta görünür", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ md166_override_reason: "Kurul takdiri." })],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText("Kurul takdiri.")).toBeInTheDocument();
   });
 });

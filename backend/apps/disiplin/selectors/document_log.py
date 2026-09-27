@@ -72,3 +72,17 @@ def documents_for_student(student_id: int) -> QuerySet[GeneratedDocument]:
         .defer("stored_pdf_b64")
         .select_related("case")
     )
+
+
+def defense_recorded(case: DisciplineCase, student_id: int) -> bool:
+    """Öğrencinin savunma tutanağı (Form-11, md. 194/1) dosyanın kütüğünde var mı?
+
+    Form-15/17 "savunması alınmış" ifadesini yalnız bu kayıt varsa basar. Kütüğe elle
+    eklenen, öğrenciye bağlanmamış savunma tutanağı tek öğrencili dosyada sayılır.
+    """
+    from apps.disiplin.models import DocumentType
+
+    docs = case.generated_documents.filter(document_type=DocumentType.DEFENSE_RECORD)
+    if docs.filter(student_id=student_id).exists():
+        return True
+    return docs.filter(student__isnull=True).exists() and case.case_students.count() == 1

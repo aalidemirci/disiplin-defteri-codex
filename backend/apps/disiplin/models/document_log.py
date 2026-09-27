@@ -35,6 +35,20 @@ class DocumentType(models.TextChoices):
     PRECAUTION_NOTICE = "PRECAUTION_NOTICE", "Tedbir bildirimi (md. 175)"
     COUNCIL_MEETING_MINUTES = "COUNCIL_MEETING_MINUTES", "Kurul toplantı tutanağı (md. 184/206)"
     BOARD_DECISION_NOTICE = "BOARD_DECISION_NOTICE", "Üst kurul kararı tebliği (md. 169/2-4)"
+    # M2 Grup 1 — süreç yazıları (kullanıcı kararı 27.09.2026; kayıttan dolu basılır).
+    RETURN_LETTER = "RETURN_LETTER", "Kurula iade yazısı (md. 197)"
+    DISTRICT_REFERRAL_LETTER = "DISTRICT_REFERRAL_LETTER", "İlçe kuruluna gönderme yazısı (md. 197)"
+    APPROVAL_REQUEST_LETTER = "APPROVAL_REQUEST_LETTER", "Onaya sevk üst yazısı (md. 169/1)"
+    PRECAUTION_MEM_LETTER = "PRECAUTION_MEM_LETTER", "Tedbir MEM yazısı (md. 175)"
+    # M2 Grup 2 — tutanaklar (kullanıcı kararı 27.09.2026; künye dolu, beyan elle).
+    PARENT_MEETING = "PARENT_MEETING", "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)"
+    SEARCH_RECORD = "SEARCH_RECORD", "Arama tutanağı (md. 158/3)"
+    NON_COMPLIANCE_RECORD = "NON_COMPLIANCE_RECORD", "İfade/savunma vermedi tespiti (md. 195)"
+    # M2 Grup 3 — md. 157/7-a değerlendirme ve öneri formu (Form-01).
+    GUIDANCE_ASSESSMENT = (
+        "GUIDANCE_ASSESSMENT",
+        "Rehberlik değerlendirme ve öneri formu (Form-01, md. 157/7-a)",
+    )
     OTHER = "OTHER", "Diğer"
 
 

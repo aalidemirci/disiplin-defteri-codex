@@ -40,7 +40,9 @@ from apps.disiplin.models import (
     AppealResult,
     ApprovalAuthority,
     CaseStage,
+    CouncilDecisionBasis,
     DisciplineCase,
+    DisciplineDecision,
     DocumentType,
     GeneratedDocument,
     ParticipantRole,
@@ -99,6 +101,16 @@ DOC_TEMPLATES: dict[str, str] = {
     DocumentType.DEFENSE_CALL: "disiplin/documents/defense_call.html",  # Form-9
     DocumentType.MEETING_CALL: "disiplin/documents/meeting_call.html",  # Form-10
     DocumentType.DEFENSE_RECORD: "disiplin/documents/defense_record.html",  # Form-11
+    # M2 Grup 1 süreç yazıları (kullanıcı kararı 27.09.2026) — resmî MEB örneği yok;
+    # içerik md. 169/1 ve 197 metninden türetildi, kayıttan dolu basılır.
+    DocumentType.RETURN_LETTER: "disiplin/documents/return_letter.html",
+    DocumentType.DISTRICT_REFERRAL_LETTER: "disiplin/documents/district_referral_letter.html",
+    DocumentType.APPROVAL_REQUEST_LETTER: "disiplin/documents/approval_request_letter.html",
+    # M2 Grup 2 tutanakları (kullanıcı kararı 27.09.2026) — künye/antet dolu, beyan elle.
+    DocumentType.SEARCH_RECORD: "disiplin/documents/search_record.html",
+    DocumentType.NON_COMPLIANCE_RECORD: "disiplin/documents/non_compliance_record.html",
+    # M2 Grup 3 — md. 157/7-a Form-01 (yazılı uyarıdan ÖNCEKİ rehberlik değerlendirmesi).
+    DocumentType.GUIDANCE_ASSESSMENT: "disiplin/documents/guidance_assessment.html",
 }
 
 # Alıcıya göre değişen belgeler (öğrenci sürümü varsayılan; veli ayrı şablon).
@@ -130,10 +142,27 @@ DOC_TEMPLATES_BY_RECIPIENT: dict[str, dict[str, str]] = {
 # karar tutanağı / F-13 müdürlüğe dilekçe). Varsayılan: VARIANT_RECORD (F-12).
 VARIANT_RECORD = "record"
 VARIANT_PETITION = "petition"
+# md. 175 MEM yazısı: ilk bildirim (175/1 "millî eğitim müdürünü bilgilendirerek") /
+# uzatma onayı talebi (175/2 "millî eğitim müdürünün onayına bağlı olarak").
+VARIANT_MEM_INFO = "info"
+VARIANT_MEM_EXTENSION = "extension"
+# md. 157/7-b veli süreci: davet yazısı / görüşme tutanağı / gelmedi tutanağı.
+VARIANT_PARENT_INVITE = "invite"
+VARIANT_PARENT_MEETING = "meeting"
+VARIANT_PARENT_NO_SHOW = "no_show"
 DOC_TEMPLATES_BY_VARIANT: dict[str, dict[str, str]] = {
     DocumentType.DEADLINE_EXTENSION: {
         VARIANT_RECORD: "disiplin/documents/deadline_extension_record.html",  # Form-12
         VARIANT_PETITION: "disiplin/documents/deadline_extension_petition.html",  # Form-13
+    },
+    DocumentType.PRECAUTION_MEM_LETTER: {
+        VARIANT_MEM_INFO: "disiplin/documents/precaution_mem_info.html",
+        VARIANT_MEM_EXTENSION: "disiplin/documents/precaution_mem_extension.html",
+    },
+    DocumentType.PARENT_MEETING: {
+        VARIANT_PARENT_INVITE: "disiplin/documents/parent_invite.html",
+        VARIANT_PARENT_MEETING: "disiplin/documents/parent_meeting_record.html",
+        VARIANT_PARENT_NO_SHOW: "disiplin/documents/parent_no_show_record.html",
     },
 }
 
@@ -154,6 +183,14 @@ DOC_TITLES: dict[str, str] = {
     DocumentType.DEFENSE_RECORD: "Savunma Tutanağı",
     DocumentType.DEADLINE_EXTENSION: "Süre Uzatma (Ara Karar / Dilekçe)",
     DocumentType.BOARD_DECISION_NOTICE: "Üst Kurul Kararı Tebliği",
+    DocumentType.RETURN_LETTER: "Kurula İade Yazısı (md. 197)",
+    DocumentType.DISTRICT_REFERRAL_LETTER: "İlçe Kuruluna Gönderme Yazısı (md. 197)",
+    DocumentType.APPROVAL_REQUEST_LETTER: "Onaya Sevk Üst Yazısı (md. 169/1)",
+    DocumentType.PRECAUTION_MEM_LETTER: "Tedbir Millî Eğitim Müdürlüğü Yazısı (md. 175)",
+    DocumentType.PARENT_MEETING: "Veli Görüşmesi (md. 157/7-b)",
+    DocumentType.GUIDANCE_ASSESSMENT: "Rehberlik Değerlendirme ve Öneri Formu (Form-01)",
+    DocumentType.SEARCH_RECORD: "Arama Tutanağı (md. 158/3)",
+    DocumentType.NON_COMPLIANCE_RECORD: "İfade/Savunma Vermedi Tespit Tutanağı (md. 195)",
 }
 
 # Öğrenci-özgü belgeler (öğrenci zorunlu) — dizi pusulası HARİÇ hepsi öğrenciye özgü.
@@ -166,6 +203,12 @@ STUDENT_REQUIRED: frozenset[str] = frozenset(
         DocumentType.WARNING_LETTER,
         DocumentType.PRECAUTION_NOTICE,
         DocumentType.BOARD_DECISION_NOTICE,
+        DocumentType.RETURN_LETTER,
+        DocumentType.DISTRICT_REFERRAL_LETTER,
+        DocumentType.APPROVAL_REQUEST_LETTER,
+        DocumentType.PRECAUTION_MEM_LETTER,
+        DocumentType.PARENT_MEETING,
+        DocumentType.GUIDANCE_ASSESSMENT,
     }
 )
 
@@ -179,6 +222,7 @@ PARTICIPANT_REQUIRED: frozenset[str] = frozenset(
         DocumentType.INFO_GATHERING,
         DocumentType.DEFENSE_CALL,
         DocumentType.DEFENSE_RECORD,
+        DocumentType.NON_COMPLIANCE_RECORD,
     }
 )
 
@@ -188,15 +232,23 @@ PARTICIPANT_REQUIRED: frozenset[str] = frozenset(
 # tebliğ→ceza günleri→itiraz; dizi pusulası kapak (sonda); OTHER/manuel en sonda.
 CANONICAL_DOC_ORDER: dict[str, int] = {
     DocumentType.PRECAUTION_NOTICE: 5,  # tedbir (md. 175, acele)
+    DocumentType.PRECAUTION_MEM_LETTER: 6,  # tedbir MEM bildirimi/uzatma onayı (md. 175)
+    DocumentType.SEARCH_RECORD: 3,  # arama tutanağı (md. 158/3 — olay tespiti, en başta)
+    DocumentType.GUIDANCE_ASSESSMENT: 8,  # rehberlik değerlendirmesi Form-01 (md. 157/7-a)
     DocumentType.WARNING_LETTER: 10,  # müdür uyarısı Form-01/02 (md. 157/7)
+    DocumentType.PARENT_MEETING: 12,  # veli daveti/görüşme/gelmedi (md. 157/7-b)
     DocumentType.STATEMENT_CALL: 20,  # ifadeye çağrı Form-3
     DocumentType.STATEMENT_RECORD: 30,  # ifade tutanağı Form-4/5/6
     DocumentType.INFO_GATHERING: 40,  # bilgi toplama Form-7/8
     DocumentType.DEFENSE_CALL: 50,  # savunmaya çağrı Form-9
     DocumentType.MEETING_CALL: 60,  # kurul toplantı çağrısı Form-10
     DocumentType.DEFENSE_RECORD: 70,  # savunma tutanağı Form-11
+    DocumentType.NON_COMPLIANCE_RECORD: 75,  # ifade/savunma vermedi tespiti (md. 195)
     DocumentType.DEADLINE_EXTENSION: 80,  # süre uzatma Form-12/13
     DocumentType.COMMITTEE_DECISION: 90,  # EK-1 kurul kararı
+    DocumentType.RETURN_LETTER: 92,  # md. 197 kurula iade
+    DocumentType.DISTRICT_REFERRAL_LETTER: 94,  # md. 197 ilçe kuruluna gönderme
+    DocumentType.APPROVAL_REQUEST_LETTER: 96,  # md. 169/1 onaya sevk
     DocumentType.PENALTY_NOTICE: 100,  # ceza tebliği Form-14/15
     DocumentType.PENALTY_DAYS_NOTICE: 110,  # ceza günleri tebliği Form-16/17
     DocumentType.APPEAL_LETTER: 120,  # il/ilçe itiraz Form-18
@@ -238,7 +290,7 @@ INFO_GATHERING_SOURCES: tuple[str, ...] = (
 _OTHER_CATEGORY = "Diğer Evrak"
 DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("İfadeler", frozenset({DocumentType.STATEMENT_RECORD})),
-    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD})),
+    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD, DocumentType.NON_COMPLIANCE_RECORD})),
     ("Bilgi Alma Tutanakları", frozenset({DocumentType.INFO_GATHERING})),
     (
         "Çağrı / Davet Yazıları",
@@ -246,12 +298,38 @@ DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
             {DocumentType.STATEMENT_CALL, DocumentType.DEFENSE_CALL, DocumentType.MEETING_CALL}
         ),
     ),
-    ("Müdür Uyarısı", frozenset({DocumentType.WARNING_LETTER})),
+    (
+        "Müdür Uyarısı",
+        frozenset(
+            {
+                DocumentType.GUIDANCE_ASSESSMENT,
+                DocumentType.WARNING_LETTER,
+                DocumentType.PARENT_MEETING,
+            }
+        ),
+    ),
+    ("Arama Tutanakları", frozenset({DocumentType.SEARCH_RECORD})),
     (
         "Tedbir / Süre Uzatma",
-        frozenset({DocumentType.PRECAUTION_NOTICE, DocumentType.DEADLINE_EXTENSION}),
+        frozenset(
+            {
+                DocumentType.PRECAUTION_NOTICE,
+                DocumentType.PRECAUTION_MEM_LETTER,
+                DocumentType.DEADLINE_EXTENSION,
+            }
+        ),
     ),
     ("Kurul Kararı", frozenset({DocumentType.COMMITTEE_DECISION})),
+    (
+        "Onay / İade Yazıları",
+        frozenset(
+            {
+                DocumentType.RETURN_LETTER,
+                DocumentType.DISTRICT_REFERRAL_LETTER,
+                DocumentType.APPROVAL_REQUEST_LETTER,
+            }
+        ),
+    ),
     (
         "Tebliğler",
         frozenset(
@@ -308,7 +386,8 @@ def _resolve_template(document_type: str, recipient: str, variant: str = "") -> 
     """Belge türü (+ alıcı / variant) → şablon yolu; üretilemezse ValueError."""
     by_variant = DOC_TEMPLATES_BY_VARIANT.get(document_type)
     if by_variant is not None:
-        return by_variant.get(variant) or by_variant[VARIANT_RECORD]
+        # Tanımsız/boş variant → türün İLK (varsayılan) şablonu.
+        return by_variant.get(variant) or next(iter(by_variant.values()))
     by_recipient = DOC_TEMPLATES_BY_RECIPIENT.get(document_type)
     if by_recipient is not None:
         return by_recipient.get(recipient) or by_recipient[RECIPIENT_STUDENT]
@@ -454,6 +533,10 @@ _BRANCH_A_ALLOWED: frozenset[str] = frozenset(
     {
         DocumentType.WARNING_LETTER,
         DocumentType.PRECAUTION_NOTICE,
+        DocumentType.PRECAUTION_MEM_LETTER,
+        DocumentType.PARENT_MEETING,
+        DocumentType.GUIDANCE_ASSESSMENT,
+        DocumentType.SEARCH_RECORD,
         DocumentType.INDEX_SHEET,
     }
 )
@@ -521,6 +604,8 @@ def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any
         "parent": _parent_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
+        # md. 194/1: "savunması alınmış" yalnız Form-11 kaydı varsa basılır.
+        "defense_taken": selectors.defense_recorded(case, student.pk),
     }
 
 
@@ -574,23 +659,89 @@ def _penalty_days_notice_context(case: DisciplineCase, student: Any) -> dict[str
         "parent": _parent_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
+        # md. 194/1: "savunması alınmış" yalnız Form-11 kaydı varsa basılır.
+        "defense_taken": selectors.defense_recorded(case, student.pk),
         "suspension_days_text": _SUSPENSION_DAYS_TEXT.get(days) if days else None,
         **_suspension_dates(decision),
     }
 
 
+# Form-18 metin parçaları (kullanıcı kararı 26.09.2026: şablon kayıttan doldurulur).
+_APPEAL_FILER_PHRASE: dict[str, str] = {
+    "PARENT": "Öğrenci velisi",
+    "STUDENT_ADULT": "18 yaşını tamamlamış öğrenci",
+    "PRINCIPAL": "Okul müdürü olarak tarafımdan",
+}
+# İtiraz merciine göre md. 169 atfı (mercii kayıttan: onaylayan merciin bir üstü).
+_APPEAL_BOARD_TEXT: dict[str, str] = {
+    ApprovalAuthority.DISTRICT_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (a) bendi uyarınca; "Kınama ve okuldan '
+        'kısa süreli uzaklaştırma cezalarına itiraz ilçe öğrenci disiplin kurulunca"'
+    ),
+    ApprovalAuthority.PROVINCIAL_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (b) bendi uyarınca; "Okul değiştirme '
+        'cezasına itiraz il öğrenci disiplin kurulunca"'
+    ),
+    ApprovalAuthority.UPPER_BOARD: (
+        'Yönetmeliğin 169. maddesi 3. fıkrası (c) bendi uyarınca; "Örgün eğitim dışına '
+        'çıkarma cezasına itiraz öğrenci üst disiplin kurulunca"'
+    ),
+}
+_APPEAL_BOARD_TEXT_REFERRED = (
+    "Karar, Yönetmeliğin 197. maddesi uyarınca ilçe öğrenci disiplin kurulunca karara "
+    'bağlandığından; 169. maddesi 4. fıkrası ("Kararı onayan kurul aynı karara yönelik '
+    'itirazları görüşemez") ve 202. maddesi 1. fıkrası (b) bendi uyarınca itiraz il '
+    "öğrenci disiplin kurulunca"
+)
+
+
+def _approval_phrase(decision: Any) -> str:
+    """Kararı kimin onayladığı/bağladığı — "kesinleşmiştir" DENMEZ (itiraz derdest)."""
+    if decision is None:
+        return "……………… onaylanmıştır"
+    if decision.referred_to_district:
+        return (
+            "müdürlüğümüzce Yönetmeliğin 197. maddesi uyarınca gönderildiği ilçe öğrenci "
+            "disiplin kurulunca karara bağlanmıştır"
+        )
+    if decision.approval_authority == ApprovalAuthority.DISTRICT_BOARD:
+        return "ilçe öğrenci disiplin kurulunca onaylanmıştır (md. 169/2-b)"
+    if decision.approval_authority == ApprovalAuthority.PROVINCIAL_BOARD:
+        return "il öğrenci disiplin kurulunca onaylanmıştır (md. 169/2-c)"
+    return "tarafımdan onaylanmıştır (md. 169/2-a)"
+
+
 def _appeal_letter_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
-    """İl/İlçe itiraz yazısı (Form-18) bağlamı — karar + en son itiraz dilekçesi."""
+    """İl/İlçe itiraz yazısı (Form-18) bağlamı — karar + en son itiraz dilekçesi.
+
+    İtiraz eden (veli / 18+ öğrenci / müdür), süre içinde olup olmadığı ve itiraz
+    mercii KAYITTAN basılır (md. 169/3-4, 202/1-b); onaylanan karar itiraz derdestken
+    "kesinleşmiş" yazılmaz.
+    """
     decision = case.decisions.filter(student_id=student.pk).first()
     appeal = None
     if decision is not None:
         appeal = selectors.appeals_for_decision(decision).first()
+    filer_role = appeal.filed_by_role if appeal else "PARENT"
+    if appeal is not None and decision is not None and decision.referred_to_district:
+        board_text = _APPEAL_BOARD_TEXT_REFERRED
+    elif appeal is not None:
+        board_text = _APPEAL_BOARD_TEXT.get(
+            appeal.appeal_authority, _APPEAL_BOARD_TEXT[ApprovalAuthority.DISTRICT_BOARD]
+        )
+    else:
+        board_text = _APPEAL_BOARD_TEXT[ApprovalAuthority.DISTRICT_BOARD]
     return {
         **_common_context(case),
         "student": _student_context(student),
         "decision": decision,
         "statute_label": statute_label(decision),
         "appeal": appeal,
+        "appeal_filer_phrase": _APPEAL_FILER_PHRASE.get(filer_role, "Öğrenci velisi"),
+        "appeal_by_principal": filer_role == "PRINCIPAL",
+        "appeal_within_deadline": appeal.within_deadline if appeal else True,
+        "approval_phrase": _approval_phrase(decision),
+        "appeal_board_text": board_text,
     }
 
 
@@ -743,6 +894,158 @@ def _precaution_notice_context(case: DisciplineCase, student: Any) -> dict[str, 
     }
 
 
+# --- M2 Grup 1 süreç yazıları (kullanıcı kararı 27.09.2026) ---
+
+_MD197_REFER_MARK = "\n\nİlçeye sevk: "
+
+
+def _split_md197_reasons(text: str) -> tuple[str, str]:
+    """`return_reason` → (iade gerekçesi, ilçeye sevk görüş/teklifi).
+
+    `services.decisions.record_principal_review` REFER'de sevk gerekçesini iade
+    gerekçesinin altına "İlçeye sevk: " ile ekler; ikisi de yazıya ayrı basılır.
+    """
+    text = text or ""
+    if _MD197_REFER_MARK in text:
+        head, tail = text.split(_MD197_REFER_MARK, 1)
+        return head.strip(), tail.strip()
+    return text.strip(), ""
+
+
+def _decision_for_letter(case: DisciplineCase, student: Any) -> Any:
+    decision = case.decisions.filter(student_id=student.pk).first()
+    if decision is None:
+        raise ValueError("Dosyada bu öğrenci için kurul kararı yok.")
+    return decision
+
+
+def _md197_letter_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """md. 197 iade / ilçeye gönderme yazısı bağlamı — karar + iki gerekçe."""
+    decision = _decision_for_letter(case, student)
+    return_part, refer_part = _split_md197_reasons(decision.return_reason)
+    return {
+        **_common_context(case, unit=""),  # müdür yazısı — kurul belgesi değil
+        **_committee_context(case),
+        "student": _student_context(student),
+        "decision": decision,
+        "statute_label": statute_label(decision),
+        "return_reason_text": return_part,
+        "refer_reason_text": refer_part,
+    }
+
+
+def _approval_request_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """md. 169/1 onaya sevk üst yazısı — onay mercii (169/2-b/c) karardan."""
+    decision = _decision_for_letter(case, student)
+    return {
+        **_common_context(case, unit=""),
+        "student": _student_context(student),
+        "decision": decision,
+        "statute_label": statute_label(decision),
+        "to_provincial": decision.approval_authority == ApprovalAuthority.PROVINCIAL_BOARD,
+    }
+
+
+def _precaution_mem_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """md. 175 MEM yazısı — yürürlükteki (yoksa en son) tedbir + sıradaki uzatma no."""
+    precaution = selectors.active_precaution(case, student.pk) or (
+        selectors.precautions_for_case(case).filter(student_id=student.pk).first()
+    )
+    if precaution is None:
+        raise ValueError("Bu öğrenci için dosyada tedbir (md. 175) kaydı yok.")
+    return {
+        **_common_context(case, unit=""),
+        "student": _student_context(student),
+        "precaution": precaution,
+        "next_extension_no": precaution.extension_count + 1,
+    }
+
+
+# --- M2 Grup 2 tutanakları (kullanıcı kararı 27.09.2026) ---
+
+
+def _class_staff_context(student: Any) -> dict[str, Any]:
+    """Öğrencinin şubesinin sınıf rehber öğretmeni / rehber öğretmeni / müdür yardımcısı.
+
+    Ayarlar > Sınıf sorumluları eşleştirmesinden (aktif ders yılı); yoksa boş (elle).
+    """
+    from apps.okul import selectors as okul_selectors
+
+    row = None
+    if student.class_level is not None and student.class_section:
+        row = (
+            okul_selectors.class_responsibilities()
+            .filter(class_level=student.class_level, class_section=student.class_section)
+            .first()
+        )
+
+    def _name(person: Any) -> str:
+        return person.full_name if person is not None else ""
+
+    return {
+        "class_teacher_name": _name(row.class_teacher) if row else "",
+        "guidance_teacher_name": _name(row.guidance_teacher) if row else "",
+        "assistant_principal_name": _name(row.assistant_principal) if row else "",
+    }
+
+
+def _parent_meeting_context(
+    case: DisciplineCase, student: Any, extra: dict[str, Any]
+) -> dict[str, Any]:
+    """md. 157/7-b veli daveti / görüşme / gelmedi tutanağı — veli + sınıf sorumluları."""
+    warning = case.warnings.filter(student_id=student.pk).order_by("-warning_date", "-pk").first()
+    return {
+        **_common_context(case, unit=""),  # müdür işlemi (Dal A)
+        "student": _student_context(student),
+        "parent": _parent_context(student),
+        "warning": warning,
+        **_class_staff_context(student),
+        **_schedule_context(extra),
+    }
+
+
+def _guidance_assessment_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """md. 157/7-a Form-01 — sınıf rehber + rehber öğretmenin değerlendirme ve önerileri.
+
+    "Daha önce disiplin cezası almamış olmak kaydıyla ... ilk defa" koşulu için
+    yürürlükteki önceki cezalar (`penalties_in_force`) listelenir; davranış özeti
+    uyarı kaydından (yoksa elle).
+    """
+    warning = case.warnings.filter(student_id=student.pk).order_by("-warning_date", "-pk").first()
+    prior = list(
+        selectors.penalties_in_force(
+            DisciplineDecision.objects.filter(student_id=student.pk).exclude(case=case)
+        ).order_by("decision_date")
+    )
+    return {
+        **_common_context(case, unit=""),
+        "student": _student_context(student),
+        "warning": warning,
+        "prior_penalties": prior,
+        **_class_staff_context(student),
+    }
+
+
+def _search_record_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
+    """md. 158/3 arama tutanağı — iki nüsha; gerekçe/yer/bulunanlar elle, müdür onaylı."""
+    return {
+        **_common_context(case, unit=""),
+        **_schedule_context(extra),
+    }
+
+
+def _non_compliance_context(
+    case: DisciplineCase, participant: Any, extra: dict[str, Any]
+) -> dict[str, Any]:
+    """md. 195 tespit tutanağı — ifade vermeyen / savunmada bulunmayan / gelmeyen kişi."""
+    return {
+        **_common_context(case),
+        **_committee_with_members_context(case),
+        "participant": _participant_context(participant),
+        **_schedule_context(extra),
+    }
+
+
 # --- Dal B ifade/savunma/bilgi formları (Tur 106) — katılımcı + kurul + geçici alanlar ---
 
 
@@ -877,7 +1180,7 @@ def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[s
     }
 
 
-def _deadline_extension_context(case: DisciplineCase) -> dict[str, Any]:
+def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """Süre uzatma (F-12 ara karar / F-13 dilekçe, md. 192/3) — uzatma kaydı + kurul + öğrenci.
 
     Uzatma dosya başına tektir (alive-unique) → `deadline_extensions.first()`. Öğrenci
@@ -890,6 +1193,8 @@ def _deadline_extension_context(case: DisciplineCase) -> dict[str, Any]:
         **_committee_with_members_context(case),
         "extension": extension,
         "student": _student_context(student) if student is not None else None,
+        # Form-12 "oy birliği / oy çoğunluğu ile" (md. 191/1; kullanıcı kararı 26.09.2026).
+        "vote_majority": extra.get("vote_basis") == CouncilDecisionBasis.MAJORITY,
     }
 
 
@@ -901,6 +1206,7 @@ _PARTICIPANT_CONTEXT_BUILDERS: dict[str, _ParticipantContextBuilder] = {
     DocumentType.INFO_GATHERING: _info_gathering_context,
     DocumentType.DEFENSE_CALL: _defense_call_context,
     DocumentType.DEFENSE_RECORD: _defense_record_context,
+    DocumentType.NON_COMPLIANCE_RECORD: _non_compliance_context,
 }
 
 
@@ -914,6 +1220,11 @@ _STUDENT_CONTEXT_BUILDERS: dict[str, _StudentContextBuilder] = {
     # WARNING_LETTER burada DEĞİL — extra (behavior_summary) gerektirir,
     # _build_context'te özel dala alınır (Tur 213). STUDENT_REQUIRED'da kalır.
     DocumentType.PRECAUTION_NOTICE: _precaution_notice_context,
+    DocumentType.RETURN_LETTER: _md197_letter_context,
+    DocumentType.DISTRICT_REFERRAL_LETTER: _md197_letter_context,
+    DocumentType.APPROVAL_REQUEST_LETTER: _approval_request_context,
+    DocumentType.PRECAUTION_MEM_LETTER: _precaution_mem_context,
+    DocumentType.GUIDANCE_ASSESSMENT: _guidance_assessment_context,
 }
 
 
@@ -934,7 +1245,11 @@ def _build_context(
     if document_type == DocumentType.MEETING_CALL:
         return _meeting_call_context(case, extra)
     if document_type == DocumentType.DEADLINE_EXTENSION:
-        return _deadline_extension_context(case)
+        return _deadline_extension_context(case, extra)
+    if document_type == DocumentType.PARENT_MEETING:
+        return _parent_meeting_context(case, student, extra)
+    if document_type == DocumentType.SEARCH_RECORD:
+        return _search_record_context(case, extra)
     participant_builder = _PARTICIPANT_CONTEXT_BUILDERS.get(document_type)
     if participant_builder is not None:
         return participant_builder(case, participant, extra)
@@ -965,6 +1280,7 @@ def generate_document(
     board_outcome: str = "",
     result_summary: str = "",
     variant: str = "",
+    vote_basis: str = "",
     document_no: str = "",
     title: str = "",
     source_label: str = "",
@@ -994,6 +1310,8 @@ def generate_document(
     """
     if recipient not in VALID_RECIPIENTS:
         raise ValueError("Geçersiz tebliğ alıcısı (öğrenci/veli).")
+    if vote_basis and vote_basis not in CouncilDecisionBasis.values:
+        raise ValueError("Geçersiz oylama esası (oy birliği / oy çoğunluğu).")
     # Dal A koruması (Tur 214, F17): yalnız-uyarı dalında (DECIDED kararı var,
     # kurula sevk yok) kurul formları üretilmez — Tur 213 (3c) UI filtresinin
     # sunucu karşılığı. DECIDED öncesi (dal belirsiz) ve Dal B'de tam liste.
@@ -1032,6 +1350,7 @@ def generate_document(
             final, reason = selectors.decision_is_final(days_decision)
         if not final:
             raise ValueError(f"Ceza kesinleşmeden ceza günleri tebliği üretilemez: {reason}.")
+    _assert_process_letter_ready(case, document_type, student_id, variant)
 
     extra = {
         "statement_date": statement_date,
@@ -1050,6 +1369,8 @@ def generate_document(
         "board_outcome": board_outcome,
         "result_summary": result_summary,
         "variant": variant,
+        # Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF.
+        "vote_basis": vote_basis,
     }
     context = _build_context(case, document_type, student, participant, extra)
     # NOT: eski DOC_CODES/doc_code altbilgi kodu Talep 1g'de (Tur 181) PDF
@@ -1089,6 +1410,46 @@ def generate_document(
             stored_filename=f"{case.case_no}-{document_type}.pdf",
         )
     return pdf_bytes, record
+
+
+def _assert_process_letter_ready(
+    case: DisciplineCase, document_type: str, student_id: int | None, variant: str
+) -> None:
+    """M2 Grup 1 yazılarının kayıt ön koşulları — yanlış aşamada yazı üretilmez."""
+    from apps.disiplin.models import DisciplinePrecaution
+
+    if document_type in {
+        DocumentType.RETURN_LETTER,
+        DocumentType.DISTRICT_REFERRAL_LETTER,
+        DocumentType.APPROVAL_REQUEST_LETTER,
+    }:
+        decision = case.decisions.filter(student_id=student_id).first()
+        if decision is None:
+            raise ValueError("Dosyada bu öğrenci için kurul kararı yok.")
+        if document_type == DocumentType.RETURN_LETTER and decision.returned_at is None:
+            raise ValueError("Karar kurula iade edilmemiş (md. 197); önce iadeyi kaydedin.")
+        if (
+            document_type == DocumentType.DISTRICT_REFERRAL_LETTER
+            and not decision.referred_to_district
+        ):
+            raise ValueError(
+                "Karar ilçe kuruluna gönderilmemiş (md. 197); önce ilçeye sevki kaydedin."
+            )
+        if document_type == DocumentType.APPROVAL_REQUEST_LETTER and (
+            decision.referred_to_district
+            or decision.approval_authority
+            not in {ApprovalAuthority.DISTRICT_BOARD, ApprovalAuthority.PROVINCIAL_BOARD}
+        ):
+            raise ValueError(
+                "Onaya sevk yazısı yalnız ilçe/il kurulu onayına bağlı cezada (okul "
+                "değiştirme, örgün eğitim dışına çıkarma — md. 169/1-2) üretilir."
+            )
+    if document_type == DocumentType.PRECAUTION_MEM_LETTER:
+        qs = DisciplinePrecaution.objects.filter(case=case, student_id=student_id)
+        if not qs.exists():
+            raise ValueError("Bu öğrenci için dosyada tedbir (md. 175) kaydı yok.")
+        if variant == VARIANT_MEM_EXTENSION and all(p.extension_count >= 2 for p in qs):
+            raise ValueError("Tedbir zaten iki kez uzatıldı; üçüncü uzatma yok (md. 175/2).")
 
 
 def _student_in_case(case: DisciplineCase, student_id: int) -> Any:

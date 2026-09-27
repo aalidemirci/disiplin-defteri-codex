@@ -410,6 +410,7 @@ export interface DecisionNarrative {
 export interface DisciplineDecision extends DecisionNarrative {
   id: number;
   student: number;
+  md166_override_reason?: string;
   student_name: string;
   event: number | null;
   meeting: number | null;
@@ -455,6 +456,31 @@ export interface DisciplineDecision extends DecisionNarrative {
 export interface DecisionsResponse {
   decisions: DisciplineDecision[];
   behavior_points: Record<number, number>;
+  // md. 166: öğrenci başına bu öğretim yılında yürürlükteki en ağır ceza (yoksa anahtar yok).
+  md166_priors?: Record<string, Md166Prior>;
+}
+
+export interface Md166Prior {
+  penalty_type: PenaltyType;
+  penalty_type_display: string;
+  decision_no: string;
+  decision_date: string;
+}
+
+// md. 166 "bir derece ağır ceza" sıralaması (md. 164 fıkra sırası; backend
+// selectors.decisions.PENALTY_SEVERITY ile birebir). Cezasız karar sıralamada yok.
+export const PENALTY_SEVERITY: Partial<Record<PenaltyType, number>> = {
+  REPRIMAND: 1,
+  SHORT_TERM_SUSPENSION: 2,
+  SCHOOL_CHANGE: 3,
+  EXPULSION: 4,
+};
+
+// Seçilen ceza, aynı yıldaki önceki cezadan ağır değilse gerekçe gerekir (md. 166).
+export function md166NeedsReason(prior: Md166Prior | undefined, penalty: PenaltyType): boolean {
+  const rank = PENALTY_SEVERITY[penalty];
+  if (!prior || rank === undefined) return false;
+  return rank <= (PENALTY_SEVERITY[prior.penalty_type] ?? 0);
 }
 
 export interface DecisionCreateBody {
@@ -467,6 +493,7 @@ export interface DecisionCreateBody {
   penalty_detail?: string;
   decision_no?: string;
   notes?: string;
+  md166_override_reason?: string; // md. 166 gerekçesi (gerekmiyorsa backend boşaltır)
 }
 
 // Karar düzenleme gövdesi (yalnız PENDING; öğrenci bağı değişmez).
@@ -644,6 +671,14 @@ export type DocumentType =
   | "WARNING_LETTER"
   | "PRECAUTION_NOTICE"
   | "BOARD_DECISION_NOTICE"
+  | "RETURN_LETTER"
+  | "DISTRICT_REFERRAL_LETTER"
+  | "APPROVAL_REQUEST_LETTER"
+  | "PRECAUTION_MEM_LETTER"
+  | "PARENT_MEETING"
+  | "SEARCH_RECORD"
+  | "NON_COMPLIANCE_RECORD"
+  | "GUIDANCE_ASSESSMENT"
   | "OTHER";
 
 // Tüm belge türleri → Türkçe etiket (backend DocumentType ile birebir). Manuel belge
@@ -664,6 +699,14 @@ export const ALL_DOCUMENT_TYPES_TR: Record<DocumentType, string> = {
   WARNING_LETTER: "Müdür uyarısı yazısı (Form-01/02)",
   PRECAUTION_NOTICE: "Tedbir bildirimi (md. 175)",
   BOARD_DECISION_NOTICE: "Üst kurul kararı tebliği (md. 169/2-4)",
+  RETURN_LETTER: "Kurula iade yazısı (md. 197)",
+  DISTRICT_REFERRAL_LETTER: "İlçe kuruluna gönderme yazısı (md. 197)",
+  APPROVAL_REQUEST_LETTER: "Onaya sevk üst yazısı (md. 169/1)",
+  PRECAUTION_MEM_LETTER: "Tedbir MEM yazısı (md. 175)",
+  PARENT_MEETING: "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)",
+  SEARCH_RECORD: "Arama tutanağı (md. 158/3)",
+  NON_COMPLIANCE_RECORD: "İfade/savunma vermedi tespiti (md. 195)",
+  GUIDANCE_ASSESSMENT: "Rehberlik değerlendirme ve öneri formu (Form-01, md. 157/7-a)",
   OTHER: "Diğer",
 };
 
@@ -698,12 +741,20 @@ export interface GeneratedDocument {
 const OTHER_CATEGORY_LABEL = "Diğer Evrak";
 export const DOCUMENT_CATEGORIES: { label: string; types: DocumentType[] }[] = [
   { label: "İfadeler", types: ["STATEMENT_RECORD"] },
-  { label: "Savunmalar", types: ["DEFENSE_RECORD"] },
+  { label: "Savunmalar", types: ["DEFENSE_RECORD", "NON_COMPLIANCE_RECORD"] },
   { label: "Bilgi Alma Tutanakları", types: ["INFO_GATHERING"] },
   { label: "Çağrı / Davet Yazıları", types: ["STATEMENT_CALL", "DEFENSE_CALL", "MEETING_CALL"] },
-  { label: "Müdür Uyarısı", types: ["WARNING_LETTER"] },
-  { label: "Tedbir / Süre Uzatma", types: ["PRECAUTION_NOTICE", "DEADLINE_EXTENSION"] },
+  { label: "Müdür Uyarısı", types: ["GUIDANCE_ASSESSMENT", "WARNING_LETTER", "PARENT_MEETING"] },
+  { label: "Arama Tutanakları", types: ["SEARCH_RECORD"] },
+  {
+    label: "Tedbir / Süre Uzatma",
+    types: ["PRECAUTION_NOTICE", "PRECAUTION_MEM_LETTER", "DEADLINE_EXTENSION"],
+  },
   { label: "Kurul Kararı", types: ["COMMITTEE_DECISION"] },
+  {
+    label: "Onay / İade Yazıları",
+    types: ["RETURN_LETTER", "DISTRICT_REFERRAL_LETTER", "APPROVAL_REQUEST_LETTER"],
+  },
   { label: "Tebliğler", types: ["PENALTY_NOTICE", "PENALTY_DAYS_NOTICE", "BOARD_DECISION_NOTICE"] },
   { label: "İtiraz", types: ["APPEAL_LETTER"] },
   { label: OTHER_CATEGORY_LABEL, types: ["OTHER"] },
@@ -762,7 +813,17 @@ export type DocumentRecipient = "student" | "parent";
 
 // Form-7/8 bilgi toplama varyantı (öğrenciden / öğretmenden).
 // student/teacher: INFO_GATHERING (Form-7/8); record/petition: DEADLINE_EXTENSION (F-12/13).
-export type DocumentVariant = "student" | "teacher" | "record" | "petition";
+export type DocumentVariant =
+  | "student"
+  | "teacher"
+  | "record"
+  | "petition"
+  | "info" // md. 175/1 MEM bilgilendirme
+  | "extension" // md. 175/2 uzatma onayı talebi
+  | "invite" // md. 157/7-b veli davet yazısı
+  | "meeting" // md. 157/7-b veli görüşme tutanağı
+  | "no_show"; // md. 157/7-b veli gelmedi tutanağı
+export type VoteBasis = "UNANIMITY" | "MAJORITY";
 
 export interface DocumentGenerateBody {
   document_type: DocumentType;
@@ -783,6 +844,8 @@ export interface DocumentGenerateBody {
   // loglanmaz; boşsa backend uyarı kaydının özetine düşer, ikisi de boşsa 400 döner.
   behavior_summary?: string;
   variant?: DocumentVariant; // yalnız INFO_GATHERING (Form-7/8) + DEADLINE_EXTENSION
+  // Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF'e basılır.
+  vote_basis?: VoteBasis;
   source_label?: string; // bilgi alma "kaynak" seçimi; diğerlerinde yok sayılır
   document_no?: string;
   title?: string;
@@ -889,6 +952,15 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
       "Suçlanan öğrenciyi savunma vermeye çağırır; tarih/saat/yer girilir, tebliğ-tebellüğ (md. 194).",
   },
   {
+    value: "NON_COMPLIANCE_RECORD",
+    label: "İfade/savunma vermedi tespiti (md. 195)",
+    studentRequired: false,
+    participantRequired: true,
+    scheduling: true,
+    description:
+      "İfade vermeyen, savunmada bulunmayan veya çağrıldığı hâlde gelmeyen kişinin durumunu tespit eden tutanak; kurul imzalı. Kurula sevkli öğrenci için dosyadaki belgelere göre karar verilir (md. 194/3).",
+  },
+  {
     value: "MEETING_CALL",
     label: "Kurul toplantı çağrısı (Form-10)",
     studentRequired: false,
@@ -926,6 +998,28 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Kurul kararı (EK-1)",
     studentRequired: true,
     description: "Kimlik + karar + anlatı alanları + imzalar (tam otomatik, md. 163-170).",
+  },
+  // --- M2 Grup 1 süreç yazıları (kayıttan dolu; resmî MEB örneği yok) ---
+  {
+    value: "RETURN_LETTER",
+    label: "Kurula iade yazısı (md. 197)",
+    studentRequired: true,
+    description:
+      "Müdürün uygun bulmadığı kararı bir defa daha görüşülmek üzere kurula iadesi; kayıtlı iade gerekçesi basılır. Yalnız iade kaydedilmiş kararda.",
+  },
+  {
+    value: "DISTRICT_REFERRAL_LETTER",
+    label: "İlçe kuruluna gönderme yazısı (md. 197)",
+    studentRequired: true,
+    description:
+      "Kurul ısrar edince dosyanın müdürün görüş ve teklifleriyle ilçe öğrenci disiplin kuruluna gönderilmesi (en geç 5 iş günü). Yalnız ilçeye sevk kaydedilmiş kararda.",
+  },
+  {
+    value: "APPROVAL_REQUEST_LETTER",
+    label: "Onaya sevk üst yazısı (md. 169/1)",
+    studentRequired: true,
+    description:
+      "Okul değiştirme (ilçe kurulu) / örgün eğitim dışına çıkarma (il kurulu) cezasının MEM aracılığıyla onaya sunulması (md. 169/1-2).",
   },
   {
     value: "PENALTY_NOTICE",
@@ -975,6 +1069,47 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Tedbir bildirimi (md. 175)",
     studentRequired: true,
     description: "Geçici uzaklaştırma bildirimi (mevzuattan türetilmiş; resmî MEB formu yok).",
+  },
+  {
+    value: "GUIDANCE_ASSESSMENT",
+    label: "Rehberlik değerlendirme ve öneri formu (Form-01)",
+    studentRequired: true,
+    description:
+      "Yazılı uyarıdan önce sınıf rehber öğretmeni ile rehber öğretmenin değerlendirme ve önerileri (md. 157/7-a). Önceki cezalar ve uyarı özeti dolu; değerlendirme elle. Ders yılı sonunda imha edilir.",
+  },
+  {
+    value: "PARENT_MEETING",
+    label: "Veli daveti / görüşme / gelmedi (md. 157/7-b)",
+    studentRequired: true,
+    scheduling: true,
+    variantLabel: "Belge",
+    variantOptions: [
+      { value: "invite", label: "Veli davet yazısı" },
+      { value: "meeting", label: "Veli görüşme tutanağı" },
+      { value: "no_show", label: "Veli gelmedi tutanağı" },
+    ],
+    description:
+      "Yazılı uyarıya rağmen olumsuz davranış sürerse veli daveti ve görüşmesi (md. 157/7-b). Görüşme tarih/saat/yeri girilir; sınıf rehber ve rehber öğretmen Ayarlar > Sınıf sorumlularından gelir. e-Okul'a işlenmez, ders yılı sonunda imha edilir.",
+  },
+  {
+    value: "SEARCH_RECORD",
+    label: "Arama tutanağı (md. 158/3)",
+    studentRequired: false,
+    scheduling: true,
+    description:
+      "Okul, sıra, masa, dolap vb. aramasının gerekçesi, aranan yerler ve bulunan malzemeler için iki nüsha tutanak; müdür onaylı (md. 158/2-3). 'Yer' alanı aranan yere yazılır; diğer kısımlar elle.",
+  },
+  {
+    value: "PRECAUTION_MEM_LETTER",
+    label: "Tedbir MEM yazısı (md. 175)",
+    studentRequired: true,
+    variantLabel: "Yazı türü",
+    variantOptions: [
+      { value: "info", label: "Millî eğitim müdürünü bilgilendirme (md. 175/1)" },
+      { value: "extension", label: "Uzatma onayı talebi — OLUR bloklu (md. 175/2)" },
+    ],
+    description:
+      "Tedbir kaydından dolu basılır. Uzatma talebinde süre ve gerekçe elle yazılır; en fazla iki uzatma.",
   },
 ];
 

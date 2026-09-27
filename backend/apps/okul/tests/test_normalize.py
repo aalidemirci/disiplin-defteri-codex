@@ -103,8 +103,20 @@ def test_class_bosluk_ve_kucuk_harf() -> None:
     assert normalize.normalize_class_section("9 b") == (9, "B")
 
 
-def test_class_turkce_sube_ascii() -> None:
-    assert normalize.normalize_class_section("12/Ş") == (12, "S")
+def test_class_turkce_sube_harfi_korunur() -> None:
+    """M6: "10/Ç" ile "10/C" ayrı şubelerdir; Türkçe harf ASCII'ye katlanmaz."""
+    assert normalize.normalize_class_section("12/Ş") == (12, "Ş")
+    assert normalize.normalize_class_section("10/ç") == (10, "Ç")
+    assert normalize.normalize_class_section("10/c") == (10, "C")
+    assert normalize.normalize_class_section("9-ö") == (9, "Ö")
+    assert normalize.normalize_class_section("11 ü") == (11, "Ü")
+
+
+def test_sube_buyuk_harf_turkce_i() -> None:
+    """Türkçe büyük harf: 'i' → 'İ', 'ı' → 'I' (çıplak .upper() 'i' → 'I' yapar)."""
+    assert normalize.section_upper("i") == "İ"
+    assert normalize.section_upper("ı") == "I"
+    assert normalize.section_upper(" ç ") == "Ç"
 
 
 def test_class_seviye_disinda_none() -> None:

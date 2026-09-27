@@ -175,7 +175,7 @@ class TestClassResponsibilityApi:
         )
 
         assert created.status_code == 201
-        assert created.json()["class_label"] == "10/S"
+        assert created.json()["class_label"] == "10/Ş"
         assert created.json()["guidance_teacher_detail"]["full_name"] == "Örnek Rehber"
         listed = client.get("/api/v1/class-responsibilities/").json()
         assert listed["count"] == 1
@@ -376,16 +376,18 @@ class TestStudentApi:
         assert son_dilim["next"] is None
 
     def test_turkce_sube_filtresi(self, client: APIClient) -> None:
-        """Şube 'Ş' ASCII'ye katlanarak saklanır; filtre de aynı katlamadan geçer (bulgu #5)."""
+        """Şube Türkçe büyük harfle saklanır (M6); filtre de aynı dönüşümden geçer (bulgu #5)."""
         resp = client.post(
             "/api/v1/students/",
             {"first_name": "A", "last_name": "B", "class_level": 12, "class_section": "ş"},
             format="json",
         )
         assert resp.status_code == 201
-        assert Student.objects.get().class_section == "S"
+        assert Student.objects.get().class_section == "Ş"
         data = client.get("/api/v1/students/", {"class_section": "ş"}).json()
         assert data["count"] == 1
+        # "S" şubesi ayrı bir şubedir; "Ş" öğrencisini getirmez.
+        assert client.get("/api/v1/students/", {"class_section": "s"}).json()["count"] == 0
 
     def test_only_active_suzgeci_ayrilan_ogrenciyi_eler(self, client: APIClient) -> None:
         """`only_active=true` yalnız aktif öğrenciyi döner; parametresiz liste HEPSİNİ (bulgu #10).

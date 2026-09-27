@@ -1,0 +1,55 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 157/7-b veli görüşme tutanağı — M2 Grup 2 (kullanıcı kararı 27.09.2026). Resmî
+MEB örneği yoktur; "sınıf/şube rehber öğretmeninin ve rehber öğretmenin de katılımı ile yapılan
+görüşmede, öğrencinin olumsuz davranışları ve uygulanabilecek yaptırımlar veliye bildirilir"
+metninden türetildi. Sınıf rehber / rehber öğretmen adları Ayarlar > Sınıf sorumlularından;
+görüşme içeriği ve veli beyanı ELLE yazılır. e-Okul'a işlenmez (157/7-ç); imha 157/7-d.{% endcomment %}
+{% block content %}
+<div class="doc-title">VELİ GÖRÜŞME TUTANAĞI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-b</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Öğrenci</td><td>{{ student.full_name }} · {{ student.class_label }} · No {{ student.student_number }}</td></tr>
+  <tr><td class="label">Veli</td><td>{{ parent.full_name|default:'……………………………' }}{% if parent.kinship_display %} ({{ parent.kinship_display }}){% endif %}</td></tr>
+  <tr>
+    <td class="label">Görüşme Tarihi / Saati</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} · {{ statement_time|default:'……' }}</td>
+  </tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Okul Müdürlüğü' }}</td></tr>
+  {% if warning %}<tr><td class="label">Yazılı Uyarı</td><td>{{ warning.warning_date|date:'d.m.Y' }} (md. 157/7-a)</td></tr>{% endif %}
+</table>
+
+<p class="para">
+  Yukarıda kimliği yazılı öğrencinin, yazılı uyarıya rağmen olumsuz davranışlarını sürdürmesi
+  üzerine Yönetmeliğin 157. maddesinin 7. fıkrasının (b) bendi uyarınca veli okula davet edilmiş;
+  sınıf rehber öğretmeni ve rehber öğretmenin katılımıyla yapılan görüşmede öğrencinin olumsuz
+  davranışları ve uygulanabilecek yaptırımlar (kınama cezasını gerektiren ikinci davranışta
+  doğrudan okul öğrenci ödül ve disiplin kuruluna gönderileceği — md. 157/7-e) veliye bildirilmiştir.
+</p>
+
+<div class="section">
+  <div class="section-title">GÖRÜŞÜLEN KONULAR</div>
+  <div class="field-box" style="min-height: 4cm;"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">VELİNİN BEYANI</div>
+  <div class="field-box" style="min-height: 3cm;"></div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+  </tr>
+  <tr>
+    <td><div class="name">{{ parent.full_name|default:'……………………' }}</div><div class="role">Veli</div></td>
+    <td><div class="name">{{ class_teacher_name|default:'……………………' }}</div><div class="role">Sınıf Rehber Öğretmeni</div></td>
+    <td><div class="name">{{ guidance_teacher_name|default:'……………………' }}</div><div class="role">Rehber Öğretmen</div></td>
+    <td><div class="name">{{ assistant_principal_name|default:'……………………' }}</div><div class="role">Müdür Yardımcısı</div></td>
+  </tr>
+</table>
+{% endblock %}

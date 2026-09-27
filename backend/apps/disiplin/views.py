@@ -370,12 +370,28 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 str(link.student_id): selectors.behavior_point_for_student(link.student_id)
                 for link in case.case_students.all()
             }
+            # md. 166 (kullanıcı kararı 26.09.2026): öğrencinin bu öğretim yılındaki en ağır
+            # yürürlükteki cezası — form "bir derece ağır ceza" uyarısı + gerekçe alanı için.
+            today = timezone.localdate()
+            md166_priors: dict[str, dict[str, object]] = {}
+            for link in case.case_students.all():
+                prior = selectors.same_year_prior_penalty(
+                    link.student_id, today, exclude_case_id=case.pk
+                )
+                if prior is not None:
+                    md166_priors[str(link.student_id)] = {
+                        "penalty_type": prior.penalty_type,
+                        "penalty_type_display": prior.get_penalty_type_display(),
+                        "decision_no": prior.decision_no,
+                        "decision_date": prior.decision_date.isoformat(),
+                    }
             return Response(
                 {
                     "decisions": DecisionSerializer(
                         selectors.decisions_for_case(case), many=True
                     ).data,
                     "behavior_points": points,
+                    "md166_priors": md166_priors,
                 }
             )
         req = DecisionSerializer(data=request.data)
@@ -394,6 +410,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 penalty_detail=data.get("penalty_detail", ""),
                 decision_no=data.get("decision_no", ""),
                 notes=data.get("notes", ""),
+                md166_override_reason=data.get("md166_override_reason", ""),
             )
         return Response(DecisionSerializer(decision).data, status=201)
 
@@ -429,6 +446,11 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 penalty_detail=str(request.data.get("penalty_detail", decision.penalty_detail)),
                 decision_no=str(request.data.get("decision_no", decision.decision_no)),
                 notes=str(request.data.get("notes", decision.notes)),
+                md166_override_reason=(
+                    str(request.data["md166_override_reason"])
+                    if "md166_override_reason" in request.data
+                    else None
+                ),
             )
         return Response(DecisionSerializer(decision).data)
 
@@ -744,6 +766,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 board_outcome=str(data.get("board_outcome", "")),
                 result_summary=str(data.get("result_summary", "")),
                 variant=str(data.get("variant", "")),
+                vote_basis=str(data.get("vote_basis", "")),
                 document_no=str(data.get("document_no", "")),
                 title=str(data.get("title", "")),
                 source_label=str(data.get("source_label", "")),
@@ -1191,6 +1214,16 @@ class HonorCertificateViewSet(viewsets.GenericViewSet[HonorCertificate]):
                 reason=str(request.data.get("reason", "")),
                 decided_on=_parse_date(request.data.get("decided_on")),
                 meeting_id=_to_int(request.data.get("meeting")),
+            )
+        return Response(HonorCertificateSerializer(certificate).data)
+
+    @action(detail=True, methods=["post"], url_path="undo")
+    def undo(self, request: Request, pk: str | None = None) -> Response:
+        """Son adımı gerekçeyle geri alır (müdür onayı hariç; kullanıcı kararı M8)."""
+        certificate = self._get(pk)
+        with _service_errors():
+            services.undo_honor_certificate_step(
+                certificate, reason=str(request.data.get("reason", ""))
             )
         return Response(HonorCertificateSerializer(certificate).data)
 

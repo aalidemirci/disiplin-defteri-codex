@@ -97,6 +97,8 @@ class StudentPurgePreview:
     purge_deadline: date | None = None
     working_days_left: int | None = None
     overdue: bool = False
+    # md. 157/7-d (kullanıcı kararı A): nakil değilse ve ders yılı bitmediyse gerekçe.
+    timing_blocker: str = ""
 
 
 @dataclass(frozen=True)
@@ -217,6 +219,9 @@ def preview_student(
         purge_deadline=deadline,
         working_days_left=days_left,
         overdue=overdue,
+        timing_blocker=purge_selectors.student_timing_blocker(
+            student_id, sorted({w.case_id for w in warnings}), today=today
+        ),
     )
 
 
@@ -247,6 +252,9 @@ def _resolve_case_scope(case_ids: list[int]) -> _Scope:
         blockers = purge_selectors.case_purge_blockers(case)
         if blockers:
             raise ValueError(f"{case.case_no}: {blockers[0]}")
+        timing = purge_selectors.case_timing_blocker(case)
+        if timing:
+            raise ValueError(f"{case.case_no}: {timing}")
     return _Scope(kind=SCOPE_ALL, case_ids=unique, warning_ids=[], document_ids=[])
 
 
@@ -255,6 +263,8 @@ def _resolve_student_scope(student_id: int, transfer_date: date | None) -> _Scop
     preview = preview_student(student_id, transfer_date=transfer_date)
     if not preview.warnings:
         raise ValueError("Bu öğrenci için imha edilecek uyarı kaydı yok.")
+    if preview.timing_blocker:
+        raise ValueError(preview.timing_blocker)
 
     whole = set(preview.whole_case_ids)
     warning_ids = sorted(w.warning_id for w in preview.warnings if w.case_id not in whole)
@@ -281,9 +291,20 @@ def _resolve_student_scope(student_id: int, transfer_date: date | None) -> _Scop
 def _revalidate(scope: _Scope) -> None:
     """Jeton üretildikten SONRA kapsamın hâlâ geçerli olduğunu doğrular.
 
-    Arada dosyaya kurul kararı işlenmişse (Dal B'ye dönmüşse) imha REDDEDİLİR —
-    jeton "o an geçerliydi" demektir, "her zaman geçerli" değil.
+    Arada dosyaya kurul kararı işlenmişse (Dal B'ye dönmüşse) ya da nakil kaydı
+    geri alınmışsa (md. 157/7-d zamanlaması) imha REDDEDİLİR — jeton "o an
+    geçerliydi" demektir, "her zaman geçerli" değil.
     """
+    if scope.student_id is not None:
+        involved = list(scope.case_ids)
+        involved += list(
+            DisciplineWarning.objects.filter(pk__in=scope.warning_ids).values_list(
+                "case_id", flat=True
+            )
+        )
+        timing = purge_selectors.student_timing_blocker(scope.student_id, involved)
+        if timing:
+            raise ValueError(f"İmha kapsamı değişti — {timing}")
     for case_id in scope.case_ids:
         case = DisciplineCase.objects.filter(pk=case_id).first()
         if case is None:

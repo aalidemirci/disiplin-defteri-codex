@@ -569,3 +569,44 @@ def test_api_tutanak_dal_b_400(factory: APIRequestFactory) -> None:
         factory.post("/imha/tutanak/", {"case_ids": [case.pk], "onay": True}, format="json")
     )
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# md. 157/7-d zamanlaması — kullanıcı kararı 26.09.2026 (A: engelle)
+# ---------------------------------------------------------------------------
+def test_ders_yili_bitmeden_toplu_imha_engellenir() -> None:
+    from unittest import mock
+
+    _setup_school()  # 2025-2026: 08.09.2025 - 26.06.2026
+    case, _student = _warning_case()
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 4, 1)):
+        item = purge_selectors.purgeable_case_items()[0]
+        assert "henüz bitmedi" in item.timing_blocker
+        with pytest.raises(ValueError, match="henüz bitmedi"):
+            purge_service.issue_record(case_ids=[case.pk], confirmed=True)
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 6, 29)):
+        assert purge_selectors.purgeable_case_items()[0].timing_blocker == ""
+
+
+def test_ders_yili_icinde_tekil_imha_yalniz_nakil_eden_ogrenci() -> None:
+    from unittest import mock
+
+    from apps.okul.models import StudentStatus
+
+    _setup_school()
+    _case, student = _warning_case()
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 4, 1)):
+        preview = purge_service.preview_student(student.pk, today=date(2026, 4, 1))
+        assert "Ayrıldı" in preview.timing_blocker
+        with pytest.raises(ValueError, match="Ayrıldı"):
+            purge_service.issue_record(student_id=student.pk, confirmed=True)
+        Student.objects.filter(pk=student.pk).update(status=StudentStatus.LEFT)
+        preview = purge_service.preview_student(student.pk, today=date(2026, 4, 1))
+        assert preview.timing_blocker == ""
+        record = purge_service.issue_record(
+            student_id=student.pk, transfer_date=date(2026, 3, 30), confirmed=True
+        )
+        # Tutanak ile uygulama arasında nakil geri alınırsa imha reddedilir.
+        Student.objects.filter(pk=student.pk).update(status=StudentStatus.ACTIVE)
+        with pytest.raises(ValueError, match="kapsamı değişti"):
+            purge_service.execute(token=record.token, confirmed=True)

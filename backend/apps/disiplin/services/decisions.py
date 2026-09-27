@@ -134,6 +134,41 @@ def _compile_prior_penalties(student_id: int, exclude_case_id: int) -> str:
 
 
 @transaction.atomic
+def _check_md166(
+    case: DisciplineCase,
+    *,
+    student_id: int,
+    penalty_type: str,
+    decision_date: date,
+    override_reason: str,
+) -> str:
+    """md. 166: aynı öğretim yılında tekrar → bir derece ağır ceza (kullanıcı kararı B).
+
+    Öğrencinin bu öğretim yılında yürürlükte cezası varsa, ondan ağır OLMAYAN bir ceza
+    ancak gerekçeyle girilir (fiilin "aynı" olup olmadığı kurulun takdiridir).
+    "Ceza verilmesine yer olmadığı" kararı ceza değildir, kural dışıdır. Temizlenmiş
+    gerekçeyi döndürür (gerek yoksa boş).
+    """
+    from apps.disiplin import selectors
+    from apps.disiplin.selectors.decisions import PENALTY_SEVERITY
+
+    reason = (override_reason or "").strip()
+    new_rank = PENALTY_SEVERITY.get(penalty_type)
+    if new_rank is None:
+        return ""
+    prior = selectors.same_year_prior_penalty(student_id, decision_date, exclude_case_id=case.pk)
+    if prior is None or new_rank > PENALTY_SEVERITY.get(prior.penalty_type, 0):
+        return ""
+    if not reason:
+        raise ValueError(
+            f"md. 166: öğrencinin bu öğretim yılında yürürlükte "
+            f'"{prior.get_penalty_type_display()}" cezası var '
+            f"({prior.decision_no}, {prior.decision_date:%d.%m.%Y}); tekrarında bir derece "
+            f"ağır ceza uygulanır. Bu cezayı vermek için kurulun gerekçesini yazın."
+        )
+    return reason
+
+
 def record_decision(
     case: DisciplineCase,
     *,
@@ -148,6 +183,7 @@ def record_decision(
     event: DisciplineEvent | None = None,
     meeting: DisciplineMeeting | None = None,
     notes: str = "",
+    md166_override_reason: str = "",
 ) -> DisciplineDecision:
     """Bir dosyadaki öğrenci için resmî disiplin kararı (ceza) kaydeder (md. 163).
 
@@ -177,6 +213,13 @@ def record_decision(
             "Bu öğrenci için bu dosyada zaten bir karar var (düzeltme için mevcut "
             "karar güncellenir/silinir)."
         )
+    md166_reason = _check_md166(
+        case,
+        student_id=student_id,
+        penalty_type=penalty_type,
+        decision_date=decision_date,
+        override_reason=md166_override_reason,
+    )
 
     decision = DisciplineDecision(
         case=case,
@@ -195,6 +238,7 @@ def record_decision(
         approval_status=DecisionApprovalStatus.PENDING,
         prior_penalties_summary=_compile_prior_penalties(student_id, case.pk),
         notes=notes,
+        md166_override_reason=md166_reason,
     )
     decision.full_clean(exclude=["event", "meeting"])
     decision.save()
@@ -231,8 +275,12 @@ def update_decision(
     penalty_detail: str = "",
     decision_no: str = "",
     notes: str = "",
+    md166_override_reason: str | None = None,
 ) -> DisciplineDecision:
     """BEKLEMEDEKİ bir kararın çekirdek alanlarını düzenler (md. 163).
+
+    md. 166 denetimi yeniden uygulanır; `md166_override_reason` verilmezse mevcut
+    gerekçe korunur.
 
     Ceza türü değişirse davranış puanı indirimi + onay mercii yeniden türetilir.
     Uzaklaştırma alanları yalnız kısa süreli uzaklaştırmada saklanır.
@@ -241,9 +289,21 @@ def update_decision(
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
 
+    md166_reason = _check_md166(
+        decision.case,
+        student_id=decision.student_id,
+        penalty_type=penalty_type,
+        decision_date=decision_date,
+        override_reason=(
+            decision.md166_override_reason
+            if md166_override_reason is None
+            else md166_override_reason
+        ),
+    )
     is_suspension = penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
     if is_suspension:
         _validate_enforcement_start(penalty_type, enforcement_start_date)
+    decision.md166_override_reason = md166_reason
     decision.penalty_type = penalty_type
     decision.decision_date = decision_date
     decision.suspension_days = suspension_days if is_suspension else None

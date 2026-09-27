@@ -1,0 +1,61 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 158/2-3 arama tutanağı — M2 Grup 2 (kullanıcı kararı 27.09.2026). Resmî MEB örneği
+yoktur; "arama ve inceleme işleri ... müdür yardımcıları ile okul öğrenci ödül ve disiplin kurulu
+üyeleri ve görevlendirilen diğer öğretmenlerce yapılır" (158/2) ve "aramanın gerekçesine, arama
+yapılan yerlere ve bulunan malzemelere ilişkin iki nüsha tutanak hazırlanır; ilgililerce
+imzalanır, okul müdürünce onaylanarak ... muhafaza edilir" (158/3) metninden türetildi. Tarih/
+saat/yer GEÇİCİ; gerekçe, yerler, bulunanlar ELLE yazılır. Dosya-geneli (öğrenci seçilmez).{% endcomment %}
+{% block content %}
+<div class="doc-title">ARAMA TUTANAĞI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 158/2-3 · İki nüsha düzenlenir</div>
+
+<table class="info">
+  <tr><td class="label">Dosya No</td><td>{{ case.case_no }}</td></tr>
+  <tr>
+    <td class="label">Arama Tarihi / Saati</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} · {{ statement_time|default:'……' }}</td>
+  </tr>
+  <tr><td class="label">Arama Yapılan Yer(ler)</td><td>{{ statement_place|default:'……………………………………………' }}</td></tr>
+</table>
+
+<div class="section">
+  <div class="section-title">ARAMANIN GEREKÇESİ (md. 158/2-a/b)</div>
+  <div class="field-box" style="min-height: 3cm;"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">ARANAN YERLER (sıra, masa, dolap vb.)</div>
+  <div class="field-box" style="min-height: 2.5cm;"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">BULUNAN MALZEMELER VE KİME AİT OLDUĞU</div>
+  <div class="field-box" style="min-height: 3.5cm;"></div>
+</div>
+
+<p class="para">
+  Arama, öğrencinin kişilik ve onurunu rencide etmeden yapılmış; işbu tutanak iki nüsha olarak
+  düzenlenip ilgililerce imzalanmıştır.
+</p>
+
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+  </tr>
+  <tr>
+    <td><div class="name">……………………</div><div class="role">Müdür Yardımcısı</div></td>
+    <td><div class="name">……………………</div><div class="role">Disiplin Kurulu Üyesi / Öğretmen</div></td>
+    <td><div class="name">……………………</div><div class="role">İlgili Öğrenci (varsa)</div></td>
+  </tr>
+</table>
+
+<div class="signature" style="margin-left: auto; margin-right: auto; margin-top: 18pt;">
+  <div class="name">ONAYLANDI</div>
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+{% endblock %}

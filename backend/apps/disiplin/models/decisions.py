@@ -332,6 +332,13 @@ class DisciplineDecision(BaseModel):
         help_text="EK-1: önceki cezalar (karar anında otomatik derlenir) + genel durum.",
     )
     notes = models.TextField("açıklama", blank=True, default="")
+    md166_override_reason = models.TextField(
+        "md. 166 gerekçesi",
+        blank=True,
+        default="",
+        help_text="Aynı öğretim yılında önceki cezadan ağır olmayan ceza verildiyse kurulun "
+        "gerekçesi (md. 166 — kullanıcı kararı 26.09.2026). Evraka basılmaz.",
+    )
 
     class Meta:
         verbose_name = "disiplin kararı"

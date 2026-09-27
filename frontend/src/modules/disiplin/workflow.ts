@@ -42,7 +42,14 @@ export function isDisciplineCommitteeReferred(events: DisciplineEvent[] | undefi
 // (ifade/savunma/toplantı/EK-1/tebliğ/itiraz) kurul antedi + imza ızgarası
 // bastığından Dal A dosyasında mevzuata aykırı görüntü oluşturur → listeden gizlenir.
 // DECIDED öncesi (dal belirsiz) ve Dal B'de tam liste kalır. Dizi pusulası ayrı buton.
-const BRANCH_A_DOC_TYPES: ReadonlySet<string> = new Set(["WARNING_LETTER", "PRECAUTION_NOTICE"]);
+const BRANCH_A_DOC_TYPES: ReadonlySet<string> = new Set([
+  "WARNING_LETTER",
+  "PRECAUTION_NOTICE",
+  "PRECAUTION_MEM_LETTER",
+  "PARENT_MEETING",
+  "SEARCH_RECORD",
+  "GUIDANCE_ASSESSMENT",
+]);
 
 /** Dosyanın dalına göre üretilebilir belge türü listesi (yalnız UI filtresi). */
 export function generatableTypesFor(branch: CaseBranch): GeneratableDocType[] {

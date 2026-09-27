@@ -68,6 +68,9 @@ class PurgeCaseItem:
     attachment_count: int
     participant_count: int
     in_active_school_year: bool
+    # md. 157/7-d zamanlaması (kullanıcı kararı 26.09.2026 — A: engelle). Boşsa imha
+    # edilebilir; doluysa gerekçe (ders yılı henüz bitmedi).
+    timing_blocker: str = ""
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,55 @@ def _decided_events(case: DisciplineCase) -> list[DisciplineEvent]:
     Soft-delete edilmiş bir sevk olayı da Dal B kanıtıdır; bu yüzden `all_objects`.
     """
     return list(DisciplineEvent.all_objects.filter(case_id=case.pk, stage=CaseStage.DECIDED))
+
+
+def case_timing_blocker(case: DisciplineCase, *, today: date | None = None) -> str:
+    """md. 157/7-d: toplu imha "ders yılı SONUNDA" yapılır (kullanıcı kararı A).
+
+    Dosyanın ders yılı (dilekçe tarihinden önce başlayan en son `SchoolYear`)
+    `today` itibarıyla bitmemişse gerekçe döner; bitmişse veya yıl bulunamazsa "".
+    Ders yılı içinde nakil eden öğrencinin izleri tekil (nakil) imhayla silinir.
+    """
+    from django.utils import timezone
+
+    from apps.okul.models import SchoolYear
+
+    reference = today or timezone.localdate()
+    year = (
+        SchoolYear.objects.filter(start_date__lte=case.petition_date)
+        .order_by("-start_date")
+        .first()
+    )
+    if year is None or year.end_date < reference:
+        return ""
+    return (
+        f"Dosyanın ders yılı ({year.name}) henüz bitmedi (bitiş "
+        f"{year.end_date:%d.%m.%Y}) — md. 157/7-d imha ders yılı sonunda yapılır; nakil "
+        f"eden öğrenci için tekil (nakil) imhayı kullanın."
+    )
+
+
+def student_timing_blocker(
+    student_id: int, case_ids: list[int], *, today: date | None = None
+) -> str:
+    """Tekil (nakil) imha zamanlaması (md. 157/7-d, kullanıcı kararı A).
+
+    Öğrenci sicilde "Ayrıldı" (nakil) ise serbest; değilse yalnız ilgili tüm
+    dosyaların ders yılı bitmişse serbest. Aksi hâlde gerekçe döner.
+    """
+    from apps.okul.models import Student, StudentStatus
+
+    student = Student.objects.filter(pk=student_id).first()
+    if student is not None and student.status == StudentStatus.LEFT:
+        return ""
+    for case in DisciplineCase.objects.filter(pk__in=case_ids):
+        if case_timing_blocker(case, today=today):
+            return (
+                'Öğrenci sicilde "Ayrıldı" (nakil) olarak işaretli değil ve ders yılı '
+                "bitmedi — md. 157/7-d imha ders yılı sonunda ya da nakilden itibaren 5 iş "
+                "günü içinde yapılır. Nakil ettiyse önce öğrenci kartında durumu güncelleyin."
+            )
+    return ""
 
 
 def case_purge_blockers(case: DisciplineCase) -> list[str]:
@@ -176,9 +228,10 @@ def case_purge_item(
 ) -> PurgeCaseItem:
     """Bir dosyanın imha önizleme satırı (sayımlar silinmişleri DE kapsar).
 
-    `in_active_school_year`: dosyanın dilekçe tarihi HÂLÂ SÜREN ders yılına
-    düşüyorsa işaretlenir — md. 157/7-d imhayı "ders yılı sonunda" öngörür, UI
-    bu satırları uyarı rozetiyle gösterir (servis engellemez; kullanıcı kararı).
+    `in_active_school_year`: dosyanın dilekçe tarihi aktif ders yılına düşüyorsa
+    işaretlenir. `timing_blocker`: ders yılı bitmemişse toplu imha ENGELLENİR
+    (md. 157/7-d; kullanıcı kararı 26.09.2026 — önceki "yalnız rozet" davranışı
+    değişti).
     """
     docs = GeneratedDocument.all_objects.filter(case_id=case.pk)
     in_active = False
@@ -200,6 +253,7 @@ def case_purge_item(
         attachment_count=case.attachments.count(),
         participant_count=case.participants.count(),
         in_active_school_year=in_active,
+        timing_blocker=case_timing_blocker(case),
     )
 
 
@@ -212,12 +266,20 @@ def purgeable_case_items() -> list[PurgeCaseItem]:
 def warning_letter_documents(
     *, case_id: int, student_id: int | None = None
 ) -> list[GeneratedDocument]:
-    """Uyarı yazısı (Form-01/02) kütük satırları — silinmişler dahil.
+    """Değerlendirme formu (Form-01), uyarı yazısı (Form-02) ve veli görüşmesi (md.
+    157/7-b) kütük satırları —
+    silinmişler dahil. md. 157/7-d: "yazılı uyarı ile veli görüşmesine ilişkin"
+    belgeler birlikte imha edilir.
 
     `student_id` verilirse yalnız o öğrenciye ait satırlar (tekil/nakil imhası).
     """
     qs = GeneratedDocument.all_objects.filter(
-        case_id=case_id, document_type=DocumentType.WARNING_LETTER
+        case_id=case_id,
+        document_type__in=[
+            DocumentType.GUIDANCE_ASSESSMENT,
+            DocumentType.WARNING_LETTER,
+            DocumentType.PARENT_MEETING,
+        ],
     )
     if student_id is not None:
         qs = qs.filter(student_id=student_id)
