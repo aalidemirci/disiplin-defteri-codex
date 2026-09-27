@@ -230,9 +230,11 @@ jobs:
         working-directory: yayin
         run: |
           rm -f pdf-duman.pdf
+          # `~` kaçışlı: çıplak ~ desende $HOME olarak açılır, ad değişmez ve
+          # mv "aynı dosya" hatasıyla çıkar.
           for paket in *~*.deb; do
             [ -e "${paket}" ] || continue
-            mv -- "${paket}" "${paket//~/.}"
+            mv -- "${paket}" "${paket//\~/.}"
           done
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
