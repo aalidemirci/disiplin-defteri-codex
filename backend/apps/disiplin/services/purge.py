@@ -238,6 +238,15 @@ class _Scope:
     document_ids: list[int]  # tekil uyarılara bağlı WARNING_LETTER kütük satırları
     student_id: int | None = None
     transfer_date: date | None = None
+    # Jetondaki her dosyanın o anki öğrenci kümesi: tutanaktan sonra dosyaya öğrenci
+    # eklenirse tutanakta adı olmayan birinin kaydı silinmesin (md. 157/7-d).
+    case_students: dict[int, list[int]] | None = None
+
+
+def _case_student_ids(case_id: int) -> list[int]:
+    return sorted(
+        DisciplineCaseStudent.objects.filter(case_id=case_id).values_list("student_id", flat=True)
+    )
 
 
 def _resolve_case_scope(case_ids: list[int]) -> _Scope:
@@ -309,6 +318,13 @@ def _revalidate(scope: _Scope) -> None:
         case = DisciplineCase.objects.filter(pk=case_id).first()
         if case is None:
             raise ValueError("İmha kapsamı değişti; önizlemeyi ve tutanağı yenileyin.")
+        if scope.case_students is not None and _case_student_ids(case_id) != (
+            scope.case_students.get(case_id, [])
+        ):
+            raise ValueError(
+                f"İmha kapsamı değişti — {case.case_no}: tutanaktan sonra dosyanın öğrencileri "
+                "değişti; önizlemeyi ve tutanağı yenileyin."
+            )
         blockers = purge_selectors.case_purge_blockers(case)
         if blockers:
             raise ValueError(f"İmha kapsamı değişti — {case.case_no}: {blockers[0]}")
@@ -332,6 +348,7 @@ def _dump_token(scope: _Scope, *, record_path: str) -> str:
         "documents": scope.document_ids,
         "student": scope.student_id,
         "record": record_path,
+        "case_students": {str(cid): _case_student_ids(cid) for cid in scope.case_ids},
     }
     return signing.dumps(payload, salt=_SIGNING_NAMESPACE)
 
@@ -353,6 +370,10 @@ def _load_token(token: str) -> tuple[_Scope, str]:
         warning_ids=[int(i) for i in payload.get("warnings", [])],
         document_ids=[int(i) for i in payload.get("documents", [])],
         student_id=payload.get("student"),
+        case_students={
+            int(cid): [int(sid) for sid in sids]
+            for cid, sids in (payload.get("case_students") or {}).items()
+        },
     )
     return scope, str(payload.get("record", ""))
 

@@ -37,6 +37,16 @@ def _service_errors() -> Iterator[None]:
         yield
     except ValueError as exc:
         raise drf_serializers.ValidationError(str(exc)) from exc
+    except TypeError as exc:
+        raise drf_serializers.ValidationError("Geçersiz istek gövdesi.") from exc
+
+
+def _parse_bool(value: Any) -> bool:
+    """Onay alanı: `bool("false")` True olurdu — geri dönüşsüz imhada kabul edilemez."""
+    if value in (None, ""):
+        return False
+    result: bool = drf_serializers.BooleanField().to_internal_value(value)
+    return result
 
 
 def _parse_optional_date(value: Any) -> date | None:
@@ -159,7 +169,7 @@ class PurgeRecordView(APIView):
                 student_id=_to_int(raw_student),
                 transfer_date=_parse_optional_date(data.get("nakil_tarihi")),
                 purge_date=_parse_optional_date(data.get("imha_tarihi")),
-                confirmed=bool(data.get("onay", False)),
+                confirmed=_parse_bool(data.get("onay")),
             )
         response = FileResponse(
             BytesIO(record.pdf_bytes), filename=record.filename, content_type="application/pdf"
@@ -180,7 +190,7 @@ class PurgeExecuteView(APIView):
         with _service_errors():
             result = purge_service.execute(
                 token=str(data.get("token", "")),
-                confirmed=bool(data.get("onay", False)),
+                confirmed=_parse_bool(data.get("onay")),
             )
         return Response(
             {

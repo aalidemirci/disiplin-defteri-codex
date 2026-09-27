@@ -285,9 +285,15 @@ def update_decision(
     Ceza türü değişirse davranış puanı indirimi + onay mercii yeniden türetilir.
     Uzaklaştırma alanları yalnız kısa süreli uzaklaştırmada saklanır.
     """
+    from apps.disiplin import selectors
+
     _assert_decision_editable(decision)
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
+    # record_decision ile aynı kural (md. 163/2): karar, kurula sevkten önce olamaz.
+    referred_on = selectors.committee_referred_on(decision.case)
+    if referred_on is not None and decision_date < referred_on:
+        raise ValueError("Karar tarihi kurula sevk tarihinden önce olamaz.")
 
     md166_reason = _check_md166(
         decision.case,
@@ -372,6 +378,11 @@ def set_decision_approval(
         raise ValueError("Müdür kararı yalnız onaylayabilir veya beklemede bırakabilir (md. 197).")
     if decision.approval_status == DecisionApprovalStatus.REJECTED:
         raise ValueError("İtiraz sonucu bozulmuş (kaldırılmış) karar yeniden onaylanamaz.")
+    if modified_penalty_type and (decision.notified_at is not None or decision.appeals.exists()):
+        raise ValueError(
+            "Tebliğ edilmiş ya da itiraz edilmiş kararın cezası onay ucundan "
+            "değiştirilemez; itiraz sonucu kesindir (md. 169/4)."
+        )
     if approval_status == DecisionApprovalStatus.PENDING and decision.notified_at is not None:
         raise ValueError("Tebliğ edilmiş karar onaysız duruma döndürülemez.")
     if approval_status == DecisionApprovalStatus.APPROVED:
@@ -379,6 +390,10 @@ def set_decision_approval(
             raise ValueError("Onay tarihi zorunludur.")
         if approved_on < decision.decision_date:
             raise ValueError("Onay tarihi karar tarihinden önce olamaz.")
+        # Onaysız karar tebliğ edilemez (md. 163/2): yeniden onay, kaydı "onaydan
+        # önce tebliğ" hâline getiremez.
+        if decision.notified_at is not None and approved_on > decision.notified_at:
+            raise ValueError("Onay tarihi tebliğ tarihinden sonra olamaz.")
     fields = ["approval_status", "approved_at", "updated_at"]
     if modified_penalty_type:
         board_approves = (

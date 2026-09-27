@@ -390,6 +390,16 @@ def enable(*, password: str) -> str:
     """
     if read_state() is not None:
         raise AppPasswordError("Uygulama parolası zaten kurulu.")
+    if _stored_fingerprint():
+        # Veritabanı başka bir anahtarla şifreli ama guvenlik.json yok (silinmiş ya da
+        # taşınmış). Yeni anahtar kurmak token'ları ikinci kez sarar ve asıl dosya
+        # bulunsa bile veriyi okunmaz bırakırdı (_adopt_key'in parmak izi korumasının eşi).
+        raise AppPasswordError(
+            "Veritabanı daha önce kurulmuş bir parolayla şifreli, ama guvenlik.json dosyası "
+            "veri klasöründe yok. Yeni parola kurmayın: guvenlik.json dosyasını (ya da "
+            "yedeğini) veri klasörüne geri koyup eski parolanızla veya kurtarma anahtarıyla "
+            "açın."
+        )
     parola = _validate_password(password)
 
     veri_anahtari = crypto.new_data_key()
