@@ -27,7 +27,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 | 10 | EK-1 imzası toplantıya katılanları değil, aktif yılın kurulunu basıyordu | 196/1, 185/4 | ✅ Dosyanın yılının kurulu + toplantı katılımcıları |
 | 11 | Toplantı yeter sayısı / şikâyetçi üye denetimi yoktu | 191/1-2 | ✅ Salt çoğunluk + şikâyetçi/zarar gören/hakkında işlem yapılan üye engeli |
 | 12 | md. 197 iadesi tekrarlanabiliyor; "ilçeye gönderildi" çıkmaz sokak | 197 | ✅ Tek iade; gerekçeler korunur; ilçe kurulu kararı girilebilir |
-| 13 | "İlk defa" koşulu korunmuyordu (yazılı uyarı ikinci kez) | 157/7, 157/7-e | ✅ Geçmişi olan öğrenciye yazılı uyarı yolu override'sız kapalı; Dal A dosyası triajda uyarı sayılır. ⏸ İmha zamanı (M5) |
+| 13 | "İlk defa" koşulu korunmuyordu (yazılı uyarı ikinci kez) | 157/7, 157/7-e | ✅ Geçmişi olan öğrenciye yazılı uyarı yolu override'sız kapalı; Dal A dosyası triajda uyarı sayılır; imha zamanı da uygulanır (M5) |
 | 14 | Şifreli kipte aynı TCKN ile ikinci öğrenci | K1 | ✅ Elle kayıtta da servis denetimi |
 | 15 | Ceza kaldırma / puan iadesi yoktu | 171/2-3 | ✅ Kaldırma + geri alma; puan/triaj/EK-1'den düşer |
 | 16 | 15 Temmuz / 30 Ağustos takvimde yoktu; bayram tablosu 2029'da bitiyordu | — | ✅ Seed penceresi 31 Ağustos'a uzadı; tablo 2031'e kadar (tahmini) |
