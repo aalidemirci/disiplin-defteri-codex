@@ -101,7 +101,12 @@ Read & Write) ve `CLOUDFLARE_ACCOUNT_ID`; yoksa adım uyarıyla atlanır. Sonra 
 kalan tek iş okulapp.org deposundaki `src/data/dd-release.json` (+ proje
 kartının `badge` alanı); o depoya yazarken `../okulapp.org/CLAUDE.md` "Ortak
 çalışma düzeni" bağlayıcıdır. SHA256SUMS R2'ye sürümlü adla
-(`SHA256SUMS-<sürüm>.txt`) yüklenir.
+(`SHA256SUMS-<sürüm>.txt`) yüklenir. Yükleme mantığı `packaging/r2-yukle.sh`'dedir.
+
+R2 adımı atlandıysa ya da kırıldıysa (ör. secret'lar Release'ten sonra
+eklendi) paketleri yeniden üretmeye gerek yok: Actions → **R2'ye yükle** → "Run
+workflow", **etiket** = `v<VERSION>`. Var olan Release'in dosyalarını indirip
+aynı betikle yükler.
 
 ## İki dil kuralı
 
