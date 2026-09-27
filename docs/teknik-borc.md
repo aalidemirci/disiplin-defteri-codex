@@ -9,6 +9,9 @@ Son güncelleme: 24.09.2026.
 
 ## Doğrulanamayan (ortam kısıtı — kod yazıldı, koşulmadı)
 
+Hepsi okulda tek oturumluk bir provayla kapanır: adım adım liste
+`docs/saha-provasi.md` (sonuç tablosu dahil).
+
 | # | Kalem | Neden | Ne zaman kapanır |
 |---|---|---|---|
 | D3 | **Qt penceresi hiç açılmadı** (ekran yok) — Wayland oturumunda `QT_QPA_PLATFORM=xcb` gereği | Konteynerde görüntü sunucusu yok | Pardus saha provasında |

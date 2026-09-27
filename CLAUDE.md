@@ -379,6 +379,7 @@ Etki × yoğunluk sırasıyla:
 | `docs/mevzuat/ortaogretim-yonetmeligi-disiplin-md157-206.md` | Yasal doğrulama kaynağı (991 satır tam metin). |
 | `docs/mevzuat/notlar/` | Ceza süreleri/itiraz, kurul kompozisyonu, onur kurulu üzerine Q&A notları. |
 | `docs/kurulum.md` | Son kullanıcı kurulum + sorun giderme + çıkış kodları. |
+| `docs/saha-provasi.md` | Okulda gerçek bilgisayarda D3-D6/D8 + W4-W9 kontrol listesi ve sonuç tablosu. |
 | `packaging/README.md` | Paket üreten kişi için dosya haritası ve komutlar. |
 | `packaging/windows/NOTLAR.md` | Windows'a özgü doğrulanmamış varsayımlar (W1-W9). |
 | `README.md` | Genel tanıtım; güncel. |
