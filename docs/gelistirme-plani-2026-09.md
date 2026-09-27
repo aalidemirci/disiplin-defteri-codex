@@ -125,6 +125,9 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
     olarak işaretli öğrenci için. Nakil eden öğrenciyi önce öğrenci kartında "Ayrıldı"
     yapın.
 
+14. **Yedeklerde kalan imha kopyası — dokunma (C):** şifreli otomatik yedekler 14 günde
+    kendiliğinden döner; geri dönüş noktaları korunur.
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"
