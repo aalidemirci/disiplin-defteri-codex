@@ -1,0 +1,33 @@
+# =============================================================================
+# .github/workflows/en-son-surum.yml — var olan bir Release'i "en son sürüm" yap
+# =============================================================================
+# Eski programlar güncellemeyi GitHub `releases/latest` ucundan okur; o uç ön
+# sürüm (prerelease) işaretli kayıtları döndürmez. Önceden ön sürüm olarak
+# yayımlanmış bir betayı kurulu programların görmesi için bu iş elle koşulur:
+# ön sürüm işaretini kaldırır ve Release'i "en son" yapar. Paketlere dokunmaz.
+# =============================================================================
+name: En son sürüm yap
+
+on:
+  workflow_dispatch:
+    inputs:
+      etiket:
+        description: "Release etiketi (ör. v2026.9.0-beta.2)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  isaretle:
+    name: Release'i en son sürüm olarak işaretle
+    runs-on: ubuntu-latest
+    steps:
+      - name: İşaretle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ETIKET: ${{ inputs.etiket }}
+        run: |
+          gh release edit "${ETIKET}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest
+          gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '"En son sürüm: " + .tag_name'

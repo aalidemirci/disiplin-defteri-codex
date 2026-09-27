@@ -1,6 +1,9 @@
 """GitHub Release tabanlı uygulama güncelleme denetimi ve güvenli kurucu indirme.
 
-Yalnız sabit proje deposunun ``latest release`` kaydı okunur. Windows kurucusu,
+Yalnız sabit proje deposunun Release LİSTESİ okunur ve taslak olmayanların en
+yüksek sürümü seçilir. ``releases/latest`` KULLANILMAZ: GitHub o uçta ön sürüm
+(beta) işaretli kayıtları hiç döndürmez (404), bu yüzden beta sürümler güncelleme
+olarak hiç görünmüyordu (27.09.2026). Windows kurucusu,
 GitHub'ın ``sha256:...`` varlık özetiyle; eski Release kayıtlarında bu alan yoksa
 aynı Release'teki ``SHA256SUMS.txt`` ile doğrulanmadan kullanıcıya verilmez.
 """
@@ -25,7 +28,7 @@ GITHUB_REPOSITORY = os.environ.get(
     "DD_UPDATE_REPOSITORY", "aalidemirci/disiplin-defteri-codex"
 ).strip()
 GITHUB_API_VERSION = "2026-03-10"
-LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
+RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases?per_page=20"
 USER_AGENT = "Disiplin-Defteri-Updater"
 INSTALLER_PATTERN = re.compile(r"^disiplin-defteri-.+-win64-setup\.exe$", re.IGNORECASE)
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
@@ -76,7 +79,7 @@ def get_app_version() -> str:
         return "0.0.0"
 
 
-def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
+def version_key(value: str) -> tuple[tuple[int, ...], int, tuple[tuple[int, int, str], ...]]:
     """`desktop.version` ile aynı, ön sürümleri kararlı sürümden küçük sayan anahtar."""
     head, _, pre = value.strip().partition("-")
     numbers: list[int] = []
@@ -84,7 +87,16 @@ def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
         match = re.match(r"^\d+", part.strip())
         numbers.append(int(match.group(0)) if match else 0)
     numbers += [0] * (4 - len(numbers))
-    return (tuple(numbers[:4]), 0 if pre else 1, pre)
+    return (tuple(numbers[:4]), 0 if pre else 1, _prerelease_key(pre))
+
+
+def _prerelease_key(pre: str) -> tuple[tuple[int, int, str], ...]:
+    """SemVer ön-sürüm sırası (`desktop.version` ile aynı): sayısal parçalar sayı
+    olarak kıyaslanır — "beta.10" > "beta.2"."""
+    parts: list[tuple[int, int, str]] = []
+    for part in pre.split(".") if pre else []:
+        parts.append((0, int(part), "") if part.isdigit() else (1, 0, part))
+    return tuple(parts)
 
 
 def update_directory() -> Path:
@@ -197,12 +209,24 @@ def latest_release(*, force: bool = False) -> ReleaseInfo:
         if not force and _cached_release and now - _cached_release[0] < CACHE_SECONDS:
             return _cached_release[1]
 
-    raw = _read_url(LATEST_RELEASE_URL, max_bytes=2 * 1024 * 1024)
+    raw = _read_url(RELEASES_URL, max_bytes=4 * 1024 * 1024)
     try:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise UpdateError("GitHub sürüm yanıtı okunamadı.") from exc
-    release = _parse_release(payload)
+    if not isinstance(payload, list):
+        raise UpdateError("GitHub sürüm yanıtı beklenen biçimde değil.")
+    candidates: list[ReleaseInfo] = []
+    for item in payload:
+        if not isinstance(item, dict) or item.get("draft"):
+            continue
+        try:
+            candidates.append(_parse_release(item))
+        except UpdateError:
+            continue
+    if not candidates:
+        raise UpdateError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.")
+    release = max(candidates, key=lambda r: version_key(r.version))
     with _cache_lock:
         _cached_release = (now, release)
     return release

@@ -57,7 +57,7 @@ def get_app_version(*, environ: Mapping[str, str] | None = None) -> str:
     return text or FALLBACK_VERSION
 
 
-def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
+def version_key(value: str) -> tuple[tuple[int, ...], int, tuple[tuple[int, int, str], ...]]:
     """Sürümü karşılaştırılabilir anahtara çevirir ("1.0.0-dev" < "1.0.0")."""
     head, _, pre = value.strip().partition("-")
     numbers: list[int] = []
@@ -66,7 +66,17 @@ def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
         numbers.append(int(match.group(0)) if match else 0)
     numbers += [0] * (4 - len(numbers))
     # Ön-sürüm (-dev/-rc1) kesin sürümden ÖNCE gelir → 0, kesin sürüm → 1.
-    return (tuple(numbers[:4]), 0 if pre else 1, pre)
+    return (tuple(numbers[:4]), 0 if pre else 1, _prerelease_key(pre))
+
+
+def _prerelease_key(pre: str) -> tuple[tuple[int, int, str], ...]:
+    """SemVer ön-sürüm sırası: "." ile bölünür; sayısal parçalar SAYI olarak
+    karşılaştırılır ("beta.10" > "beta.2" — metin kıyası tersini verirdi) ve
+    alfasayısal parçadan önce gelir; daha uzun dizi, ortak öneki eşitse büyüktür."""
+    parts: list[tuple[int, int, str]] = []
+    for part in pre.split(".") if pre else []:
+        parts.append((0, int(part), "") if part.isdigit() else (1, 0, part))
+    return tuple(parts)
 
 
 def read_version_stamp(path: Path) -> VersionStamp | None:
