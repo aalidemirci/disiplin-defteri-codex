@@ -85,6 +85,24 @@ Tek doğruluk kaynağı depo kökündeki **`VERSION`** dosyasıdır (CalVer:
 * artefakt dosya adları,
 * `v*` etiketi ile GitHub Release.
 
+## Yayın hattı
+
+`paketleme.yml` iki yoldan yayınlar:
+
+1. **Etiket push'u:** `git tag -a v<VERSION> && git push origin v<VERSION>`.
+2. **Elle (etiket push'u yapılamayan ortam):** Actions → Paketleme → "Run
+   workflow", dal `main`, **yayinla** işaretli. Etiket `v<VERSION>` GitHub'da
+   Release ile birlikte oluşturulur (`gh release create --target`).
+
+`yayin` işi: SHA256SUMS.txt → GitHub Release (beta/rc/dev ön sürüm) → paketlerin
+Cloudflare R2'ye (`okulapp-indirme` kovası, `indir.okulapp.org/disiplin-defteri/`)
+yüklenmesi. R2 için depo secret'ları gerekir: `CLOUDFLARE_API_TOKEN` (R2 Object
+Read & Write) ve `CLOUDFLARE_ACCOUNT_ID`; yoksa adım uyarıyla atlanır. Sonra elle
+kalan tek iş okulapp.org deposundaki `src/data/dd-release.json` (+ proje
+kartının `badge` alanı); o depoya yazarken `../okulapp.org/CLAUDE.md` "Ortak
+çalışma düzeni" bağlayıcıdır. SHA256SUMS R2'ye sürümlü adla
+(`SHA256SUMS-<sürüm>.txt`) yüklenir.
+
 ## İki dil kuralı
 
 * **Python tanımlayıcıları İngilizce** (depo geneliyle aynı), yorumlar ve
