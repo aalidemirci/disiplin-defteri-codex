@@ -120,6 +120,11 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
     ("uygun gördü", "kabul etti", "uygun görülmedi", "müdür onaylamadı") gerekçeyle
     geri alınır. Migrasyon: `disiplin 0008` (olay türü seçeneği).
 
+13. **İmha zamanlaması (md. 157/7-d — A: engelle):** toplu imha yalnız dosyanın ders
+    yılı bittikten sonra; ders yılı içinde tekil imha yalnız sicilde "Ayrıldı" (nakil)
+    olarak işaretli öğrenci için. Nakil eden öğrenciyi önce öğrenci kartında "Ayrıldı"
+    yapın.
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"

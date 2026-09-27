@@ -138,9 +138,10 @@ function YilSonuPanel({
 
   const cases = useMemo(() => preview?.cases ?? [], [preview]);
 
-  // Önizleme tazelendiğinde varsayılan seçim = tüm kapsam; jeton/sonuç sıfırlanır.
+  // Önizleme tazelendiğinde varsayılan seçim = imhası mümkün tüm kapsam (md. 157/7-d:
+  // ders yılı bitmemiş dosya seçilemez); jeton/sonuç sıfırlanır.
   useEffect(() => {
-    setSelected(cases.map((c) => c.case_id));
+    setSelected(cases.filter((c) => !c.timing_blocker).map((c) => c.case_id));
     setRecord(null);
   }, [cases]);
 
@@ -265,6 +266,7 @@ function YilSonuPanel({
                           type="checkbox"
                           checked={selected.includes(item.case_id)}
                           onChange={() => toggle(item.case_id)}
+                          disabled={Boolean(item.timing_blocker)}
                           className="h-5 w-5 accent-primary"
                           aria-label={`${item.case_no} dosyasını imha kapsamına al`}
                         />
@@ -276,6 +278,9 @@ function YilSonuPanel({
                         <span className="ml-2 rounded-shape-xs bg-tertiary-container px-2 py-0.5 text-label-small text-on-tertiary-container">
                           aktif ders yılı
                         </span>
+                      )}
+                      {item.timing_blocker && (
+                        <p className="mt-1 text-label-small text-error">{item.timing_blocker}</p>
                       )}
                     </td>
                     <td className="p-3">{item.students.join(", ") || "—"}</td>
@@ -501,6 +506,10 @@ function NakilPanel({
             />
           )}
 
+          {detail && detail.warnings.length > 0 && detail.timing_blocker && (
+            <ErrorBanner message={detail.timing_blocker} />
+          )}
+
           {detail && detail.warnings.length > 0 && (
             <>
               <Card elevation={1} className="overflow-x-auto p-0">
@@ -538,7 +547,7 @@ function NakilPanel({
                   variant="tonal"
                   icon="picture_as_pdf"
                   onClick={() => void produceRecord()}
-                  disabled={busy}
+                  disabled={busy || Boolean(detail.timing_blocker)}
                 >
                   1. Tutanağı üret ve indir
                 </Button>

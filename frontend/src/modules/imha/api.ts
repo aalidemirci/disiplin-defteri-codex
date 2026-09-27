@@ -24,6 +24,8 @@ export interface PurgeCaseItem {
   participant_count: number;
   /** Dilekçe tarihi HÂLÂ SÜREN ders yılına düşüyor — md. 157/7-d "ders yılı sonunda" uyarısı. */
   in_active_school_year: boolean;
+  // md. 157/7-d: ders yılı bitmediyse toplu imha engelinin gerekçesi (boşsa serbest).
+  timing_blocker?: string;
 }
 
 export interface PurgeStudentSummary {
@@ -65,6 +67,8 @@ export interface StudentPurgePreview {
   purge_deadline: string | null;
   working_days_left: number | null;
   overdue: boolean;
+  // md. 157/7-d: nakil değilse ve ders yılı bitmediyse tekil imha engelinin gerekçesi.
+  timing_blocker?: string;
 }
 
 export interface PurgeRecordResult {

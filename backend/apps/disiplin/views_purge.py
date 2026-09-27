@@ -75,6 +75,7 @@ def _case_payload(item: purge_selectors.PurgeCaseItem) -> dict[str, Any]:
         "attachment_count": item.attachment_count,
         "participant_count": item.participant_count,
         "in_active_school_year": item.in_active_school_year,
+        "timing_blocker": item.timing_blocker,
     }
 
 
@@ -135,6 +136,7 @@ class PurgeStudentPreviewView(APIView):
                 "purge_deadline": _iso(preview.purge_deadline),
                 "working_days_left": preview.working_days_left,
                 "overdue": preview.overdue,
+                "timing_blocker": preview.timing_blocker,
             }
         )
 
