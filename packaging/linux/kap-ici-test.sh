@@ -35,7 +35,9 @@ echo "== dpkg -i (bağımlılıklar eksik olabilir)"
 dpkg -i "$DEB" || true
 
 echo "== apt-get -f install (bağımlılık çözümü)"
-apt-get -f install -y -qq
+# shellcheck source=packaging/linux/apt-yedekli.sh
+. "$(dirname "${BASH_SOURCE[0]}")/apt-yedekli.sh"
+apt_yedekli -f install -y -qq
 
 echo "== paket durumu"
 dpkg -s disiplin-defteri | grep -E '^(Package|Version|Status|Depends)'

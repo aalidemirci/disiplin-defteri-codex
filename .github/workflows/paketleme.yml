@@ -97,7 +97,10 @@ jobs:
       - name: git
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends git ca-certificates
+          # Ayna 404 verirse (27.09.2026 debian-security) koşu burada durmasın:
+          # git yoksa checkout tarball yoluna düşer; apt yedeği kap-ici-test.sh'de.
+          apt-get install -y -qq --no-install-recommends git ca-certificates || \
+            echo "(git kurulamadı — checkout tarball yoluna düşer)"
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
