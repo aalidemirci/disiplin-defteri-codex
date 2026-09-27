@@ -60,7 +60,8 @@ Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
 - **M2 eksik resmî belgeler:** yeni şablon + saha örneği gerekir.
-- **M5 imha zamanı ve yedekler**: ayrı ve dikkat isteyen iş.
+- **M5 imha:** ✅ kapandı — zamanlama engeli; yedek kopyası ve çok öğrencili nakil
+  kapsamı bilinçli olarak kabul edildi.
 - **M8 onur kararı geri alma:** ✅ kapandı — müdür onayında denetim + son adımı geri alma.
 - **M3 onur kurulu:** ✅ kapandı — md. 181/1 uyarısı + md. 180 kompozisyon kuralları.
 - **M4 md. 166 / 168/5:** ✅ kapandı — md. 166 gerekçeli kural; md. 168/5 bilinçli
@@ -127,6 +128,9 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 
 14. **Yedeklerde kalan imha kopyası — dokunma (C):** şifreli otomatik yedekler 14 günde
     kendiliğinden döner; geri dönüş noktaları korunur.
+
+15. **Çok öğrencili dosyada nakil imhası — dokunma (C):** yalnız uyarı kaydı ve uyarı
+    yazısı silinir; dosyanın diğer öğrenciler için bütünlüğü korunur.
 
 ## Geçiş notları (kullanıcıya etkisi)
 
