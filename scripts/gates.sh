@@ -4,6 +4,7 @@
 # =============================================================================
 # Test + lint + biçim + tip kontrolünü sırayla Docker konteynerinde çalıştırır.
 # Herhangi biri kırmızı olursa betik durur (`set -e`).
+# CI eşi: .github/workflows/kapilar.yml — adımlar değişirse ikisi birlikte değişir.
 # =============================================================================
 set -euo pipefail
 

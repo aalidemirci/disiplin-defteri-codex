@@ -106,7 +106,8 @@ website/            okulapp.org'a yönlendiren stub sayfalar (eski GitHub Pages
                     bağlantıları kırılmasın diye — tek kaynak okulapp.org, §5)
 docs/               tasarim/ (331 satır genel tasarım), mevzuat/, kurulum.md, teknik-borc.md
 scripts/gates.sh    tek komutluk kapı koşusu
-.github/workflows/  paketleme.yml + pages.yml (yönlendirme stub'larını yayımlar)
+.github/workflows/  kapilar.yml (her PR'da gates.sh adımları) + paketleme.yml +
+                    r2-yukle.yml (Release → indir.okulapp.org) + pages.yml (yönlendirme stub'ları)
 ```
 
 **Açılış sırası (kritik, `desktop/main.py`):** tek-instance kilidi → günlük
@@ -352,7 +353,8 @@ Etki × yoğunluk sırasıyla:
 
 - **Test önce.** Her davranış değişikliği testle gelir; `--cov-fail-under=75`
   kapısı var (saf modüller fiilen ~%100).
-- **`bash scripts/gates.sh` yeşil olmadan iş bitmiş sayılmaz.** mypy `strict`,
+- **`bash scripts/gates.sh` yeşil olmadan iş bitmiş sayılmaz.** Aynı adımlar her PR'da
+  `.github/workflows/kapilar.yml` ile CI'da da koşar; birini değiştiren ötekini de değiştirir. mypy `strict`,
   ruff `E,F,I,UP,B,DJ,S,C4`, satır 100.
 - **Commit mesajları Türkçe**, Conventional Commits biçiminde ve kapsam etiketli:
   `fix(disiplin): …`, `feat(okul): …`, `chore(ci): …`, `docs: …`. Git geçmişine bak,
