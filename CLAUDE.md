@@ -315,7 +315,7 @@ Tam liste `docs/teknik-borc.md`. Özeti — **bunları yeniden keşfetme**:
 *Doğrulanamayanlar (kod yazıldı, ortam kısıtı nedeniyle koşulmadı):* Qt penceresi
 hiç açılmadı (D3) · paketlenmiş ikili üzerinden gerçek evrak üretimi (D4) · `.deb`
 yükseltme yolu (D5) · Windows başlatıcı yolları: ikinci kopya kilit çakışması,
-WebView2 yokluğu (D6) · Argon2 cffi ikilisinin pakette toplanması (D7).
+WebView2 yokluğu (D6). (D7 Argon2 paketi 27.09.2026'da `--kripto-duman` ile kapandı.)
 
 *Kabul edilmiş bedeller:* K1-K7 → §6 tablosunda karşılıkları var.
 

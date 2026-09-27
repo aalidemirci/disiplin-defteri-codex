@@ -10,6 +10,7 @@
 #   1. dpkg -i + apt-get -f install ile bağımlılıkların gerçekten çözülmesi
 #   2. `--autotest` → ÇIKIŞ KODU 0 (açılış zinciri: kilit, yedek, göç, sunucu)
 #   3. `--pdf-duman` → Türkçe metinli PDF üretimi + pypdf ile geri okuma
+#      `--kripto-duman` → parola zinciri (Argon2id cffi ikilisi + Fernet)
 #   4. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı)
 #   5. Temiz kaldırma
 # =============================================================================
@@ -51,6 +52,9 @@ test -f /usr/share/icons/hicolor/48x48/apps/disiplin-defteri.png
 echo "== --pdf-duman (Türkçe PDF + font doğrulaması)"
 disiplin-defteri --pdf-duman /tmp/duman.pdf
 test -s /tmp/duman.pdf
+
+echo "== --kripto-duman (parola zinciri: Argon2id + Fernet)"
+disiplin-defteri --kripto-duman
 
 echo "== --autotest (açılış zinciri; çıkış kodu 0 beklenir)"
 disiplin-defteri --autotest

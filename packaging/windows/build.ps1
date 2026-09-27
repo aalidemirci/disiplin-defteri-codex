@@ -149,6 +149,12 @@ if ($kod -ne 0) {
 }
 if (-not (Test-Path $pdf)) { throw "PDF üretilmedi: $pdf" }
 
+Write-Adim "duman testi: --kripto-duman (parola zinciri)"
+$kod = Invoke-Uygulama $AppExe @("--kripto-duman")
+if ($kod -ne 0) {
+    throw "Kripto duman testi BAŞARISIZ (çıkış $kod). Argon2 cffi ikilisi pakette eksik olabilir."
+}
+
 Write-Adim "duman testi: --autotest"
 $gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("dd-" + [Guid]::NewGuid().ToString("N"))
 $kod = Invoke-Uygulama $AppExe @("--autotest") @{ "DD_APP_HOME" = $gecici }

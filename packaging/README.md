@@ -10,7 +10,7 @@ packaging/
 ├── requirements-paketleme.txt   PyInstaller + pywebview + (Linux) PyQt5
 ├── pyinstaller/
 │   ├── disiplin_defteri.spec    Windows + Linux ORTAK spec
-│   ├── giris.py                 paket giriş noktası + `--pdf-duman` teşhis kipi
+│   ├── giris.py                 paket giriş noktası + `--pdf-duman`/`--kripto-duman` teşhis kipleri
 │   ├── rthook_dd.py             çalışma-zamanı kancası (DLL/fontconfig/SPA yolu)
 │   └── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü DejaVu)
 ├── fontlar/                     DejaVu Sans 4 kesim + lisans (pakete gömülür)
@@ -41,7 +41,7 @@ bash packaging/linux/test-kurulum.sh               # debian:11 + debian:12 prova
 ```
 
 Hızlı doğrulama derlemesi (PyQt5 indirilmez, ~5 dk yerine ~2 dk; pencere
-açılmaz, yalnız `--autotest`/`--pdf-duman` çalışır):
+açılmaz, yalnız `--autotest`/`--pdf-duman`/`--kripto-duman` çalışır):
 
 ```bash
 DD_WITH_QT=0 bash packaging/linux/docker-build.sh

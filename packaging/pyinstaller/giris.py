@@ -23,6 +23,17 @@ doğrular. Amacı iki katmanı ayrı ayrı sınamaktır:
 Kip hem CI duman testinde (§8) hem de sahada "programın PDF üretimi çalışıyor
 mu?" sorusunu tek komutla yanıtlamak için kullanılır. Veritabanına DOKUNMAZ:
 Django ayağa kaldırılmaz, veri dizinine yazılmaz.
+
+İkinci teşhis kipi (teknik borç D7):
+
+    disiplin-defteri --kripto-duman
+
+Opsiyonel açılış parolasının zincirini (`shared/crypto.py`) pakette uçtan uca
+koşar: Argon2id ile anahtar türetme → veri anahtarını sarmalama/açma → Türkçe
+metni Fernet ile şifreleyip geri çözme. `--autotest` parolasız kipte koştuğu
+için Argon2 cffi ikilisi pakete girmese bile CI yeşil kalıyordu; o zaman
+program ancak sahada, kullanıcı parola koyduğunda çökerdi. Bu kip o eksiği
+paketleme anında yakalar. O da veritabanına ve veri dizinine DOKUNMAZ.
 """
 
 from __future__ import annotations
@@ -40,8 +51,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 PDF_SMOKE_FLAG = "--pdf-duman"
 
-# `desktop/errors.py` 0-7 arasını kullanıyor; teşhis kipi 8'den devam eder.
+CRYPTO_SMOKE_FLAG = "--kripto-duman"
+
+# `desktop/errors.py` 0-7 arasını kullanıyor; teşhis kipleri 8'den devam eder.
 EXIT_PDF_SMOKE_FAILED = 8
+EXIT_CRYPTO_SMOKE_FAILED = 9
 
 # Duman testinin aradığı metin — Türkçe'ye özgü altı harf, hem büyük hem küçük.
 TURKISH_SAMPLE = "ĞÜŞİÖÇ ığüşiöç"
@@ -171,6 +185,48 @@ def run_pdf_smoke(target: Path) -> int:
     return 0
 
 
+def run_crypto_smoke() -> int:
+    """Parola zincirini (Argon2id + Fernet zarf şifreleme) sınar; 0 = başarılı.
+
+    Gerçek varsayılan KDF parametreleri kullanılır (64 MiB): sahadaki parola
+    kurulumu da bunlarla koşar, bellek ayırma hatası da burada görünmeli.
+    """
+    from desktop.paths import resolve_backend_dir
+
+    backend = str(resolve_backend_dir())
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+
+    from shared import crypto
+
+    salt = crypto.new_salt()
+    wrapping_key = crypto.derive_key("duman-parolası-ğüşiöç", salt=salt)
+    if wrapping_key != crypto.derive_key("duman-parolası-ğüşiöç", salt=salt):
+        _write("HATA: Argon2id aynı parola ve tuzdan farklı anahtar üretti.")
+        return EXIT_CRYPTO_SMOKE_FAILED
+
+    data_key = crypto.new_data_key()
+    wrapped = crypto.wrap_key(data_key, wrapping_key=wrapping_key)
+    if crypto.unwrap_key(wrapped, wrapping_key=wrapping_key) != data_key:
+        _write("HATA: veri anahtarı sarmaldan geri açılamadı.")
+        return EXIT_CRYPTO_SMOKE_FAILED
+
+    # Kayıt alanlarının gerçekte geçtiği yol: anahtar yüklü → şifreli yaz/oku.
+    field = crypto.EncryptedTextField()
+    crypto.load_key(data_key)
+    try:
+        stored = field.get_prep_value(TURKISH_SAMPLE)
+        read_back = field.from_db_value(stored, None, None)
+    finally:
+        crypto.unload_key()
+    if stored == TURKISH_SAMPLE or read_back != TURKISH_SAMPLE:
+        _write("HATA: Türkçe metin şifrelenip geri çözülemedi.")
+        return EXIT_CRYPTO_SMOKE_FAILED
+
+    _write("Kripto duman testi başarılı (Argon2id + Fernet).")
+    return 0
+
+
 def _smoke_target(argv: Sequence[str]) -> Path:
     """`--pdf-duman` sonrasında dosya yolu verildiyse onu, yoksa geçici dosyayı seçer."""
     index = list(argv).index(PDF_SMOKE_FLAG)
@@ -183,6 +239,12 @@ def _smoke_target(argv: Sequence[str]) -> Path:
 def run(argv: Sequence[str] | None = None) -> int:
     """Argümanlara göre teşhis kipini veya normal açılışı çalıştırır."""
     args = list(sys.argv[1:] if argv is None else argv)
+    if CRYPTO_SMOKE_FLAG in args:
+        try:
+            return run_crypto_smoke()
+        except Exception as error:  # noqa: BLE001 — teşhis kipi: her hata rapor edilir
+            _write(f"HATA: kripto duman testi çöktü: {error!r}")
+            return EXIT_CRYPTO_SMOKE_FAILED
     if PDF_SMOKE_FLAG in args:
         try:
             return run_pdf_smoke(_smoke_target(args))
