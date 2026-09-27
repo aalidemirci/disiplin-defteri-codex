@@ -117,7 +117,7 @@ export interface HolidaySeedResult {
 /** Cinsiyet — boş dize "belirtilmemiş" demektir (backend blank=True). */
 export type Gender = "E" | "K" | "";
 export type GuardianKinship = "ANNE" | "BABA" | "DIGER" | "";
-export type StudentStatus = "ACTIVE" | "LEFT";
+export type StudentStatus = "ACTIVE" | "LEFT" | "GRADUATED";
 
 export const GENDER_TR: Record<"E" | "K", string> = { E: "Erkek", K: "Kız" };
 
@@ -130,6 +130,7 @@ export const GUARDIAN_KINSHIP_TR: Record<"ANNE" | "BABA" | "DIGER", string> = {
 export const STUDENT_STATUS_TR: Record<StudentStatus, string> = {
   ACTIVE: "Aktif",
   LEFT: "Ayrıldı",
+  GRADUATED: "Mezun",
 };
 
 /** Öğrenci sicili — StudentSerializer ile birebir (`full_name`/`class_label` türetilmiş). */

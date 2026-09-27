@@ -663,7 +663,7 @@ function OgrenciAdimi() {
       message:
         `${formatNumber(onizleme?.promoted ?? 0)} öğrenci bir üst sınıfa taşınacak` +
         (mezunEt
-          ? `, 12. sınıftaki ${formatNumber(onizleme?.graduated ?? 0)} öğrenci "Ayrıldı" (mezun) olarak işaretlenecek`
+          ? `, 12. sınıftaki ${formatNumber(onizleme?.graduated ?? 0)} öğrenci "Mezun" olarak işaretlenecek`
           : "") +
         ". Bu işlem GERİ ALINAMAZ: öğrencilerin önceki sınıf bilgisi saklanmaz. Devam edilsin mi?",
       confirmLabel: "Yükselt",
@@ -734,7 +734,7 @@ function OgrenciAdimi() {
             onChange={(e) => setMezunEt(e.target.checked)}
             className="h-5 w-5 accent-primary"
           />
-          12. sınıfları mezun say (&quot;Ayrıldı&quot; olarak işaretle)
+          12. sınıfları mezun say (&quot;Mezun&quot; olarak işaretle)
         </label>
         <p className="text-label-small text-on-surface-variant">
           Kayıt silinmez: geçmiş disiplin dosyaları erişilebilir kalır, sınıf bilgisi 12 olarak
@@ -749,7 +749,7 @@ function OgrenciAdimi() {
             {uygulanan !== null && (
               <SonucBandi>
                 {formatNumber(uygulanan.promoted)} öğrenci yükseltildi,{" "}
-                {formatNumber(uygulanan.graduated)} öğrenci mezun (Ayrıldı) olarak işaretlendi.
+                {formatNumber(uygulanan.graduated)} öğrenci &quot;Mezun&quot; olarak işaretlendi.
               </SonucBandi>
             )}
             <ul className="divide-y divide-outline-variant/50">
@@ -765,7 +765,7 @@ function OgrenciAdimi() {
               ))}
               <li className="flex items-center justify-between gap-3 py-2">
                 <span className="text-body-medium text-on-surface">
-                  12. sınıf → {rapor.graduate_final_level ? "mezun (Ayrıldı)" : "değişmez"}
+                  12. sınıf → {rapor.graduate_final_level ? "mezun" : "değişmez"}
                 </span>
                 <span className="text-body-medium text-on-surface-variant">
                   {formatNumber(

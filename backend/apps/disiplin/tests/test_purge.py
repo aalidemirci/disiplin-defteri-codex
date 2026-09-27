@@ -610,3 +610,20 @@ def test_ders_yili_icinde_tekil_imha_yalniz_nakil_eden_ogrenci() -> None:
         Student.objects.filter(pk=student.pk).update(status=StudentStatus.ACTIVE)
         with pytest.raises(ValueError, match="kapsamı değişti"):
             purge_service.execute(token=record.token, confirmed=True)
+
+
+def test_mezun_ogrenci_nakil_sayilmaz_ders_yili_kurali_gecerli() -> None:
+    """Borç K6: tekil (nakil) imha serbestliği yalnız "Ayrıldı"ya; mezun yıl sonunu bekler."""
+    from unittest import mock
+
+    from apps.okul.models import StudentStatus
+
+    _setup_school()
+    _case, student = _warning_case()
+    Student.objects.filter(pk=student.pk).update(status=StudentStatus.GRADUATED)
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 4, 1)):
+        preview = purge_service.preview_student(student.pk, today=date(2026, 4, 1))
+        assert preview.timing_blocker != ""
+    with mock.patch("django.utils.timezone.localdate", return_value=date(2026, 6, 29)):
+        preview = purge_service.preview_student(student.pk, today=date(2026, 6, 29))
+        assert preview.timing_blocker == ""

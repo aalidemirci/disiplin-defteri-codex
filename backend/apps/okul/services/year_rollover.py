@@ -275,11 +275,11 @@ def promote_students(*, graduate_final_level: bool = True, apply: bool = False) 
     Kurallar:
     - Yalnız `status=ACTIVE` ve sınıfı 9-12 aralığında olan öğrenciler işlenir;
       sınıfsız / ayrılmış / aralık dışı kayıtlara dokunulmaz (raporda görünür).
-    - 12. sınıflar mezun olur: kayıt SİLİNMEZ, `status=LEFT` ("Ayrıldı") olur ve
+    - 12. sınıflar mezun olur: kayıt SİLİNMEZ, `status=GRADUATED` ("Mezun") olur ve
       `class_level` 12'de kalır (mezun olduğu sınıf geçmiş kaydıdır). Böylece
       geçmiş disiplin dosyaları erişilebilir kalır, `only_active` süzgeçli
-      seçiciler (yeni dosya açma) mezunu ÖNERMEZ. Ayrı bir "MEZUN" durumu şema
-      değişikliği gerektirir; `LEFT` mevcut şemada en yakın doğru anlamdır.
+      seçiciler (yeni dosya açma) mezunu ÖNERMEZ. "Ayrıldı" (`LEFT`) KULLANILMAZ:
+      o nakil demektir ve md. 157/7-d tekil imhasını serbest bırakır (borç K6).
     - Mezuniyet YÜKSELTMEDEN ÖNCE uygulanır: aksi halde 11'den 12'ye yükselen
       öğrenci aynı koşuda mezun sayılırdı.
     - GERİ ALINAMAZ: eski sınıf bilgisi saklanmaz (tarihçe tablosu yoktur —
@@ -293,7 +293,7 @@ def promote_students(*, graduate_final_level: bool = True, apply: bool = False) 
     active = Student.objects.filter(status=StudentStatus.ACTIVE)
     if graduate_final_level:
         active.filter(class_level=FINAL_CLASS_LEVEL).update(
-            status=StudentStatus.LEFT, updated_at=now
+            status=StudentStatus.GRADUATED, updated_at=now
         )
     # Tek SQL UPDATE: satır bazında çalıştığı için kaydırma (9→10→11) OLMAZ.
     Student.objects.filter(

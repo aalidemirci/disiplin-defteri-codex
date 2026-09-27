@@ -233,12 +233,13 @@ class TestPromoteStudents:
         assert rapor.promoted == 3
         assert rapor.applied is True
 
-    def test_12ler_ayrildi_isaretlenir_kayit_silinmez(self) -> None:
+    def test_12ler_mezun_isaretlenir_kayit_silinmez(self) -> None:
         oniki = _ogrenci(level=12, no="2004")
         rapor = year_rollover.promote_students(graduate_final_level=True, apply=True)
 
         oniki.refresh_from_db()
-        assert oniki.status == StudentStatus.LEFT
+        # Borç K6: mezun "Ayrıldı" (nakil) DEĞİL, ayrı durumdur.
+        assert oniki.status == StudentStatus.GRADUATED
         # Mezun olduğu sınıf geçmiş kaydı olarak KORUNUR (12'de kalır).
         assert oniki.class_level == 12
         assert rapor.graduated == 1
@@ -255,7 +256,7 @@ class TestPromoteStudents:
         oniki.refresh_from_db()
         assert onbir.class_level == 12
         assert onbir.status == StudentStatus.ACTIVE
-        assert oniki.status == StudentStatus.LEFT
+        assert oniki.status == StudentStatus.GRADUATED
 
     def test_12ler_secenekle_dokunulmaz_kalir(self) -> None:
         oniki = _ogrenci(level=12, no="2007")
@@ -407,4 +408,4 @@ class TestYearRolloverApi:
         dokuz.refresh_from_db()
         oniki.refresh_from_db()
         assert dokuz.class_level == 10
-        assert oniki.status == StudentStatus.LEFT
+        assert oniki.status == StudentStatus.GRADUATED

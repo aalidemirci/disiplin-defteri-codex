@@ -242,6 +242,20 @@ describe("KisilerPage — öğrenci ekleme/düzenleme/silme", () => {
     expect(within(dialog).getByLabelText("TCKN")).toHaveValue("12345678901");
   });
 
+  it("durum seçiminde Mezun, Ayrıldı'dan (nakil) ayrı seçenektir (borç K6)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    await user.click(screen.getByRole("button", { name: "Ayşe Yılmaz kaydını düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
+    const durum = within(dialog).getByLabelText("Durum");
+    const secenekler = within(durum)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(secenekler).toEqual(["Aktif", "Ayrıldı", "Mezun"]);
+  });
+
   it("son sayfadaki tek kayıt silinince önceki sayfaya düşer (boş sayfada kilitlenmez)", async () => {
     const SON_KAYIT: Student = {
       ...STUDENT,

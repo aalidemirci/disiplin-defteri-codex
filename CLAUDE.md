@@ -195,7 +195,6 @@ her biri gerekçesiyle kayıt altındadır.
 | Şifreli kipte `uq_student_tckn_alive` etkisiz | Fernet deterministik değil; blind index bilinçli alınmadı (≤1000 kayıt). Tekillik serviste: `selectors.find_student_by_tckn`. | borç K1, §10.2 |
 | Şifreleme anahtarı süreç ömrü boyunca bellekte | Bağlanacak oturum kimliği yok; her istekte Argon2id ~0,2 sn maliyet olurdu. Kilitleme = kapatma veya açık "Kilitle". | `shared/crypto.py` başlığı |
 | Boşta-kalma otomatik kilidi yok | Aynı gerekçe. | borç K3 |
-| 12. sınıflar mezun olduğunda `LEFT` ("Ayrıldı") | Şemada `GRADUATED` yok; `LEFT` doğru davranışı veriyor. | borç K6 |
 | `backend/` pakete kaynak ağaç olarak giriyor | `desktop/paths.py::resolve_backend_dir()` gerçek `settings.py` arıyor. Bedeli: yeni bağımlılık eklenirse PyInstaller spec'inde `hiddenimports` güncellenmeli. | borç K7 |
 | Celery/Redis/Postgres/Sentry/JWT yok | Sunucu bağımlılıkları bilinçli ayıklandı; süre taraması senkron panele dönüştü. | §3.4, §4.5 |
 | `frontend` tarafında global 423 yakalayıcı yok | Kilit yalnız açılışta ve "Şimdi kilitle" ile görünür. | borç K4 |
@@ -317,7 +316,8 @@ hiç açılmadı (D3) · paketlenmiş ikili üzerinden gerçek evrak üretimi (D
 yükseltme yolu (D5) · Windows başlatıcı yolları: ikinci kopya kilit çakışması,
 WebView2 yokluğu (D6). (D7 Argon2 paketi 27.09.2026'da `--kripto-duman` ile kapandı.)
 
-*Kabul edilmiş bedeller:* K1-K7 → §6 tablosunda karşılıkları var.
+*Kabul edilmiş bedeller:* K1-K5, K7-K8 → §6 tablosunda karşılıkları var (K6 27.09.2026'da
+`GRADUATED` "Mezun" durumuyla kapandı; "Ayrıldı" artık yalnız nakil demektir).
 
 Windows tarafında ayrıca `packaging/windows/NOTLAR.md` W1-W9 doğrulanmamış
 varsayım listesi tutuyor.

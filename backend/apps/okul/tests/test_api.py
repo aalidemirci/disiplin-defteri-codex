@@ -422,6 +422,16 @@ class TestStudentApi:
             assert data["count"] == 2, kapali
         assert client.get("/api/v1/students/", {"only_active": "1"}).json()["count"] == 1
 
+    def test_mezun_durumu_kaydedilir_ve_secicide_cikmaz(self, client: APIClient) -> None:
+        """Borç K6: "Mezun" ayrı durumdur; sicilde görünür, yeni dosya seçicisinde görünmez."""
+        ogr = Student.objects.create(first_name="MEZUN", last_name="KAYA", status="ACTIVE")
+        resp = client.patch(f"/api/v1/students/{ogr.pk}/", {"status": "GRADUATED"}, format="json")
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["status"] == "GRADUATED"
+
+        assert client.get("/api/v1/students/").json()["count"] == 1
+        assert client.get("/api/v1/students/", {"only_active": "true"}).json()["count"] == 0
+
 
 @pytest.mark.django_db
 class TestPersonnelApi:

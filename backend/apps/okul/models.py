@@ -318,7 +318,10 @@ class GuardianKinship(models.TextChoices):
 
 class StudentStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "Aktif"
+    # "Ayrıldı" = nakil/kayıt silme. md. 157/7-d tekil (nakil) imhası buna bağlıdır.
     LEFT = "LEFT", "Ayrıldı"
+    # Yıl devrinde 12. sınıftan mezun (borç K6). Nakil DEĞİLDİR: imhası yıl sonu kuralına tabi.
+    GRADUATED = "GRADUATED", "Mezun"
 
 
 class Student(BaseModel):
