@@ -73,7 +73,7 @@ yazıldığını anlamıyorsan cevap çoğu kez "OYS'de öyleydi ve pariteyi kor
 
 **Durum:** F0-F5 fazlarının hepsi tamamlandı. CI'da Linux `.deb` (debian:11 ve
 debian:12'ye temiz kurulum) ve Windows `setup.exe` + `portable.zip` uçtan uca
-yeşil koştu. Sürüm: `VERSION` → `2026.7.0-beta.1` (CalVer).
+yeşil koştu. Sürüm: `VERSION` → `2026.9.0-beta.1` (CalVer; eylül 2026 mevzuat uyumu sürümü).
 
 ---
 

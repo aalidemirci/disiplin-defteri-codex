@@ -73,11 +73,14 @@ güncelleme öncesi yedekleri de aynı şifreli `.ddbak` biçimindedir.
 
 ## Durum
 
-**F0-F5 geliştirme fazları tamamlandı; sürüm `2026.7.0-beta.1`.** Okul kurulumu ve
-kişi aktarımı, disiplin/onur kurulu iş akışları, 25 resmî evrak şablonu,
-uygulama parolası, otomatik yedekleme ve Windows/Linux paketleme kodu çalışır
-durumdadır. Tam kalite kapısı 26.07.2026 tarihinde backend, masaüstü/paketleme
-ve frontend için yeşil koşmuştur.
+**F0-F5 geliştirme fazları tamamlandı; sürüm `2026.9.0-beta.1`.** Okul kurulumu ve
+kişi aktarımı, disiplin/onur kurulu iş akışları, resmî evrak şablonları (eylül
+2026 mevzuat uyumu sürümünde 11 yeni belge: md. 197 iade/ilçeye gönderme, md. 169/1
+onaya sevk, md. 175 MEM yazıları, veli görüşmesi, arama ve md. 195 tespit
+tutanakları, Form-01), uygulama parolası, otomatik yedekleme ve Windows/Linux
+paketleme kodu çalışır durumdadır. Mevzuat uyumu değişikliklerinin tam listesi
+`docs/gelistirme-plani-2026-09.md` içindedir; backend ve frontend kalite kapısı
+27.09.2026 tarihinde yeşil koşmuştur.
 
 Gerçek masaüstü ortamında hâlâ saha doğrulaması isteyen başlıklar (Qt penceresi,
 paketlenmiş ikiliden uçtan uca evrak/indirme, `.deb` yükseltmesi ve parola

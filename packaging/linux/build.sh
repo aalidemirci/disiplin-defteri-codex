@@ -67,9 +67,11 @@ bilgi() { echo "== $*"; }
 # --- 1. Sistem bağımlılıkları (derleme kabında) ------------------------------
 bilgi "sistem bağımlılıkları"
 export DEBIAN_FRONTEND=noninteractive
+# shellcheck source=packaging/linux/apt-yedekli.sh
+. "$(dirname "${BASH_SOURCE[0]}")/apt-yedekli.sh"
 apt-get update -qq
 # shellcheck disable=SC2086
-apt-get install -y -qq --no-install-recommends $APT_TEMEL
+apt_yedekli install -y -qq --no-install-recommends $APT_TEMEL
 # shellcheck disable=SC2086
 apt-get install -y -qq --no-install-recommends $APT_ISTEGE_BAGLI 2>/dev/null || \
     echo "   (libharfbuzz-subset0 bu dağıtımda yok — atlandı)"
@@ -77,7 +79,7 @@ if [ "$QT_ILE" != "0" ]; then
     # PyInstaller PyQt5'i ÇÖZÜMLEMEK için import eder; libGL olmadan import
     # patlar ("libGL.so.1: cannot open shared object file").
     # shellcheck disable=SC2086
-    apt-get install -y -qq --no-install-recommends $APT_QT
+    apt_yedekli install -y -qq --no-install-recommends $APT_QT
 fi
 
 # --- 2. Python bağımlılıkları ------------------------------------------------
