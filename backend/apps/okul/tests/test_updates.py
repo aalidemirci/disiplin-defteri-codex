@@ -155,3 +155,73 @@ def test_guncelleme_api_durumu_dondurur(
 
     assert response.status_code == 200
     assert response.json() == expected
+
+
+def _liste_kaydi(tag: str, *, prerelease: bool = True, draft: bool = False) -> dict[str, Any]:
+    surum = tag.removeprefix("v")
+    return {
+        "tag_name": tag,
+        "name": f"Disiplin Defteri {tag}",
+        "draft": draft,
+        "prerelease": prerelease,
+        "published_at": "2026-09-27T18:35:58Z",
+        "html_url": f"https://github.com/aalidemirci/disiplin-defteri-codex/releases/tag/{tag}",
+        "assets": [
+            {
+                "name": f"disiplin-defteri-{surum}-win64-setup.exe",
+                "browser_download_url": (
+                    "https://github.com/aalidemirci/disiplin-defteri-codex/releases/download/"
+                    f"{tag}/disiplin-defteri-{surum}-win64-setup.exe"
+                ),
+                "size": 10,
+                "digest": "sha256:" + "a" * 64,
+            }
+        ],
+    }
+
+
+def test_beta_surumler_de_guncelleme_olarak_gorulur(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GitHub `releases/latest` ön sürümleri döndürmez (404); liste okunur, beta dahil
+    en yüksek sürüm seçilir, taslak atlanır."""
+    import json
+
+    liste = [
+        _liste_kaydi("v2026.7.0-beta.1"),
+        _liste_kaydi("v2026.9.0-beta.3", draft=True),
+        _liste_kaydi("v2026.9.0-beta.2"),
+        _liste_kaydi("v2026.9.0-beta.1"),
+    ]
+    okunan: list[str] = []
+
+    def sahte_oku(url: str, **_kwargs: Any) -> bytes:
+        okunan.append(url)
+        return json.dumps(liste).encode("utf-8")
+
+    monkeypatch.setattr(updates, "_read_url", sahte_oku)
+    durum = updates.update_status(force=True, current_version="2026.9.0-beta.1")
+    assert "/releases/latest" not in okunan[0]
+    assert durum["update_available"] is True
+    assert durum["latest_version"] == "2026.9.0-beta.2"
+
+
+def test_yayimlanmis_surum_yoksa_anlasilir_hata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        updates,
+        "_read_url",
+        lambda *_a, **_k: b'[{"tag_name": "v2026.9.0-beta.3", "draft": true, "assets": []}]',
+    )
+    with pytest.raises(updates.UpdateError, match="yayımlanmış bir sürüm"):
+        updates.latest_release(force=True)
+
+
+@pytest.mark.parametrize(
+    ("dusuk", "yuksek"),
+    [
+        ("2026.9.0-beta.1", "2026.9.0-beta.2"),
+        ("2026.9.0-beta.2", "2026.9.0-beta.10"),
+        ("2026.9.0-beta.10", "2026.9.0"),
+        ("2026.7.0", "2026.9.0-beta.1"),
+    ],
+)
+def test_surum_siralamasi_semver(dusuk: str, yuksek: str) -> None:
+    assert updates.version_key(dusuk) < updates.version_key(yuksek)

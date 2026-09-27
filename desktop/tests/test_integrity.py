@@ -89,6 +89,9 @@ def test_bos_dosya_bozuk_sayilmaz(tmp_path: Path) -> None:
         ("1.0.0-dev", "1.0.0"),  # ön-sürüm, kesin sürümden ÖNCE gelir
         ("1.0.0", "1.0.1"),
         ("1.2.0", "1.10.0"),  # sayısal karşılaştırma (metin değil)
+        ("2026.9.0-beta.2", "2026.9.0-beta.10"),  # ön-sürüm sayısı da sayısal (SemVer)
+        ("2026.9.0-beta.9", "2026.9.0-rc.1"),
+        ("2026.9.0-beta", "2026.9.0-beta.1"),
     ],
 )
 def test_surum_siralamasi(dusuk: str, yuksek: str) -> None:

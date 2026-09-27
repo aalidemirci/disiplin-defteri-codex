@@ -107,7 +107,8 @@ website/            okulapp.org'a yönlendiren stub sayfalar (eski GitHub Pages
 docs/               tasarim/ (331 satır genel tasarım), mevzuat/, kurulum.md, teknik-borc.md
 scripts/gates.sh    tek komutluk kapı koşusu
 .github/workflows/  kapilar.yml (her PR'da gates.sh adımları) + paketleme.yml +
-                    r2-yukle.yml (Release → indir.okulapp.org) + pages.yml (yönlendirme stub'ları)
+                    r2-yukle.yml (Release → indir.okulapp.org) + en-son-surum.yml
+                    (Release'i "en son" yap) + pages.yml (yönlendirme stub'ları)
 ```
 
 **Açılış sırası (kritik, `desktop/main.py`):** tek-instance kilidi → günlük

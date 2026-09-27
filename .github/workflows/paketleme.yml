@@ -244,9 +244,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ON_SURUM=""
+          # Beta/rc sürümler okullarda kullanılan GÜNCEL sürümdür: "ön sürüm" değil,
+          # "en son sürüm" işaretlenir. Eski programlar güncellemeyi GitHub'ın
+          # releases/latest ucundan okur ve o uç ön sürümleri HİÇ döndürmez (404) —
+          # betalar ön sürüm işaretliyken güncelleme hiç görünmüyordu (27.09.2026).
+          # Yalnız -dev iç deneme yapısı ön sürüm kalır.
+          ON_SURUM="--latest"
           case "${ETIKET}" in
-            *-beta.*|*-rc.*|*-dev*) ON_SURUM="--prerelease" ;;
+            *-dev*) ON_SURUM="--prerelease" ;;
           esac
           # --target: elle yayında etiket henüz yoktur; GitHub bu commit'te oluşturur
           # (etiket push'unda etiket zaten vardır, --target yok sayılır).

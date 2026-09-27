@@ -94,7 +94,7 @@ Tek doğruluk kaynağı depo kökündeki **`VERSION`** dosyasıdır (CalVer:
    workflow", dal `main`, **yayinla** işaretli. Etiket `v<VERSION>` GitHub'da
    Release ile birlikte oluşturulur (`gh release create --target`).
 
-`yayin` işi: SHA256SUMS.txt → GitHub Release (beta/rc/dev ön sürüm) → paketlerin
+`yayin` işi: SHA256SUMS.txt → GitHub Release ("en son sürüm"; yalnız `-dev` ön sürüm — programın güncelleme denetimi betaları görsün diye) → paketlerin
 Cloudflare R2'ye (`okulapp-indirme` kovası, `indir.okulapp.org/disiplin-defteri/`)
 yüklenmesi. R2 için depo secret'ları gerekir: `CLOUDFLARE_API_TOKEN` (R2 Object
 Read & Write) ve `CLOUDFLARE_ACCOUNT_ID`; yoksa adım uyarıyla atlanır. Sonra elle
