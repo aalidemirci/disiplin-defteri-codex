@@ -1,0 +1,57 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 175/2 tedbir uzatma onayı talebi — M2 Grup 1 (kullanıcı kararı 27.09.2026).
+Resmî MEB örneği yoktur; md. 175/2 "haklı ve zorlayıcı sebeplerin devamı hâlinde millî eğitim
+müdürünün onayına bağlı olarak tedbir kararı iki kez daha uzatılabilir" metninden türetildi.
+Her uzatma ayrı süre, en fazla 10 iş günü (kullanıcı kararı 24.09.2026). Uzatma süresi
+onaydan önce bilinmediği için elle yazılır; altta millî eğitim müdürü OLUR bloğu.{% endcomment %}
+{% block content %}
+<div class="doc-title">TEDBİR KARARININ UZATILMASI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 175/2</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Tedbir kararının uzatılması ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt; text-align: center;">
+  <strong>……………… İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong>
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong>, Yönetmeliğin 175. maddesi uyarınca
+  {{ precaution.start_date|date:'d.m.Y' }} tarihinden itibaren geçici olarak okuldan
+  uzaklaştırılmış olup tedbir süresi {{ precaution.end_date|date:'d.m.Y' }} tarihinde
+  sona erecektir{% if precaution.extension_count %} (tedbir {{ precaution.extension_count }} kez uzatılmıştır){% endif %}.
+</p>
+
+<p class="para">
+  Disiplin işlemi haklı ve zorlayıcı sebeplerle bu süre içinde sonuçlandırılamayacağından,
+  175. maddenin 2. fıkrası uyarınca tedbir kararının <strong>{{ next_extension_no }}. kez</strong>
+  ……… (………) iş günü (en fazla 10 iş günü) uzatılması hususunu olurlarınıza arz ederim.
+</p>
+
+<div class="section">
+  <div class="section-title">UZATMA GEREKÇESİ</div>
+  <div class="field-box" style="min-height: 60pt;"></div>
+</div>
+
+<div class="signature">
+  <div class="date">{{ generated_at|date:'d.m.Y' }}</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<div class="signature" style="margin-left: auto; margin-right: auto; margin-top: 24pt;">
+  <div class="name">OLUR</div>
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">……………………………</div>
+  <div class="role">İlçe Millî Eğitim Müdürü</div>
+</div>
+{% endblock %}

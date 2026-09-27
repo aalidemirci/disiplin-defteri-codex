@@ -1,0 +1,53 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 175/1 tedbir — millî eğitim müdürünü bilgilendirme yazısı. M2 Grup 1 (kullanıcı
+kararı 27.09.2026). Resmî MEB örneği yoktur; md. 175/1 "on iş gününü geçmemek kaydıyla millî
+eğitim müdürünü bilgilendirerek ... geçici olarak okuldan uzaklaştırabilir" metninden ve
+DisciplinePrecaution kaydından türetildi.{% endcomment %}
+{% block content %}
+<div class="doc-title">GEÇİCİ UZAKLAŞTIRMA (TEDBİR) HAKKINDA</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 175/1</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Tedbir kararı bilgilendirmesi ({{ student.full_name }})</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt; text-align: center;">
+  <strong>……………… İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong>
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong> hakkında disiplin işlemi başlatılmış olup,
+  kovuşturmanın tamamlanmasını ve sonucunu beklemeden acele bir tedbir olmak üzere Millî
+  Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin 175. maddesinin 1. fıkrası uyarınca
+  öğrenci <strong>{{ precaution.start_date|date:'d.m.Y' }}</strong> tarihinden itibaren
+  <strong>{{ precaution.requested_days }} iş günü</strong> (son gün
+  {{ precaution.end_date|date:'d.m.Y' }}) süreyle geçici olarak okuldan uzaklaştırılmıştır.
+</p>
+
+{% if precaution.reason %}
+<div class="section">
+  <div class="section-title">GEREKÇE</div>
+  <div class="field-box" style="white-space: pre-wrap;">{{ precaution.reason }}</div>
+</div>
+{% endif %}
+
+<p class="para">
+  Tedbir süresince öğrenci ders ve sınavlarla diğer etkinliklere alınmayacak; disiplin
+  işlemine tedbir kararını izleyen en geç üç iş günü içinde başlanacaktır (md. 175/2).
+</p>
+
+<p class="para">Bilgilerinize arz ederim.</p>
+
+<div class="signature">
+  <div class="date">{{ generated_at|date:'d.m.Y' }}</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+{% endblock %}

@@ -29,8 +29,10 @@
    doğrulandı. Buradaki bir "iyileştirme" sessizce resmî evrak paritesini bozar.
    **Bilinçli istisnalar (kullanıcı kararı, 24-26.09.2026):** `precaution_notice`,
    `appeal_letter` (Form-18), `penalty_notice_parent` / `penalty_days_notice_parent`
-   (Form-15/17), `deadline_extension_record` (Form-12) ve `ek1_committee_decision`
-   (müdür onay kutusu) metinleri mevzuata göre değiştirildi — bunları OYS'ye "geri
+   (Form-15/17), `deadline_extension_record` (Form-12), `deadline_extension_petition`
+   (Form-13 OLUR bloğu) ve `ek1_committee_decision` (müdür onay kutusu) metinleri
+   mevzuata göre değiştirildi; `return_letter`, `district_referral_letter`,
+   `approval_request_letter`, `precaution_mem_*` (M2 Grup 1) OYS'de yoktur, yeni eklendi — bunları OYS'ye "geri
    döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek

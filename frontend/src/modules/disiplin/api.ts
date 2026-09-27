@@ -671,6 +671,10 @@ export type DocumentType =
   | "WARNING_LETTER"
   | "PRECAUTION_NOTICE"
   | "BOARD_DECISION_NOTICE"
+  | "RETURN_LETTER"
+  | "DISTRICT_REFERRAL_LETTER"
+  | "APPROVAL_REQUEST_LETTER"
+  | "PRECAUTION_MEM_LETTER"
   | "OTHER";
 
 // Tüm belge türleri → Türkçe etiket (backend DocumentType ile birebir). Manuel belge
@@ -691,6 +695,10 @@ export const ALL_DOCUMENT_TYPES_TR: Record<DocumentType, string> = {
   WARNING_LETTER: "Müdür uyarısı yazısı (Form-01/02)",
   PRECAUTION_NOTICE: "Tedbir bildirimi (md. 175)",
   BOARD_DECISION_NOTICE: "Üst kurul kararı tebliği (md. 169/2-4)",
+  RETURN_LETTER: "Kurula iade yazısı (md. 197)",
+  DISTRICT_REFERRAL_LETTER: "İlçe kuruluna gönderme yazısı (md. 197)",
+  APPROVAL_REQUEST_LETTER: "Onaya sevk üst yazısı (md. 169/1)",
+  PRECAUTION_MEM_LETTER: "Tedbir MEM yazısı (md. 175)",
   OTHER: "Diğer",
 };
 
@@ -729,8 +737,15 @@ export const DOCUMENT_CATEGORIES: { label: string; types: DocumentType[] }[] = [
   { label: "Bilgi Alma Tutanakları", types: ["INFO_GATHERING"] },
   { label: "Çağrı / Davet Yazıları", types: ["STATEMENT_CALL", "DEFENSE_CALL", "MEETING_CALL"] },
   { label: "Müdür Uyarısı", types: ["WARNING_LETTER"] },
-  { label: "Tedbir / Süre Uzatma", types: ["PRECAUTION_NOTICE", "DEADLINE_EXTENSION"] },
+  {
+    label: "Tedbir / Süre Uzatma",
+    types: ["PRECAUTION_NOTICE", "PRECAUTION_MEM_LETTER", "DEADLINE_EXTENSION"],
+  },
   { label: "Kurul Kararı", types: ["COMMITTEE_DECISION"] },
+  {
+    label: "Onay / İade Yazıları",
+    types: ["RETURN_LETTER", "DISTRICT_REFERRAL_LETTER", "APPROVAL_REQUEST_LETTER"],
+  },
   { label: "Tebliğler", types: ["PENALTY_NOTICE", "PENALTY_DAYS_NOTICE", "BOARD_DECISION_NOTICE"] },
   { label: "İtiraz", types: ["APPEAL_LETTER"] },
   { label: OTHER_CATEGORY_LABEL, types: ["OTHER"] },
@@ -789,7 +804,13 @@ export type DocumentRecipient = "student" | "parent";
 
 // Form-7/8 bilgi toplama varyantı (öğrenciden / öğretmenden).
 // student/teacher: INFO_GATHERING (Form-7/8); record/petition: DEADLINE_EXTENSION (F-12/13).
-export type DocumentVariant = "student" | "teacher" | "record" | "petition";
+export type DocumentVariant =
+  | "student"
+  | "teacher"
+  | "record"
+  | "petition"
+  | "info" // md. 175/1 MEM bilgilendirme
+  | "extension"; // md. 175/2 uzatma onayı talebi
 export type VoteBasis = "UNANIMITY" | "MAJORITY";
 
 export interface DocumentGenerateBody {
@@ -957,6 +978,28 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     studentRequired: true,
     description: "Kimlik + karar + anlatı alanları + imzalar (tam otomatik, md. 163-170).",
   },
+  // --- M2 Grup 1 süreç yazıları (kayıttan dolu; resmî MEB örneği yok) ---
+  {
+    value: "RETURN_LETTER",
+    label: "Kurula iade yazısı (md. 197)",
+    studentRequired: true,
+    description:
+      "Müdürün uygun bulmadığı kararı bir defa daha görüşülmek üzere kurula iadesi; kayıtlı iade gerekçesi basılır. Yalnız iade kaydedilmiş kararda.",
+  },
+  {
+    value: "DISTRICT_REFERRAL_LETTER",
+    label: "İlçe kuruluna gönderme yazısı (md. 197)",
+    studentRequired: true,
+    description:
+      "Kurul ısrar edince dosyanın müdürün görüş ve teklifleriyle ilçe öğrenci disiplin kuruluna gönderilmesi (en geç 5 iş günü). Yalnız ilçeye sevk kaydedilmiş kararda.",
+  },
+  {
+    value: "APPROVAL_REQUEST_LETTER",
+    label: "Onaya sevk üst yazısı (md. 169/1)",
+    studentRequired: true,
+    description:
+      "Okul değiştirme (ilçe kurulu) / örgün eğitim dışına çıkarma (il kurulu) cezasının MEM aracılığıyla onaya sunulması (md. 169/1-2).",
+  },
   {
     value: "PENALTY_NOTICE",
     label: "Ceza/Karar tebliği (Form-14/15)",
@@ -1005,6 +1048,18 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Tedbir bildirimi (md. 175)",
     studentRequired: true,
     description: "Geçici uzaklaştırma bildirimi (mevzuattan türetilmiş; resmî MEB formu yok).",
+  },
+  {
+    value: "PRECAUTION_MEM_LETTER",
+    label: "Tedbir MEM yazısı (md. 175)",
+    studentRequired: true,
+    variantLabel: "Yazı türü",
+    variantOptions: [
+      { value: "info", label: "Millî eğitim müdürünü bilgilendirme (md. 175/1)" },
+      { value: "extension", label: "Uzatma onayı talebi — OLUR bloklu (md. 175/2)" },
+    ],
+    description:
+      "Tedbir kaydından dolu basılır. Uzatma talebinde süre ve gerekçe elle yazılır; en fazla iki uzatma.",
   },
 ];
 

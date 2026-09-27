@@ -35,6 +35,11 @@ class DocumentType(models.TextChoices):
     PRECAUTION_NOTICE = "PRECAUTION_NOTICE", "Tedbir bildirimi (md. 175)"
     COUNCIL_MEETING_MINUTES = "COUNCIL_MEETING_MINUTES", "Kurul toplantı tutanağı (md. 184/206)"
     BOARD_DECISION_NOTICE = "BOARD_DECISION_NOTICE", "Üst kurul kararı tebliği (md. 169/2-4)"
+    # M2 Grup 1 — süreç yazıları (kullanıcı kararı 27.09.2026; kayıttan dolu basılır).
+    RETURN_LETTER = "RETURN_LETTER", "Kurula iade yazısı (md. 197)"
+    DISTRICT_REFERRAL_LETTER = "DISTRICT_REFERRAL_LETTER", "İlçe kuruluna gönderme yazısı (md. 197)"
+    APPROVAL_REQUEST_LETTER = "APPROVAL_REQUEST_LETTER", "Onaya sevk üst yazısı (md. 169/1)"
+    PRECAUTION_MEM_LETTER = "PRECAUTION_MEM_LETTER", "Tedbir MEM yazısı (md. 175)"
     OTHER = "OTHER", "Diğer"
 
 

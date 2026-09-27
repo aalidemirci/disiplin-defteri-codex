@@ -764,3 +764,110 @@ def test_ek1_cezasiz_kararda_md197_iade_kutusu() -> None:
     assert "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" in text
     assert "gerektirmez (md. 191)" not in text
     assert "UYGUNDUR" not in text
+
+
+# ---------------------------------------------------------------------------
+# M2 Grup 1 — süreç yazıları (kullanıcı kararı 27.09.2026)
+# ---------------------------------------------------------------------------
+def _letter_text(case: DisciplineCase, sid: int, document_type: str, variant: str = "") -> str:
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=document_type,
+        generated_on=date(2026, 6, 1),
+        student_id=sid,
+        variant=variant,
+        log=False,
+    )
+    return " ".join(_pdf_text(pdf_bytes).split())
+
+
+def test_md197_iade_ve_ilceye_gonderme_yazilari() -> None:
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
+    )
+    with pytest.raises(ValueError, match="iade edilmemiş"):
+        _letter_text(case, sid, DocumentType.RETURN_LETTER)
+    services.record_principal_review(
+        d, action="RETURN", reason="Savunma alınmadan karar verilmiş.", decided_on=date(2026, 5, 21)
+    )
+    text = _letter_text(case, sid, DocumentType.RETURN_LETTER)
+    assert "Savunma alınmadan karar verilmiş." in text
+    assert "bir defa daha görüşülmek üzere" in text
+    assert "ALİ ÖRNEK" in text  # müdür imzası (kurulum sihirbazı)
+    with pytest.raises(ValueError, match="ilçe kuruluna gönderilmemiş"):
+        _letter_text(case, sid, DocumentType.DISTRICT_REFERRAL_LETTER)
+
+    services.record_principal_review(
+        d, action="REFER", reason="Ceza fiille orantısız.", decided_on=date(2026, 5, 26)
+    )
+    text = _letter_text(case, sid, DocumentType.DISTRICT_REFERRAL_LETTER)
+    assert "Savunma alınmadan karar verilmiş." in text  # iade gerekçesi
+    assert "Ceza fiille orantısız." in text  # görüş ve teklifler
+    assert "İlçeye sevk:" not in text  # iç işaret basılmaz
+    assert "görüşülmek ve karara bağlanmak üzere" in text
+
+
+def test_md169_1_onaya_sevk_yazisi_yalniz_ilce_il_onayli_cezada() -> None:
+    case, sid = _committee_case()
+    services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
+    )
+    with pytest.raises(ValueError, match="ilçe/il kurulu onayına"):
+        _letter_text(case, sid, DocumentType.APPROVAL_REQUEST_LETTER)
+    d = case.decisions.get()
+    services.update_decision(
+        d, penalty_type=PenaltyType.SCHOOL_CHANGE, decision_date=date(2026, 5, 20)
+    )
+    text = _letter_text(case, sid, DocumentType.APPROVAL_REQUEST_LETTER)
+    assert "(b) bendi uyarınca ilçe öğrenci disiplin kurulunun" in text
+    services.update_decision(d, penalty_type=PenaltyType.EXPULSION, decision_date=date(2026, 5, 20))
+    text = _letter_text(case, sid, DocumentType.APPROVAL_REQUEST_LETTER)
+    assert "(c) bendi uyarınca il öğrenci disiplin kurulunun" in text
+
+
+def test_md175_mem_bilgilendirme_ve_uzatma_onayi_yazisi() -> None:
+    case, sid = _committee_case()
+    with pytest.raises(ValueError, match="tedbir"):
+        _letter_text(case, sid, DocumentType.PRECAUTION_MEM_LETTER, "info")
+    p = services.create_precaution(
+        case, student_id=sid, start_date=date(2026, 5, 20), requested_days=5
+    )
+    info = _letter_text(case, sid, DocumentType.PRECAUTION_MEM_LETTER, "info")
+    assert "20.05.2026" in info and "5 iş günü" in info
+    ext = _letter_text(case, sid, DocumentType.PRECAUTION_MEM_LETTER, "extension")
+    assert "1. kez" in ext and "OLUR" in ext
+    services.extend_precaution(p, additional_days=3, mne_notified=True)
+    services.extend_precaution(p, additional_days=3, mne_notified=True)
+    with pytest.raises(ValueError, match="iki kez"):
+        _letter_text(case, sid, DocumentType.PRECAUTION_MEM_LETTER, "extension")
+
+
+def test_md192_3_form13_mudur_olur_blogu() -> None:
+    case, _sid = _committee_case()
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.DEADLINE_EXTENSION,
+        generated_on=date(2026, 5, 25),
+        variant="petition",
+        log=False,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "OLUR" in text and "ALİ ÖRNEK" in text
+
+
+def test_surec_yazilari_kutuge_ve_kategoriye_girer() -> None:
+    case, sid = _committee_case()
+    services.create_precaution(case, student_id=sid, start_date=date(2026, 5, 20), requested_days=5)
+    _pdf, record = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.PRECAUTION_MEM_LETTER,
+        generated_on=date(2026, 5, 20),
+        student_id=sid,
+        variant="info",
+    )
+    assert record is not None
+    assert record.title == "Tedbir Millî Eğitim Müdürlüğü Yazısı (md. 175)"
+    assert record.sort_order == 6  # tedbir bildiriminin (5) hemen ardı
+    groups = doc_engine.categorized_documents([record])
+    assert groups[0]["label"] == "Tedbir / Süre Uzatma"

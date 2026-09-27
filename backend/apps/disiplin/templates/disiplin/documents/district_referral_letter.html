@@ -1,0 +1,64 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 197 ilçe öğrenci disiplin kuruluna gönderme yazısı — M2 Grup 1 (kullanıcı
+kararı 27.09.2026). Resmî MEB örneği yoktur; md. 197 "kurul kararında ısrar ederse müdür
+görüş ve tekliflerini de ekleyerek dosyayı ... en geç beş iş günü içinde ilçe öğrenci
+disiplin kuruluna gönderir" metninden türetildi. Muhatap merci satırı elle netleştirilir;
+ilk iade tarihi kayıtta tutulmadığından (returned_at sevk tarihiyle güncellenir) boş.{% endcomment %}
+{% block content %}
+<div class="doc-title">DİSİPLİN DOSYASININ İLÇE KURULUNA GÖNDERİLMESİ</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 197</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{% if decision.returned_at %}{{ decision.returned_at|date:'d.m.Y' }}{% else %}{{ generated_at|date:'d.m.Y' }}{% endif %}</td></tr>
+  <tr>
+    <td class="label">Konu</td>
+    <td>Disiplin dosyası ({{ student.full_name }})</td>
+  </tr>
+  <tr>
+    <td class="label">İlgi</td>
+    <td class="narr">a) {{ decision.decision_date|date:'d.m.Y' }} tarihli ve {{ decision.decision_no|default:'………' }} sayılı Okul Öğrenci Ödül ve Disiplin Kurulu Kararı
+b) Müdürlüğümüzün …/…/202… tarihli kurula iade yazısı
+c) MEB Ortaöğretim Kurumları Yönetmeliği Madde 197</td>
+  </tr>
+</table>
+
+<p class="para" style="margin-top: 14pt; text-align: center;">
+  <strong>……………… İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
+  <span class="muted" style="font-style: normal;">(İlçe Öğrenci Disiplin Kurulu)</span>
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong> hakkında İlgi (a) karar ile verilen
+  "<strong>{{ decision.get_penalty_type_display }}</strong>" kararı ({{ statute_label }})
+  tarafımca uygun bulunmayarak İlgi (b) yazı ile bir defa daha görüşülmek üzere kurula iade
+  edilmiş; okul öğrenci ödül ve disiplin kurulu kararında ısrar etmiştir.
+</p>
+
+<div class="section">
+  <div class="section-title">İADE GEREKÇESİ</div>
+  <div class="field-box" style="white-space: pre-wrap;">{{ return_reason_text }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">MÜDÜRÜN GÖRÜŞ VE TEKLİFLERİ</div>
+  <div class="field-box" style="white-space: pre-wrap;">{{ refer_reason_text }}</div>
+</div>
+
+<p class="para">
+  Yönetmeliğin 197. maddesi uyarınca disiplin dosyası, görüş ve tekliflerimle birlikte
+  <strong>görüşülmek ve karara bağlanmak üzere</strong> ekte sunulmuştur.
+</p>
+
+<p class="para">Bilgilerinizi ve gereğini arz ederim.</p>
+
+<div class="signature">
+  <div class="date">{% if decision.returned_at %}{{ decision.returned_at|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<p class="para" style="margin-top: 18pt;"><strong>Ek:</strong> Disiplin dosyası (EK-1 karar, iade yazısı ve kurulun ısrar kararı dahil)</p>
+{% endblock %}
