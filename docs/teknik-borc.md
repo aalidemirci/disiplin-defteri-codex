@@ -27,7 +27,6 @@ Son güncelleme: 24.09.2026.
 | K4 | **FE'de global 423 yakalayıcı yok** (`lib/api.ts`) | Kilit yalnız açılışta ve "Şimdi kilitle" ile ekrana yansır; süreç ömrü boyunca anahtar bellekte olduğundan pratikte 423 ancak başka bir pencereden kilitlenirse görülür |
 | K5 | **Gerekçeler saklanmıyor** (aşama geri alma, erken kapatma) | Tasarım AuditLog'u bilinçli kaldırdı ("tek kullanıcı; evrak kütüğü yeter"). UI artık saklandığı yönünde vaat VERMİYOR; kalıcı iz isteyen kullanıcı evrak kütüğüne manuel kayıt ekler |
 | K7 | **`backend/` pakete kaynak ağaç olarak girer** (donmuş arşive değil) | `desktop/paths.py::resolve_backend_dir()` gerçek `settings.py` dosyası arıyor. Bedeli: backend'in üçüncü taraf import'ları spec'te elle `hiddenimports` sayılmalı — yeni bağımlılık eklenirse spec de güncellenmeli |
-| K8 | **npm üretim denetiminde React Router için 2 orta seviye bildirim** | Düzeltme React Router 7'ye kırıcı yükseltme gerektiriyor. Uygulama SSR kullanmaz, yalnız sabit yerel rotalarda ve `127.0.0.1` içinde çalışır; yükseltme ayrı uyumluluk çalışması olarak yapılacak |
 
 ## Açık mevzuat kalemleri (2026-09 gözden geçirmesinden kalan)
 
@@ -48,6 +47,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| K8 npm üretim denetiminde React Router için 2 orta seviye bildirim | KAPANDI (kayıt 27.09.2026) — `react-router-dom` 2026.7.0-beta.1 sürümünde 7.18.2'ye yükseltilmişti; kalem güncellenmemişti. `npm audit --omit=dev`: 0 açık. Kullanılan API (MemoryRouter/BrowserRouter, Routes/Route, Link/NavLink, use* kancaları) v7'de değişmedi; 396 arayüz testi yeşil |
 | K6 12. sınıflar yıl devrinde "Ayrıldı" (`LEFT`) olarak işaretleniyordu | KAPANDI 27.09.2026 — `StudentStatus.GRADUATED` ("Mezun", okul 0006). Yıl devri mezunu buna çevirir. Ayrım biçimsel değil: "Ayrıldı" nakil demektir ve md. 157/7-d tekil (nakil) imhasını ders yılı içinde serbest bırakır; mezun ise yıl sonu kuralına tabidir. Eski "Ayrıldı + 12. sınıf" kayıtları otomatik çevrilmez (nakil mi mezun mu ayırt edilemez); gerekirse öğrenci kartından elle düzeltilir |
 | D7 Argon2 cffi ikilisinin pakette toplandığı hiç sınanmıyordu (`--autotest` parolasız koşar) | KAPANDI 27.09.2026 — `--kripto-duman` teşhis kipi (`packaging/pyinstaller/giris.py`): pakette gerçek KDF parametreleriyle Argon2id türetme + zarf sarmalama + `EncryptedTextField` yazma/okuma; Linux derlemesi, debian:11/12 kurulum provası ve Windows derlemesi bunu koşar (çıkış 9 = zincir bozuk). `--autotest`'e parola adımı yerine ayrı kip seçildi: açılış zincirine veri dizininde `guvenlik.json` bırakan bir test adımı sokmamak için |
 | M2 Grup 3 Form-01 (md. 157/7-a değerlendirme ve öneri formu) yoktu | KAPANDI 27.09.2026 — GUIDANCE_ASSESSMENT: sınıf rehber + rehber öğretmen imzalı, önceki cezalar ("ilk defa" koşulu) ve uyarı özeti dolu, müdür GÖRÜLDÜ; md. 157/7-d imhasına girer. Form-01 kimliği yönetmelik metninden çıkarıldı (saha örneğiyle doğrulanmalı) |
