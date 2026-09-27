@@ -44,6 +44,11 @@ class DocumentType(models.TextChoices):
     PARENT_MEETING = "PARENT_MEETING", "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)"
     SEARCH_RECORD = "SEARCH_RECORD", "Arama tutanağı (md. 158/3)"
     NON_COMPLIANCE_RECORD = "NON_COMPLIANCE_RECORD", "İfade/savunma vermedi tespiti (md. 195)"
+    # M2 Grup 3 — md. 157/7-a değerlendirme ve öneri formu (Form-01).
+    GUIDANCE_ASSESSMENT = (
+        "GUIDANCE_ASSESSMENT",
+        "Rehberlik değerlendirme ve öneri formu (Form-01, md. 157/7-a)",
+    )
     OTHER = "OTHER", "Diğer"
 
 

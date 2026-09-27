@@ -99,6 +99,7 @@ describe("generatableTypesFor — Dal A belge filtresi", () => {
   it("Dal A: yalnız Form-02 + tedbir bildirimi listelenir", () => {
     const values = generatableTypesFor("A").map((t) => t.value);
     expect(values.sort()).toEqual([
+      "GUIDANCE_ASSESSMENT",
       "PARENT_MEETING",
       "PRECAUTION_MEM_LETTER",
       "PRECAUTION_NOTICE",

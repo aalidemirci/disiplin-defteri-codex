@@ -33,7 +33,8 @@
    (Form-13 OLUR bloğu) ve `ek1_committee_decision` (müdür onay kutusu) metinleri
    mevzuata göre değiştirildi; `return_letter`, `district_referral_letter`,
    `approval_request_letter`, `precaution_mem_*` (M2 Grup 1) ile `parent_*`,
-   `search_record`, `non_compliance_record` (M2 Grup 2) OYS'de yoktur, yeni eklendi — bunları OYS'ye "geri
+   `search_record`, `non_compliance_record` (M2 Grup 2), `guidance_assessment` (Form-01)
+   OYS'de yoktur, yeni eklendi — bunları OYS'ye "geri
    döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek

@@ -1,0 +1,58 @@
+{% extends "documents/base.html" %}
+{% comment %}Form-01 — md. 157/7-a rehberlik değerlendirme ve öneri formu. M2 Grup 3 (kullanıcı
+kararı 27.09.2026). Resmî MEB örneği depoda yoktur; "sınıf/şube rehber öğretmeni ile rehber
+öğretmenin birlikte yapacakları değerlendirme ve önerileri ile okul müdürü tarafından ... yazılı
+uyarı yapılır" metninden türetildi (yazılı uyarı = Form-02). "Daha önce disiplin cezası almamış
+olmak kaydıyla ... ilk defa" koşulu için yürürlükteki önceki cezalar basılır. Değerlendirme ve
+öneriler ELLE yazılır; imha md. 157/7-d kapsamında.{% endcomment %}
+{% block content %}
+<div class="doc-title">REHBERLİK DEĞERLENDİRME VE ÖNERİ FORMU</div>
+<div class="doc-subtitle">Form-01 · MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-a</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Öğrenci</td><td>{{ student.full_name }} · {{ student.class_label }} · No {{ student.student_number }}</td></tr>
+  <tr>
+    <td class="label">Önceki Disiplin Cezası</td>
+    <td>{% if prior_penalties %}{% for d in prior_penalties %}{{ d.get_penalty_type_display }} ({{ d.decision_date|date:'d.m.Y' }}){% if not forloop.last %}; {% endif %}{% endfor %} — md. 157/7 usulü uygulanamaz, kurula sevk edilir.{% else %}Yok (md. 157/7 "daha önce disiplin cezası almamış olmak" koşulu){% endif %}</td>
+  </tr>
+</table>
+
+<div class="section">
+  <div class="section-title">KINAMA CEZASINI GEREKTİREN DAVRANIŞ</div>
+  <div class="field-box" style="white-space: pre-wrap; min-height: 2cm;">{% if warning and warning.summary %}{{ warning.summary }}{% endif %}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">DEĞERLENDİRME (öğrencinin kişisel, ailevi ve sosyal durumu; davranışın koşulları)</div>
+  <div class="field-box" style="min-height: 4.5cm;"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">ÖNERİLER</div>
+  <div class="field-box" style="white-space: normal; min-height: 3cm;">
+    ☐ Davranışlarında kusurlu olduğuna yönelik dikkatinin çekilmesi amacıyla <strong>yazılı uyarı</strong> yapılması (md. 157/7-a)<br>
+    ☐ Sosyal sorumluluk programı çalışmasıyla ilişkilendirilmesi (md. 157/7-c)<br>
+    ☐ Diğer: ………………………………………………………………………………
+  </div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+  </tr>
+  <tr>
+    <td><div class="name">{{ class_teacher_name|default:'……………………' }}</div><div class="role">Sınıf/Şube Rehber Öğretmeni</div></td>
+    <td><div class="name">{{ guidance_teacher_name|default:'……………………' }}</div><div class="role">Rehber Öğretmen</div></td>
+  </tr>
+</table>
+
+<div class="signature" style="margin-left: auto; margin-right: auto; margin-top: 18pt;">
+  <div class="name">GÖRÜLDÜ</div>
+  <div class="date">…/…/202…</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+{% endblock %}

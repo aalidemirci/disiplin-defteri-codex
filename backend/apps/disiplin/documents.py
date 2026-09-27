@@ -42,6 +42,7 @@ from apps.disiplin.models import (
     CaseStage,
     CouncilDecisionBasis,
     DisciplineCase,
+    DisciplineDecision,
     DocumentType,
     GeneratedDocument,
     ParticipantRole,
@@ -108,6 +109,8 @@ DOC_TEMPLATES: dict[str, str] = {
     # M2 Grup 2 tutanakları (kullanıcı kararı 27.09.2026) — künye/antet dolu, beyan elle.
     DocumentType.SEARCH_RECORD: "disiplin/documents/search_record.html",
     DocumentType.NON_COMPLIANCE_RECORD: "disiplin/documents/non_compliance_record.html",
+    # M2 Grup 3 — md. 157/7-a Form-01 (yazılı uyarıdan ÖNCEKİ rehberlik değerlendirmesi).
+    DocumentType.GUIDANCE_ASSESSMENT: "disiplin/documents/guidance_assessment.html",
 }
 
 # Alıcıya göre değişen belgeler (öğrenci sürümü varsayılan; veli ayrı şablon).
@@ -185,6 +188,7 @@ DOC_TITLES: dict[str, str] = {
     DocumentType.APPROVAL_REQUEST_LETTER: "Onaya Sevk Üst Yazısı (md. 169/1)",
     DocumentType.PRECAUTION_MEM_LETTER: "Tedbir Millî Eğitim Müdürlüğü Yazısı (md. 175)",
     DocumentType.PARENT_MEETING: "Veli Görüşmesi (md. 157/7-b)",
+    DocumentType.GUIDANCE_ASSESSMENT: "Rehberlik Değerlendirme ve Öneri Formu (Form-01)",
     DocumentType.SEARCH_RECORD: "Arama Tutanağı (md. 158/3)",
     DocumentType.NON_COMPLIANCE_RECORD: "İfade/Savunma Vermedi Tespit Tutanağı (md. 195)",
 }
@@ -204,6 +208,7 @@ STUDENT_REQUIRED: frozenset[str] = frozenset(
         DocumentType.APPROVAL_REQUEST_LETTER,
         DocumentType.PRECAUTION_MEM_LETTER,
         DocumentType.PARENT_MEETING,
+        DocumentType.GUIDANCE_ASSESSMENT,
     }
 )
 
@@ -229,6 +234,7 @@ CANONICAL_DOC_ORDER: dict[str, int] = {
     DocumentType.PRECAUTION_NOTICE: 5,  # tedbir (md. 175, acele)
     DocumentType.PRECAUTION_MEM_LETTER: 6,  # tedbir MEM bildirimi/uzatma onayı (md. 175)
     DocumentType.SEARCH_RECORD: 3,  # arama tutanağı (md. 158/3 — olay tespiti, en başta)
+    DocumentType.GUIDANCE_ASSESSMENT: 8,  # rehberlik değerlendirmesi Form-01 (md. 157/7-a)
     DocumentType.WARNING_LETTER: 10,  # müdür uyarısı Form-01/02 (md. 157/7)
     DocumentType.PARENT_MEETING: 12,  # veli daveti/görüşme/gelmedi (md. 157/7-b)
     DocumentType.STATEMENT_CALL: 20,  # ifadeye çağrı Form-3
@@ -292,7 +298,16 @@ DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
             {DocumentType.STATEMENT_CALL, DocumentType.DEFENSE_CALL, DocumentType.MEETING_CALL}
         ),
     ),
-    ("Müdür Uyarısı", frozenset({DocumentType.WARNING_LETTER, DocumentType.PARENT_MEETING})),
+    (
+        "Müdür Uyarısı",
+        frozenset(
+            {
+                DocumentType.GUIDANCE_ASSESSMENT,
+                DocumentType.WARNING_LETTER,
+                DocumentType.PARENT_MEETING,
+            }
+        ),
+    ),
     ("Arama Tutanakları", frozenset({DocumentType.SEARCH_RECORD})),
     (
         "Tedbir / Süre Uzatma",
@@ -520,6 +535,7 @@ _BRANCH_A_ALLOWED: frozenset[str] = frozenset(
         DocumentType.PRECAUTION_NOTICE,
         DocumentType.PRECAUTION_MEM_LETTER,
         DocumentType.PARENT_MEETING,
+        DocumentType.GUIDANCE_ASSESSMENT,
         DocumentType.SEARCH_RECORD,
         DocumentType.INDEX_SHEET,
     }
@@ -988,6 +1004,28 @@ def _parent_meeting_context(
     }
 
 
+def _guidance_assessment_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """md. 157/7-a Form-01 — sınıf rehber + rehber öğretmenin değerlendirme ve önerileri.
+
+    "Daha önce disiplin cezası almamış olmak kaydıyla ... ilk defa" koşulu için
+    yürürlükteki önceki cezalar (`penalties_in_force`) listelenir; davranış özeti
+    uyarı kaydından (yoksa elle).
+    """
+    warning = case.warnings.filter(student_id=student.pk).order_by("-warning_date", "-pk").first()
+    prior = list(
+        selectors.penalties_in_force(
+            DisciplineDecision.objects.filter(student_id=student.pk).exclude(case=case)
+        ).order_by("decision_date")
+    )
+    return {
+        **_common_context(case, unit=""),
+        "student": _student_context(student),
+        "warning": warning,
+        "prior_penalties": prior,
+        **_class_staff_context(student),
+    }
+
+
 def _search_record_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """md. 158/3 arama tutanağı — iki nüsha; gerekçe/yer/bulunanlar elle, müdür onaylı."""
     return {
@@ -1186,6 +1224,7 @@ _STUDENT_CONTEXT_BUILDERS: dict[str, _StudentContextBuilder] = {
     DocumentType.DISTRICT_REFERRAL_LETTER: _md197_letter_context,
     DocumentType.APPROVAL_REQUEST_LETTER: _approval_request_context,
     DocumentType.PRECAUTION_MEM_LETTER: _precaution_mem_context,
+    DocumentType.GUIDANCE_ASSESSMENT: _guidance_assessment_context,
 }
 
 

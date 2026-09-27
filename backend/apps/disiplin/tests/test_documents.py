@@ -985,3 +985,22 @@ def test_md158_3_arama_tutanagi_ve_md195_tespit_tutanagi() -> None:
     text = " ".join(_pdf_text(pdf_bytes).split())
     assert "EMRE CAN YILMAZ" in text
     assert "dosyada bulunan bilgi ve belgelere göre karar verilir" in text
+
+
+def test_md157_7a_form01_degerlendirme_ve_oneri_formu() -> None:
+    """M2 Grup 3: Form-01 Dal A'da üretilir; önceki ceza yoksa "Yok" basar, uyarı özeti dolu."""
+    case, sid = _warning_only_case()
+    pdf_bytes, record = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.GUIDANCE_ASSESSMENT,
+        generated_on=date(2026, 5, 19),
+        student_id=sid,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "REHBERLİK DEĞERLENDİRME VE ÖNERİ FORMU" in text
+    assert "Yok (md. 157/7" in text and "geç" in text
+    assert record is not None and record.sort_order == 8
+    from apps.disiplin.selectors import purge as purge_selectors
+
+    docs = purge_selectors.warning_letter_documents(case_id=case.pk, student_id=sid)
+    assert [d.document_type for d in docs] == [DocumentType.GUIDANCE_ASSESSMENT]

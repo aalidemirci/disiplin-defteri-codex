@@ -678,6 +678,7 @@ export type DocumentType =
   | "PARENT_MEETING"
   | "SEARCH_RECORD"
   | "NON_COMPLIANCE_RECORD"
+  | "GUIDANCE_ASSESSMENT"
   | "OTHER";
 
 // Tüm belge türleri → Türkçe etiket (backend DocumentType ile birebir). Manuel belge
@@ -705,6 +706,7 @@ export const ALL_DOCUMENT_TYPES_TR: Record<DocumentType, string> = {
   PARENT_MEETING: "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)",
   SEARCH_RECORD: "Arama tutanağı (md. 158/3)",
   NON_COMPLIANCE_RECORD: "İfade/savunma vermedi tespiti (md. 195)",
+  GUIDANCE_ASSESSMENT: "Rehberlik değerlendirme ve öneri formu (Form-01, md. 157/7-a)",
   OTHER: "Diğer",
 };
 
@@ -742,7 +744,7 @@ export const DOCUMENT_CATEGORIES: { label: string; types: DocumentType[] }[] = [
   { label: "Savunmalar", types: ["DEFENSE_RECORD", "NON_COMPLIANCE_RECORD"] },
   { label: "Bilgi Alma Tutanakları", types: ["INFO_GATHERING"] },
   { label: "Çağrı / Davet Yazıları", types: ["STATEMENT_CALL", "DEFENSE_CALL", "MEETING_CALL"] },
-  { label: "Müdür Uyarısı", types: ["WARNING_LETTER", "PARENT_MEETING"] },
+  { label: "Müdür Uyarısı", types: ["GUIDANCE_ASSESSMENT", "WARNING_LETTER", "PARENT_MEETING"] },
   { label: "Arama Tutanakları", types: ["SEARCH_RECORD"] },
   {
     label: "Tedbir / Süre Uzatma",
@@ -1067,6 +1069,13 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Tedbir bildirimi (md. 175)",
     studentRequired: true,
     description: "Geçici uzaklaştırma bildirimi (mevzuattan türetilmiş; resmî MEB formu yok).",
+  },
+  {
+    value: "GUIDANCE_ASSESSMENT",
+    label: "Rehberlik değerlendirme ve öneri formu (Form-01)",
+    studentRequired: true,
+    description:
+      "Yazılı uyarıdan önce sınıf rehber öğretmeni ile rehber öğretmenin değerlendirme ve önerileri (md. 157/7-a). Önceki cezalar ve uyarı özeti dolu; değerlendirme elle. Ders yılı sonunda imha edilir.",
   },
   {
     value: "PARENT_MEETING",

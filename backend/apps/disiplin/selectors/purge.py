@@ -266,7 +266,8 @@ def purgeable_case_items() -> list[PurgeCaseItem]:
 def warning_letter_documents(
     *, case_id: int, student_id: int | None = None
 ) -> list[GeneratedDocument]:
-    """Uyarı yazısı (Form-01/02) ve veli görüşmesi (md. 157/7-b) kütük satırları —
+    """Değerlendirme formu (Form-01), uyarı yazısı (Form-02) ve veli görüşmesi (md.
+    157/7-b) kütük satırları —
     silinmişler dahil. md. 157/7-d: "yazılı uyarı ile veli görüşmesine ilişkin"
     belgeler birlikte imha edilir.
 
@@ -274,7 +275,11 @@ def warning_letter_documents(
     """
     qs = GeneratedDocument.all_objects.filter(
         case_id=case_id,
-        document_type__in=[DocumentType.WARNING_LETTER, DocumentType.PARENT_MEETING],
+        document_type__in=[
+            DocumentType.GUIDANCE_ASSESSMENT,
+            DocumentType.WARNING_LETTER,
+            DocumentType.PARENT_MEETING,
+        ],
     )
     if student_id is not None:
         qs = qs.filter(student_id=student_id)
