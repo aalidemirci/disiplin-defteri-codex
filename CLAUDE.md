@@ -317,8 +317,9 @@ hiç açılmadı (D3) · paketlenmiş ikili üzerinden gerçek evrak üretimi (D
 yükseltme yolu (D5) · Windows başlatıcı yolları: ikinci kopya kilit çakışması,
 WebView2 yokluğu (D6). (D7 Argon2 paketi 27.09.2026'da `--kripto-duman` ile kapandı.)
 
-*Kabul edilmiş bedeller:* K1-K5, K7-K8 → §6 tablosunda karşılıkları var (K6 27.09.2026'da
-`GRADUATED` "Mezun" durumuyla kapandı; "Ayrıldı" artık yalnız nakil demektir).
+*Kabul edilmiş bedeller:* K1-K5, K7 → §6 tablosunda karşılıkları var (K6 27.09.2026'da
+`GRADUATED` "Mezun" durumuyla kapandı; "Ayrıldı" artık yalnız nakil demektir. K8 React
+Router 7'ye yükseltmeyle kapandı; `npm audit --omit=dev` 0 açık).
 
 Windows tarafında ayrıca `packaging/windows/NOTLAR.md` W1-W9 doğrulanmamış
 varsayım listesi tutuyor.
