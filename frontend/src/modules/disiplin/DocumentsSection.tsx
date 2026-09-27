@@ -1146,7 +1146,7 @@ function GenerateDocumentForm({
       {meta.scheduling && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <TextField
-            label="Çağrı/toplantı tarihi"
+            label="Tarih (çağrı, görüşme, arama)"
             type="date"
             value={statementDate}
             onChange={(e) => setStatementDate(e.target.value)}

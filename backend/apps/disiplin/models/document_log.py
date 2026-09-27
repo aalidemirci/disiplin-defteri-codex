@@ -40,6 +40,10 @@ class DocumentType(models.TextChoices):
     DISTRICT_REFERRAL_LETTER = "DISTRICT_REFERRAL_LETTER", "İlçe kuruluna gönderme yazısı (md. 197)"
     APPROVAL_REQUEST_LETTER = "APPROVAL_REQUEST_LETTER", "Onaya sevk üst yazısı (md. 169/1)"
     PRECAUTION_MEM_LETTER = "PRECAUTION_MEM_LETTER", "Tedbir MEM yazısı (md. 175)"
+    # M2 Grup 2 — tutanaklar (kullanıcı kararı 27.09.2026; künye dolu, beyan elle).
+    PARENT_MEETING = "PARENT_MEETING", "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)"
+    SEARCH_RECORD = "SEARCH_RECORD", "Arama tutanağı (md. 158/3)"
+    NON_COMPLIANCE_RECORD = "NON_COMPLIANCE_RECORD", "İfade/savunma vermedi tespiti (md. 195)"
     OTHER = "OTHER", "Diğer"
 
 

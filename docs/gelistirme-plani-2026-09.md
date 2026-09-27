@@ -59,7 +59,7 @@ Durum işaretleri: ✅ yapıldı · ⏸ bilinçli olarak ertelendi (`docs/teknik
 Ayrıntı `docs/teknik-borc.md` M1-M8. Özet:
 
 - **M1 AYNEN şablon metinleri:** ✅ kapandı (26.09.2026) — Form-18, Form-15/17, Form-12 ve EK-1 kullanıcı kararlarıyla düzeltildi.
-- **M2 eksik resmî belgeler:** Grup 1 (süreç yazıları) ✅; Grup 2 (tutanaklar) ve Grup 3
+- **M2 eksik resmî belgeler:** Grup 1 (süreç yazıları) ✅; Grup 2 (tutanaklar) ✅; Grup 3
   (Form-01) sırada.
 - **M5 imha:** ✅ kapandı — zamanlama engeli; yedek kopyası ve çok öğrencili nakil
   kapsamı bilinçli olarak kabul edildi.
@@ -138,6 +138,11 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
     uzatma onayı (OLUR bloklu) yazıları; Form-13'e müdür OLUR bloğu (md. 192/3).
     Migrasyon: `disiplin 0009` (belge türü seçenekleri).
 
+17. **Eksik belgeler — Grup 2 tamam:** md. 157/7-b veli davet yazısı / görüşme tutanağı /
+    gelmedi tutanağı (sınıf rehber ve rehber öğretmen Ayarlar > Sınıf sorumlularından),
+    md. 158/3 arama tutanağı (iki nüsha, müdür onaylı), md. 195 ifade/savunma vermedi
+    tespit tutanağı. Migrasyon: `disiplin 0010`.
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"
@@ -147,4 +152,5 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
   türüyle girin; yalnız uzaklaştırma günlerinde atlanır, yasal süreleri etkilemez.
 - Migrasyonlar: `disiplin 0006_decision_legal_fields`, `disiplin 0007_decision_md166_override`,
   `disiplin 0008_honor_event_undone`, `disiplin 0009_process_letters`,
+  `disiplin 0010_records_group2`,
   `okul 0005_holiday_school_break` (yalnız alan ekleme / seçenek; veri dönüştürmez).

@@ -46,6 +46,8 @@ const BRANCH_A_DOC_TYPES: ReadonlySet<string> = new Set([
   "WARNING_LETTER",
   "PRECAUTION_NOTICE",
   "PRECAUTION_MEM_LETTER",
+  "PARENT_MEETING",
+  "SEARCH_RECORD",
 ]);
 
 /** Dosyanın dalına göre üretilebilir belge türü listesi (yalnız UI filtresi). */

@@ -105,6 +105,9 @@ DOC_TEMPLATES: dict[str, str] = {
     DocumentType.RETURN_LETTER: "disiplin/documents/return_letter.html",
     DocumentType.DISTRICT_REFERRAL_LETTER: "disiplin/documents/district_referral_letter.html",
     DocumentType.APPROVAL_REQUEST_LETTER: "disiplin/documents/approval_request_letter.html",
+    # M2 Grup 2 tutanakları (kullanıcı kararı 27.09.2026) — künye/antet dolu, beyan elle.
+    DocumentType.SEARCH_RECORD: "disiplin/documents/search_record.html",
+    DocumentType.NON_COMPLIANCE_RECORD: "disiplin/documents/non_compliance_record.html",
 }
 
 # Alıcıya göre değişen belgeler (öğrenci sürümü varsayılan; veli ayrı şablon).
@@ -140,6 +143,10 @@ VARIANT_PETITION = "petition"
 # uzatma onayı talebi (175/2 "millî eğitim müdürünün onayına bağlı olarak").
 VARIANT_MEM_INFO = "info"
 VARIANT_MEM_EXTENSION = "extension"
+# md. 157/7-b veli süreci: davet yazısı / görüşme tutanağı / gelmedi tutanağı.
+VARIANT_PARENT_INVITE = "invite"
+VARIANT_PARENT_MEETING = "meeting"
+VARIANT_PARENT_NO_SHOW = "no_show"
 DOC_TEMPLATES_BY_VARIANT: dict[str, dict[str, str]] = {
     DocumentType.DEADLINE_EXTENSION: {
         VARIANT_RECORD: "disiplin/documents/deadline_extension_record.html",  # Form-12
@@ -148,6 +155,11 @@ DOC_TEMPLATES_BY_VARIANT: dict[str, dict[str, str]] = {
     DocumentType.PRECAUTION_MEM_LETTER: {
         VARIANT_MEM_INFO: "disiplin/documents/precaution_mem_info.html",
         VARIANT_MEM_EXTENSION: "disiplin/documents/precaution_mem_extension.html",
+    },
+    DocumentType.PARENT_MEETING: {
+        VARIANT_PARENT_INVITE: "disiplin/documents/parent_invite.html",
+        VARIANT_PARENT_MEETING: "disiplin/documents/parent_meeting_record.html",
+        VARIANT_PARENT_NO_SHOW: "disiplin/documents/parent_no_show_record.html",
     },
 }
 
@@ -172,6 +184,9 @@ DOC_TITLES: dict[str, str] = {
     DocumentType.DISTRICT_REFERRAL_LETTER: "İlçe Kuruluna Gönderme Yazısı (md. 197)",
     DocumentType.APPROVAL_REQUEST_LETTER: "Onaya Sevk Üst Yazısı (md. 169/1)",
     DocumentType.PRECAUTION_MEM_LETTER: "Tedbir Millî Eğitim Müdürlüğü Yazısı (md. 175)",
+    DocumentType.PARENT_MEETING: "Veli Görüşmesi (md. 157/7-b)",
+    DocumentType.SEARCH_RECORD: "Arama Tutanağı (md. 158/3)",
+    DocumentType.NON_COMPLIANCE_RECORD: "İfade/Savunma Vermedi Tespit Tutanağı (md. 195)",
 }
 
 # Öğrenci-özgü belgeler (öğrenci zorunlu) — dizi pusulası HARİÇ hepsi öğrenciye özgü.
@@ -188,6 +203,7 @@ STUDENT_REQUIRED: frozenset[str] = frozenset(
         DocumentType.DISTRICT_REFERRAL_LETTER,
         DocumentType.APPROVAL_REQUEST_LETTER,
         DocumentType.PRECAUTION_MEM_LETTER,
+        DocumentType.PARENT_MEETING,
     }
 )
 
@@ -201,6 +217,7 @@ PARTICIPANT_REQUIRED: frozenset[str] = frozenset(
         DocumentType.INFO_GATHERING,
         DocumentType.DEFENSE_CALL,
         DocumentType.DEFENSE_RECORD,
+        DocumentType.NON_COMPLIANCE_RECORD,
     }
 )
 
@@ -211,13 +228,16 @@ PARTICIPANT_REQUIRED: frozenset[str] = frozenset(
 CANONICAL_DOC_ORDER: dict[str, int] = {
     DocumentType.PRECAUTION_NOTICE: 5,  # tedbir (md. 175, acele)
     DocumentType.PRECAUTION_MEM_LETTER: 6,  # tedbir MEM bildirimi/uzatma onayı (md. 175)
+    DocumentType.SEARCH_RECORD: 3,  # arama tutanağı (md. 158/3 — olay tespiti, en başta)
     DocumentType.WARNING_LETTER: 10,  # müdür uyarısı Form-01/02 (md. 157/7)
+    DocumentType.PARENT_MEETING: 12,  # veli daveti/görüşme/gelmedi (md. 157/7-b)
     DocumentType.STATEMENT_CALL: 20,  # ifadeye çağrı Form-3
     DocumentType.STATEMENT_RECORD: 30,  # ifade tutanağı Form-4/5/6
     DocumentType.INFO_GATHERING: 40,  # bilgi toplama Form-7/8
     DocumentType.DEFENSE_CALL: 50,  # savunmaya çağrı Form-9
     DocumentType.MEETING_CALL: 60,  # kurul toplantı çağrısı Form-10
     DocumentType.DEFENSE_RECORD: 70,  # savunma tutanağı Form-11
+    DocumentType.NON_COMPLIANCE_RECORD: 75,  # ifade/savunma vermedi tespiti (md. 195)
     DocumentType.DEADLINE_EXTENSION: 80,  # süre uzatma Form-12/13
     DocumentType.COMMITTEE_DECISION: 90,  # EK-1 kurul kararı
     DocumentType.RETURN_LETTER: 92,  # md. 197 kurula iade
@@ -264,7 +284,7 @@ INFO_GATHERING_SOURCES: tuple[str, ...] = (
 _OTHER_CATEGORY = "Diğer Evrak"
 DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("İfadeler", frozenset({DocumentType.STATEMENT_RECORD})),
-    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD})),
+    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD, DocumentType.NON_COMPLIANCE_RECORD})),
     ("Bilgi Alma Tutanakları", frozenset({DocumentType.INFO_GATHERING})),
     (
         "Çağrı / Davet Yazıları",
@@ -272,7 +292,8 @@ DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
             {DocumentType.STATEMENT_CALL, DocumentType.DEFENSE_CALL, DocumentType.MEETING_CALL}
         ),
     ),
-    ("Müdür Uyarısı", frozenset({DocumentType.WARNING_LETTER})),
+    ("Müdür Uyarısı", frozenset({DocumentType.WARNING_LETTER, DocumentType.PARENT_MEETING})),
+    ("Arama Tutanakları", frozenset({DocumentType.SEARCH_RECORD})),
     (
         "Tedbir / Süre Uzatma",
         frozenset(
@@ -498,6 +519,8 @@ _BRANCH_A_ALLOWED: frozenset[str] = frozenset(
         DocumentType.WARNING_LETTER,
         DocumentType.PRECAUTION_NOTICE,
         DocumentType.PRECAUTION_MEM_LETTER,
+        DocumentType.PARENT_MEETING,
+        DocumentType.SEARCH_RECORD,
         DocumentType.INDEX_SHEET,
     }
 )
@@ -922,6 +945,69 @@ def _precaution_mem_context(case: DisciplineCase, student: Any) -> dict[str, Any
     }
 
 
+# --- M2 Grup 2 tutanakları (kullanıcı kararı 27.09.2026) ---
+
+
+def _class_staff_context(student: Any) -> dict[str, Any]:
+    """Öğrencinin şubesinin sınıf rehber öğretmeni / rehber öğretmeni / müdür yardımcısı.
+
+    Ayarlar > Sınıf sorumluları eşleştirmesinden (aktif ders yılı); yoksa boş (elle).
+    """
+    from apps.okul import selectors as okul_selectors
+
+    row = None
+    if student.class_level is not None and student.class_section:
+        row = (
+            okul_selectors.class_responsibilities()
+            .filter(class_level=student.class_level, class_section=student.class_section)
+            .first()
+        )
+
+    def _name(person: Any) -> str:
+        return person.full_name if person is not None else ""
+
+    return {
+        "class_teacher_name": _name(row.class_teacher) if row else "",
+        "guidance_teacher_name": _name(row.guidance_teacher) if row else "",
+        "assistant_principal_name": _name(row.assistant_principal) if row else "",
+    }
+
+
+def _parent_meeting_context(
+    case: DisciplineCase, student: Any, extra: dict[str, Any]
+) -> dict[str, Any]:
+    """md. 157/7-b veli daveti / görüşme / gelmedi tutanağı — veli + sınıf sorumluları."""
+    warning = case.warnings.filter(student_id=student.pk).order_by("-warning_date", "-pk").first()
+    return {
+        **_common_context(case, unit=""),  # müdür işlemi (Dal A)
+        "student": _student_context(student),
+        "parent": _parent_context(student),
+        "warning": warning,
+        **_class_staff_context(student),
+        **_schedule_context(extra),
+    }
+
+
+def _search_record_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
+    """md. 158/3 arama tutanağı — iki nüsha; gerekçe/yer/bulunanlar elle, müdür onaylı."""
+    return {
+        **_common_context(case, unit=""),
+        **_schedule_context(extra),
+    }
+
+
+def _non_compliance_context(
+    case: DisciplineCase, participant: Any, extra: dict[str, Any]
+) -> dict[str, Any]:
+    """md. 195 tespit tutanağı — ifade vermeyen / savunmada bulunmayan / gelmeyen kişi."""
+    return {
+        **_common_context(case),
+        **_committee_with_members_context(case),
+        "participant": _participant_context(participant),
+        **_schedule_context(extra),
+    }
+
+
 # --- Dal B ifade/savunma/bilgi formları (Tur 106) — katılımcı + kurul + geçici alanlar ---
 
 
@@ -1082,6 +1168,7 @@ _PARTICIPANT_CONTEXT_BUILDERS: dict[str, _ParticipantContextBuilder] = {
     DocumentType.INFO_GATHERING: _info_gathering_context,
     DocumentType.DEFENSE_CALL: _defense_call_context,
     DocumentType.DEFENSE_RECORD: _defense_record_context,
+    DocumentType.NON_COMPLIANCE_RECORD: _non_compliance_context,
 }
 
 
@@ -1120,6 +1207,10 @@ def _build_context(
         return _meeting_call_context(case, extra)
     if document_type == DocumentType.DEADLINE_EXTENSION:
         return _deadline_extension_context(case, extra)
+    if document_type == DocumentType.PARENT_MEETING:
+        return _parent_meeting_context(case, student, extra)
+    if document_type == DocumentType.SEARCH_RECORD:
+        return _search_record_context(case, extra)
     participant_builder = _PARTICIPANT_CONTEXT_BUILDERS.get(document_type)
     if participant_builder is not None:
         return participant_builder(case, participant, extra)

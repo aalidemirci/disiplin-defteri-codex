@@ -1,0 +1,59 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 157/7-b veli davet yazısı — M2 Grup 2 (kullanıcı kararı 27.09.2026). Resmî MEB
+örneği yoktur; "okul yönetimi, öğrencinin olumsuz davranışları sürdürmesi hâlinde veliyi okula
+davet eder" metninden türetildi. Veli adı sicilden (sorumlu veli), görüşme tarih/saat/yeri
+GEÇİCİ alanlardan (DB'ye yazılmaz). md. 157/7-ç: e-Okul'a işlenmez; 157/7-d: ders yılı sonunda
+imha edilir (imha aracı kapsamında).{% endcomment %}
+{% block content %}
+<div class="doc-title">VELİ DAVET YAZISI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-b</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Tarih</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
+  <tr><td class="label">Konu</td><td>Veli görüşmesine davet ({{ student.full_name }})</td></tr>
+</table>
+
+<p class="para" style="margin-top: 14pt;">
+  <strong>Sayın {{ parent.full_name|default:'……………………………' }}</strong>{% if parent.kinship_display %}<br>
+  ({{ parent.kinship_display }}){% endif %}
+</p>
+
+<p class="para">
+  Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
+  <strong>{{ student.full_name }}</strong>{% if warning %}, {{ warning.warning_date|date:'d.m.Y' }}
+  tarihinde yazılı olarak uyarılmış olmasına rağmen{% endif %} olumsuz davranışlarını sürdürmektedir.
+  Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin 157. maddesinin 7. fıkrasının (b)
+  bendi uyarınca, öğrencinizin olumsuz davranışları ve uygulanabilecek yaptırımlar hakkında sınıf
+  rehber öğretmeni ve rehber öğretmenin katılımıyla görüşme yapılacaktır.
+</p>
+
+<table class="info flush">
+  <tr>
+    <td class="label">Görüşme Tarihi</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}</td>
+  </tr>
+  <tr><td class="label">Saat</td><td>{{ statement_time|default:'……' }}</td></tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Okul Müdürlüğü' }}</td></tr>
+</table>
+
+<p class="para">
+  Belirtilen tarih ve saatte okulumuza gelmenizi rica ederim. Gelmemeniz durumunda tutanak
+  tutulacağını bilgilerinize sunarım.
+</p>
+
+<div class="signature">
+  <div class="date">{{ generated_at|date:'d.m.Y' }}</div>
+  <div class="sig-line"></div>
+  <div class="name">{{ principal_name|default:'……………………………' }}</div>
+  <div class="role">Okul Müdürü</div>
+</div>
+
+<div class="section" style="margin-top: 18pt;">
+  <div class="section-title">TEBELLÜĞ</div>
+  <div class="field-box" style="white-space: normal;">
+    İşbu yazıyı …/…/202… tarihinde tebellüğ ettim.<br><br>
+    Veli Adı Soyadı: {{ parent.full_name|default:'……………………………' }} &nbsp;&nbsp; İmza: ……………………
+  </div>
+</div>
+{% endblock %}

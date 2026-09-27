@@ -38,7 +38,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 | # | Kalem | Neden bırakıldı |
 |---|---|---|
 | M1 | ~~AYNEN şablon metinleri~~ | KAPANDI 26.09.2026 — kullanıcı kararlarıyla Form-18, Form-15/17, Form-12 ve EK-1 müdür onay kutusu düzeltildi (ayrıntı aşağıda "Kapanmış"). Bu dört formda OYS birebir paritesi bilinçli olarak bırakıldı |
-| M2 | **Eksik resmî belgeler:** Grup 2 tutanaklar (157/7-b veli davet/görüşme/gelmeme, 158/3 arama, 195 tespit) ve Grup 3 Form-01 (157/7-a) (Grup 1 süreç yazıları 27.09.2026'da eklendi — aşağıda) | Yeni şablon + saha örneği gerektirir |
+| M2 | **Eksik resmî belgeler:** Grup 3 Form-01 (157/7-a) (Grup 1 süreç yazıları ve Grup 2 tutanaklar 27.09.2026'da eklendi — aşağıda) | Saha örneği gerektirir |
 | M3 | ~~md. 180/181 onur kurulu~~ | KAPANDI 26.09.2026 — md. 181/1 üyelik düşmesi uyarısı ve md. 180 kompozisyon kuralları eklendi (aşağıda) |
 | M4 | ~~md. 166 / 168/5 uyarıları~~ | KAPANDI 26.09.2026 — md. 166 kuralı eklendi (aşağıda); md. 168/5 (zihinsel engel/otizm) için bilinçli olarak alan EKLENMEDİ: kullanıcı kararıyla bu bilgi e-Okul/RAM kaydında tutulur ve kurulca dikkate alınır; özel nitelikli kişisel veri (KVKK md. 6) programda toplanmaz |
 | M5 | ~~İmha~~ | KAPANDI 27.09.2026 — ders yılı ortası imha engellendi; yedeklerde kalan kopya ve çok öğrencili dosyada nakil imhasının dar kapsamı kullanıcı kararıyla kabul edildi (aşağıda) |
@@ -50,6 +50,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| M2 Grup 2 tutanaklar yoktu: md. 157/7-b veli davet/görüşme/gelmedi, md. 158/3 arama, md. 195 tespit | KAPANDI 27.09.2026 — 3 yeni belge türü (veli: 3 sürüm); künye, veli ve sınıf sorumluları dolu, beyan elle. Veli görüşmesi belgeleri md. 157/7-d gereği nakil imhasına da girer |
 | M2 Grup 1 süreç yazıları yoktu: md. 197 iade ve ilçeye gönderme, md. 169/1 onaya sevk, md. 175 MEM bilgilendirme/uzatma onayı, md. 192/3 müdür OLUR bloğu | KAPANDI 27.09.2026 — kullanıcı kararıyla (C, sırayla) 4 yeni belge türü + Form-13 OLUR bloğu; kayıttan dolu basılır, yanlış aşamada üretilmez. Resmî MEB örneği yok — saha örneği gelirse metin uyarlanır |
 | Tekil (nakil) imha çok öğrencili dosyada yalnız uyarı kaydı + uyarı yazısını siliyor; dosya bağı, katılımcı kaydı ve diğer kütük satırları kalıyor (M5 alt kalemi) | KABUL EDİLDİ 27.09.2026 — kullanıcı kararıyla (C) dokunulmadı: md. 157/7-d imha konusu uyarı belgeleridir; diğer öğrencilerin dosyası bütünlüğünü korur |
 | İmha edilen veri 14 günlük otomatik yedeklerde kalıyor (M5 alt kalemi) | KABUL EDİLDİ 27.09.2026 — kullanıcı kararıyla (C) dokunulmadı: yedekler şifreli (`.ddbak`, yalnız kurtarma anahtarıyla açılır) ve 14 günde kendiliğinden döner; geri dönüş noktalarını korumak öncelikli |

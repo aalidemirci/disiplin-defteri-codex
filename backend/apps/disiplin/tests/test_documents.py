@@ -871,3 +871,117 @@ def test_surec_yazilari_kutuge_ve_kategoriye_girer() -> None:
     assert record.sort_order == 6  # tedbir bildiriminin (5) hemen ardı
     groups = doc_engine.categorized_documents([record])
     assert groups[0]["label"] == "Tedbir / Süre Uzatma"
+
+
+# ---------------------------------------------------------------------------
+# M2 Grup 2 — tutanaklar (kullanıcı kararı 27.09.2026)
+# ---------------------------------------------------------------------------
+def _warning_only_case() -> tuple[DisciplineCase, int]:
+    SchoolYearFactory()
+    _setup_school()
+    s = StudentFactory(
+        first_name="EMRE CAN",
+        last_name="YILMAZ",
+        class_level=10,
+        class_section="A",
+        guardian_name="AYŞE YILMAZ",
+        guardian_kinship="ANNE",
+    )
+    case = services.create_case(
+        petition_date=date(2026, 5, 18),
+        petitioner_name="İdare",
+        petitioner_role="IDARE",
+        summary="x",
+        student_ids=[s.pk],
+    )
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 19),
+        override=True,
+        override_reason="atla",
+        principal_decisions=[PrincipalDecision.WRITTEN_WARNING],
+    )
+    services.issue_warning(case, student_id=s.pk, warning_date=date(2026, 5, 19), summary="geç")
+    return case, s.pk
+
+
+def test_md157_7b_veli_davet_gorusme_gelmedi_dal_a_da_uretilir() -> None:
+    from apps.okul.models import ClassResponsibility, Personnel, SchoolYear
+
+    case, sid = _warning_only_case()
+    rehber = Personnel.objects.create(first_name="REHBER", last_name="ÖĞRETMEN")
+    ClassResponsibility.objects.create(
+        school_year=SchoolYear.objects.get(is_active=True),
+        class_level=10,
+        class_section="A",
+        guidance_teacher=rehber,
+    )
+
+    def text(variant: str) -> str:
+        pdf_bytes, _ = doc_engine.generate_document(
+            case,
+            document_type=DocumentType.PARENT_MEETING,
+            generated_on=date(2026, 5, 25),
+            student_id=sid,
+            variant=variant,
+            statement_date=date(2026, 5, 27),
+            statement_time="10:00",
+            log=False,
+        )
+        return " ".join(_pdf_text(pdf_bytes).split())
+
+    invite = text("invite")
+    assert "VELİ DAVET YAZISI" in invite and "AYŞE YILMAZ" in invite
+    assert "27.05.2026" in invite and "19.05.2026 tarihinde yazılı olarak uyarılmış" in invite
+    meeting = text("meeting")
+    assert "VELİ GÖRÜŞME TUTANAĞI" in meeting and "REHBER ÖĞRETMEN" in meeting
+    no_show = text("no_show")
+    assert "gelmemiştir" in no_show
+
+
+def test_md157_7d_veli_gorusmesi_nakil_imhasinda_silinir() -> None:
+    from apps.disiplin.selectors import purge as purge_selectors
+
+    case, sid = _warning_only_case()
+    doc_engine.generate_document(
+        case,
+        document_type=DocumentType.PARENT_MEETING,
+        generated_on=date(2026, 5, 25),
+        student_id=sid,
+        variant="meeting",
+    )
+    docs = purge_selectors.warning_letter_documents(case_id=case.pk, student_id=sid)
+    assert [d.document_type for d in docs] == [DocumentType.PARENT_MEETING]
+
+
+def test_md158_3_arama_tutanagi_ve_md195_tespit_tutanagi() -> None:
+    from apps.disiplin.models import DisciplineParticipant, ParticipantRole
+
+    case, sid = _committee_case()
+    pdf_bytes, record = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.SEARCH_RECORD,
+        generated_on=date(2026, 5, 20),
+        statement_place="10/A sınıfı dolapları",
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "ARAMA TUTANAĞI" in text and "İki nüsha" in text
+    assert "10/A sınıfı dolapları" in text and "ONAYLANDI" in text
+    assert record is not None and record.student_id is None
+
+    participant = DisciplineParticipant.objects.filter(
+        case=case, student_id=sid, role=ParticipantRole.ACCUSED
+    ).first() or services.add_participant(
+        case, role=ParticipantRole.ACCUSED, person_type="STUDENT", person_id=sid
+    )
+    pdf_bytes, _ = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.NON_COMPLIANCE_RECORD,
+        generated_on=date(2026, 5, 21),
+        participant_id=participant.pk,
+        log=False,
+    )
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    assert "EMRE CAN YILMAZ" in text
+    assert "dosyada bulunan bilgi ve belgelere göre karar verilir" in text

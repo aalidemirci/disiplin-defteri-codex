@@ -1,0 +1,45 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 157/7-b "velinin toplantıya gelmemesi durumunda tutanak tutulur" — M2 Grup 2
+(kullanıcı kararı 27.09.2026). Resmî MEB örneği yoktur; metinden türetildi. Görüşme tarih/saat/
+yeri GEÇİCİ alanlardan; imzalar sınıf sorumlularından (yoksa boş).{% endcomment %}
+{% block content %}
+<div class="doc-title">VELİNİN GÖRÜŞMEYE GELMEDİĞİNE DAİR TUTANAK</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7-b</div>
+
+<table class="info">
+  <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Öğrenci</td><td>{{ student.full_name }} · {{ student.class_label }} · No {{ student.student_number }}</td></tr>
+  <tr><td class="label">Veli</td><td>{{ parent.full_name|default:'……………………………' }}{% if parent.kinship_display %} ({{ parent.kinship_display }}){% endif %}</td></tr>
+  <tr>
+    <td class="label">Davet Edilen Tarih / Saat</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} · {{ statement_time|default:'……' }}</td>
+  </tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Okul Müdürlüğü' }}</td></tr>
+</table>
+
+<p class="para">
+  Yukarıda kimliği yazılı öğrencinin velisi, öğrencinin olumsuz davranışları ve uygulanabilecek
+  yaptırımlar hakkında görüşmek üzere Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin
+  157. maddesinin 7. fıkrasının (b) bendi uyarınca belirtilen tarih ve saatte okula davet edilmiş;
+  davet ……………………………………… yoluyla …/…/202… tarihinde tebliğ edilmiş olmasına rağmen
+  görüşmeye <strong>gelmemiştir</strong>. İşbu tutanak birlikte düzenlenerek imza altına alınmıştır.
+</p>
+
+<div class="section">
+  <div class="section-title">AÇIKLAMA</div>
+  <div class="field-box" style="min-height: 3cm;"></div>
+</div>
+
+<table class="sig-grid">
+  <tr>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+    <td><div class="space"></div><div class="line"></div></td>
+  </tr>
+  <tr>
+    <td><div class="name">{{ class_teacher_name|default:'……………………' }}</div><div class="role">Sınıf Rehber Öğretmeni</div></td>
+    <td><div class="name">{{ guidance_teacher_name|default:'……………………' }}</div><div class="role">Rehber Öğretmen</div></td>
+    <td><div class="name">{{ assistant_principal_name|default:'……………………' }}</div><div class="role">Müdür Yardımcısı</div></td>
+  </tr>
+</table>
+{% endblock %}

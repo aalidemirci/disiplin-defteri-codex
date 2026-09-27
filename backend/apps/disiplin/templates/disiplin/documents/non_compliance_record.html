@@ -1,0 +1,47 @@
+{% extends "documents/base.html" %}
+{% comment %}md. 195 tespit tutanağı — M2 Grup 2 (kullanıcı kararı 27.09.2026). Resmî MEB örneği
+yoktur; "ifade vermeyen, savunmada bulunmayan veya çağrıldığı hâlde gelmeyen öğrencilerin durumu
+bir tutanakla tespit edilir. Bunlardan okul öğrenci ödül ve disiplin kuruluna sevk edilenler
+hakkında 194/3 uygulanır" metninden türetildi. Kişi dosya katılımcısından; durum kutusu elle
+işaretlenir; kurul imza ızgarası Form-11 ile ortak.{% endcomment %}
+{% block content %}
+<div class="doc-title">İFADE / SAVUNMA VERMEDİĞİNE DAİR TESPİT TUTANAĞI</div>
+<div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 195</div>
+
+<table class="info">
+  <tr><td class="label">Dosya No</td><td>{{ case.case_no }}</td></tr>
+  <tr><td class="label">Adı Soyadı</td><td>{{ participant.name|default:'…………………………' }}</td></tr>
+  <tr><td class="label">Sıfatı</td><td>{{ participant.role_display|default:'……' }}</td></tr>
+  {% if participant.class_label %}<tr><td class="label">Sınıfı ve No</td><td>{{ participant.class_label }} / {{ participant.student_number|default:'……' }}</td></tr>{% endif %}
+  <tr>
+    <td class="label">Çağrı Tarihi / Saati</td>
+    <td>{% if statement_date %}{{ statement_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} · {{ statement_time|default:'……' }}</td>
+  </tr>
+  <tr><td class="label">Yer</td><td>{{ statement_place|default:'Müdür Yardımcısı Odası' }}</td></tr>
+</table>
+
+<p class="para">Yukarıda kimliği yazılı kişi, yazılı ve imza karşılığı yapılan çağrıya rağmen:</p>
+
+<p class="para" style="margin-left: 12pt;">
+  ☐ İfade vermemiştir.<br>
+  ☐ Savunmada bulunmamıştır.<br>
+  ☐ Çağrıldığı hâlde belirtilen gün ve saatte gelmemiştir. (Özrü: ……………………………………)
+</p>
+
+<p class="para">
+  Durum Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin 195. maddesi uyarınca işbu
+  tutanakla tespit edilmiştir. Okul öğrenci ödül ve disiplin kuruluna sevk edilen öğrenci
+  hakkında 194. maddenin 3. fıkrası uyarınca <strong>dosyada bulunan bilgi ve belgelere göre
+  karar verilir</strong>.
+</p>
+
+<div class="section">
+  <div class="section-title">AÇIKLAMA</div>
+  <div class="field-box" style="min-height: 2.5cm;"></div>
+</div>
+
+<div class="section" style="margin-top: 8pt;">
+  <div class="section-title">TESPİT EDENLER</div>
+</div>
+{% include "disiplin/documents/_defense_record_committee_grid.html" %}
+{% endblock %}

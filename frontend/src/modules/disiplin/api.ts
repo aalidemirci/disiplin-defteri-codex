@@ -675,6 +675,9 @@ export type DocumentType =
   | "DISTRICT_REFERRAL_LETTER"
   | "APPROVAL_REQUEST_LETTER"
   | "PRECAUTION_MEM_LETTER"
+  | "PARENT_MEETING"
+  | "SEARCH_RECORD"
+  | "NON_COMPLIANCE_RECORD"
   | "OTHER";
 
 // Tüm belge türleri → Türkçe etiket (backend DocumentType ile birebir). Manuel belge
@@ -699,6 +702,9 @@ export const ALL_DOCUMENT_TYPES_TR: Record<DocumentType, string> = {
   DISTRICT_REFERRAL_LETTER: "İlçe kuruluna gönderme yazısı (md. 197)",
   APPROVAL_REQUEST_LETTER: "Onaya sevk üst yazısı (md. 169/1)",
   PRECAUTION_MEM_LETTER: "Tedbir MEM yazısı (md. 175)",
+  PARENT_MEETING: "Veli daveti / görüşme / gelmedi tutanağı (md. 157/7-b)",
+  SEARCH_RECORD: "Arama tutanağı (md. 158/3)",
+  NON_COMPLIANCE_RECORD: "İfade/savunma vermedi tespiti (md. 195)",
   OTHER: "Diğer",
 };
 
@@ -733,10 +739,11 @@ export interface GeneratedDocument {
 const OTHER_CATEGORY_LABEL = "Diğer Evrak";
 export const DOCUMENT_CATEGORIES: { label: string; types: DocumentType[] }[] = [
   { label: "İfadeler", types: ["STATEMENT_RECORD"] },
-  { label: "Savunmalar", types: ["DEFENSE_RECORD"] },
+  { label: "Savunmalar", types: ["DEFENSE_RECORD", "NON_COMPLIANCE_RECORD"] },
   { label: "Bilgi Alma Tutanakları", types: ["INFO_GATHERING"] },
   { label: "Çağrı / Davet Yazıları", types: ["STATEMENT_CALL", "DEFENSE_CALL", "MEETING_CALL"] },
-  { label: "Müdür Uyarısı", types: ["WARNING_LETTER"] },
+  { label: "Müdür Uyarısı", types: ["WARNING_LETTER", "PARENT_MEETING"] },
+  { label: "Arama Tutanakları", types: ["SEARCH_RECORD"] },
   {
     label: "Tedbir / Süre Uzatma",
     types: ["PRECAUTION_NOTICE", "PRECAUTION_MEM_LETTER", "DEADLINE_EXTENSION"],
@@ -810,7 +817,10 @@ export type DocumentVariant =
   | "record"
   | "petition"
   | "info" // md. 175/1 MEM bilgilendirme
-  | "extension"; // md. 175/2 uzatma onayı talebi
+  | "extension" // md. 175/2 uzatma onayı talebi
+  | "invite" // md. 157/7-b veli davet yazısı
+  | "meeting" // md. 157/7-b veli görüşme tutanağı
+  | "no_show"; // md. 157/7-b veli gelmedi tutanağı
 export type VoteBasis = "UNANIMITY" | "MAJORITY";
 
 export interface DocumentGenerateBody {
@@ -940,6 +950,15 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
       "Suçlanan öğrenciyi savunma vermeye çağırır; tarih/saat/yer girilir, tebliğ-tebellüğ (md. 194).",
   },
   {
+    value: "NON_COMPLIANCE_RECORD",
+    label: "İfade/savunma vermedi tespiti (md. 195)",
+    studentRequired: false,
+    participantRequired: true,
+    scheduling: true,
+    description:
+      "İfade vermeyen, savunmada bulunmayan veya çağrıldığı hâlde gelmeyen kişinin durumunu tespit eden tutanak; kurul imzalı. Kurula sevkli öğrenci için dosyadaki belgelere göre karar verilir (md. 194/3).",
+  },
+  {
     value: "MEETING_CALL",
     label: "Kurul toplantı çağrısı (Form-10)",
     studentRequired: false,
@@ -1048,6 +1067,28 @@ export const GENERATABLE_DOCUMENT_TYPES: GeneratableDocType[] = [
     label: "Tedbir bildirimi (md. 175)",
     studentRequired: true,
     description: "Geçici uzaklaştırma bildirimi (mevzuattan türetilmiş; resmî MEB formu yok).",
+  },
+  {
+    value: "PARENT_MEETING",
+    label: "Veli daveti / görüşme / gelmedi (md. 157/7-b)",
+    studentRequired: true,
+    scheduling: true,
+    variantLabel: "Belge",
+    variantOptions: [
+      { value: "invite", label: "Veli davet yazısı" },
+      { value: "meeting", label: "Veli görüşme tutanağı" },
+      { value: "no_show", label: "Veli gelmedi tutanağı" },
+    ],
+    description:
+      "Yazılı uyarıya rağmen olumsuz davranış sürerse veli daveti ve görüşmesi (md. 157/7-b). Görüşme tarih/saat/yeri girilir; sınıf rehber ve rehber öğretmen Ayarlar > Sınıf sorumlularından gelir. e-Okul'a işlenmez, ders yılı sonunda imha edilir.",
+  },
+  {
+    value: "SEARCH_RECORD",
+    label: "Arama tutanağı (md. 158/3)",
+    studentRequired: false,
+    scheduling: true,
+    description:
+      "Okul, sıra, masa, dolap vb. aramasının gerekçesi, aranan yerler ve bulunan malzemeler için iki nüsha tutanak; müdür onaylı (md. 158/2-3). 'Yer' alanı aranan yere yazılır; diğer kısımlar elle.",
   },
   {
     value: "PRECAUTION_MEM_LETTER",
