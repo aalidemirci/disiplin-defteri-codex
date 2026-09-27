@@ -28,15 +28,19 @@ from apps.okul.services.calendar import is_working_day
 def committee_referred_on(case: DisciplineCase) -> date | None:
     """Dosyanın kurula sevk edildiği gün (md. 192/3 "kurula gelişi") — yoksa None.
 
-    Kurula sevk = müdürün DISCIPLINE_COMMITTEE içeren DECIDED kararı; en erken
-    böyle olayın `event_date`'i alınır. (JSON contains SQLite'ta yok — Python.)
+    Kurula sevk = müdürün DISCIPLINE_COMMITTEE içeren DECIDED kararı. Aşama geri
+    alınıp müdür kararı yeniden verilmişse YALNIZ SON müdür kararı geçerlidir
+    (kullanıcı kararı 27.09.2026): konu kurula fiilen son sevkte gelir; son karar
+    sevk değilse (ör. yazılı uyarıya dönüldüyse) dosya sevkli sayılmaz.
+    (JSON contains SQLite'ta yok — Python.)
     """
-    events: QuerySet[DisciplineEvent] = case.events.filter(stage=CaseStage.DECIDED).order_by(
-        "event_date", "recorded_at"
+    latest: DisciplineEvent | None = (
+        case.events.filter(stage=CaseStage.DECIDED).order_by("-event_date", "-recorded_at").first()
     )
-    for event in events:
-        if PrincipalDecision.DISCIPLINE_COMMITTEE in (event.principal_decisions or []):
-            return event.event_date
+    if latest is not None and PrincipalDecision.DISCIPLINE_COMMITTEE in (
+        latest.principal_decisions or []
+    ):
+        return latest.event_date
     return None
 
 

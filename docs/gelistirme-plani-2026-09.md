@@ -146,6 +146,21 @@ Ara tatilde uzaklaştırma araştırması ve kalan şablon metinleri için tek t
 18. **Eksik belgeler — Grup 3 tamam (M2 kapandı):** md. 157/7-a Form-01 rehberlik
     değerlendirme ve öneri formu. Migrasyon: `disiplin 0011`.
 
+27.09.2026 kod denetiminden (13 kusur, PR #12) kalan üç yorum sorusu:
+
+19. **Yeniden sevkte son sevk esas (A):** aşama geri alınıp dosya kurula yeniden
+    sevk edilirse md. 192/3 kurul süresi ve "karar sevkten önce olamaz" denetimi
+    SON müdür kararına göre işler (`selectors.committee_referred_on`); son karar
+    sevk değilse dosya sevkli sayılmaz.
+20. **md. 172/2-ç bekletmesi (A — uyarı + doğru kayıt):** okul değiştirme cezası
+    onayla uygulanır; süresinde itiraz edilirse itiraz sonuçlanana kadar
+    uygulanmaz (`is_enforced=False`, kartta "Uygulama bekletiliyor" uyarısı),
+    onanır/değiştirilirse yeniden uygulanır.
+21. **Kapalı dosyada kapanış dayanağı kilitli (A):** onay, tebliğ, kurula iade /
+    ilçeye sevk, karar düzenleme/silme/geri yükleme kapalı dosyada reddedilir
+    (düğmeleri de gizli); süre dışı itiraz ve sonucu, e-Okul işlendi, md. 171/2
+    ceza kaldırma serbesttir. Düzeltme için dosya önce yeniden açılır.
+
 ## Geçiş notları (kullanıcıya etkisi)
 
 - Mevcut veritabanında **onaysız ama tebliğ edilmiş** kararlar artık "kesin"

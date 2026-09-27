@@ -462,6 +462,48 @@ describe("DecisionsSection — 27.09.2026 denetim bulguları", () => {
     await waitFor(() => expect(dapi.resolveAppeal).toHaveBeenCalledTimes(1));
   });
 
+  it("okul değiştirmede süresinde itiraz varken 'uygulama bekletiliyor' uyarısı çıkar (md. 172/2-ç)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...onayli,
+          penalty_type: "SCHOOL_CHANGE",
+          appeals: [itiraz()],
+        } as Partial<DisciplineDecision>),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText(/Uygulama bekletiliyor/)).toBeInTheDocument();
+  });
+
+  it("süre dışı itirazda bekletme uyarısı çıkmaz", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...onayli,
+          penalty_type: "SCHOOL_CHANGE",
+          appeals: [{ ...itiraz(), within_deadline: false }],
+        } as Partial<DisciplineDecision>),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText(/Tebliğ: /);
+    expect(screen.queryByText(/Uygulama bekletiliyor/)).toBeNull();
+  });
+
+  it("kapalı dosyada onay/tebliğ/düzenleme düğmeleri sunulmaz, itiraz sunulur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...onayli })],
+      behavior_points: {},
+    });
+    renderSection(makeCase({ closed_at: "2026-04-01T10:00:00+03:00" }));
+    await screen.findByText(/Tebliğ: /);
+    expect(screen.queryByRole("button", { name: /Tebliği düzelt|Onay durumu|Düzenle/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /İtiraz/ })).toBeInTheDocument();
+  });
+
   it("ceza kaldırmayı geri alma hatası kullanıcıya gösterilir", async () => {
     dapi.listDecisions.mockResolvedValue({
       decisions: [

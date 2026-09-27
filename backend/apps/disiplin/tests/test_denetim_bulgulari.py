@@ -17,6 +17,7 @@ from apps.disiplin.models import (
     AppealResult,
     CaseStage,
     DisciplineCase,
+    DisciplineDecision,
     PenaltyType,
     PrincipalDecision,
 )
@@ -258,3 +259,119 @@ def test_dk1_tutanak_sonrasi_eklenen_ogrenci_imha_kapsamini_bozar() -> None:
         with pytest.raises(ValueError, match="kapsamı değişti"):
             purge_service.execute(token=record.token, confirmed=True)
     assert DisciplineWarning.all_objects.filter(student_id=kalan.pk).exists()
+
+
+# --- Karar 1 (27.09.2026): yeniden sevkte kurul süresi SON sevkten işler (md. 192/3)
+def test_karar1_yeniden_sevkte_son_sevk_esas() -> None:
+    case, sid = _committee_case()  # ilk sevk 19.05
+    services.revert_stage(case, target_stage=CaseStage.PETITION, reason="rehberliğe dönüldü")
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 6, 1),
+        override=True,
+        override_reason="r",
+        principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
+    )
+    assert selectors.committee_referred_on(case) == date(2026, 6, 1)
+    with pytest.raises(ValueError, match="sevk"):
+        services.record_decision(
+            case,
+            student_id=sid,
+            penalty_type=PenaltyType.REPRIMAND,
+            decision_date=date(2026, 5, 25),
+        )
+
+
+def test_karar1_sevk_geri_alinip_uyariya_donerse_sevk_yok() -> None:
+    case, _sid = _committee_case()
+    services.revert_stage(case, target_stage=CaseStage.PETITION, reason="yanlış giriş")
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 20),
+        override=True,
+        override_reason="r",
+        principal_decisions=[PrincipalDecision.WRITTEN_WARNING],
+    )
+    assert selectors.committee_referred_on(case) is None
+
+
+# --- Karar 2 (27.09.2026): okul değiştirmede süresinde itiraz → uygulama bekler (md. 172/2-ç)
+def _okul_degistirme_teblig() -> DisciplineDecision:
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case,
+        student_id=sid,
+        penalty_type=PenaltyType.SCHOOL_CHANGE,
+        decision_date=date(2026, 5, 22),
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 25))
+    d.refresh_from_db()
+    return d
+
+
+def test_karar2_okul_degistirme_onayla_uygulanir_itirazla_bekler_onanirsa_doner() -> None:
+    d = _okul_degistirme_teblig()
+    assert d.is_enforced is True
+    appeal = services.file_appeal(d, filed_on=date(2026, 5, 26), filed_by_role="PARENT")
+    d.refresh_from_db()
+    assert d.is_enforced is False  # itiraz sonuçlanana kadar ceza uygulanmaz
+    services.resolve_appeal(appeal, result=AppealResult.UPHELD, resulted_on=date(2026, 6, 5))
+    d.refresh_from_db()
+    assert d.is_enforced is True
+
+
+def test_karar2_suresi_disinda_itiraz_uygulamayi_durdurmaz() -> None:
+    d = _okul_degistirme_teblig()
+    services.file_appeal(d, filed_on=date(2026, 6, 20), filed_by_role="PARENT")
+    d.refresh_from_db()
+    assert d.is_enforced is True
+
+
+def test_karar2_itiraz_degistirirse_yeni_ceza_uygulanir() -> None:
+    d = _okul_degistirme_teblig()
+    appeal = services.file_appeal(d, filed_on=date(2026, 5, 26), filed_by_role="PARENT")
+    services.resolve_appeal(
+        appeal,
+        result=AppealResult.REDUCED,
+        resulted_on=date(2026, 6, 5),
+        new_penalty_type=PenaltyType.REPRIMAND,
+    )
+    d.refresh_from_db()
+    assert d.penalty_type == PenaltyType.REPRIMAND
+    assert d.is_enforced is True
+
+
+# --- Karar 3 (27.09.2026): kapalı dosyada kapanış dayanağı kilitli ------------------
+def _kapali_dosyada_teblig_edilmis_karar() -> DisciplineDecision:
+    from django.utils import timezone
+
+    case, sid = _committee_case()
+    d = services.record_decision(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    approve(d)
+    services.notify_decision(d, notified_on=date(2026, 5, 25))
+    case.closed_at = timezone.now()
+    case.current_stage = CaseStage.CLOSED
+    case.save(update_fields=["closed_at", "current_stage"])
+    d.refresh_from_db()
+    return d
+
+
+def test_karar3_kapali_dosyada_onay_ve_teblig_degismez() -> None:
+    d = _kapali_dosyada_teblig_edilmis_karar()
+    with pytest.raises(ValueError, match="kapal"):
+        services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 5, 23))
+    with pytest.raises(ValueError, match="kapal"):
+        services.notify_decision(d, notified_on=date(2026, 5, 26))
+
+
+def test_karar3_kapali_dosyada_sonradan_gelen_islemler_serbest() -> None:
+    d = _kapali_dosyada_teblig_edilmis_karar()
+    # Süre dışı itiraz kaydı + sonucu, e-Okul ve md. 171/2 ceza kaldırma serbest.
+    appeal = services.file_appeal(d, filed_on=date(2026, 6, 20), filed_by_role="PARENT")
+    services.resolve_appeal(appeal, result=AppealResult.UPHELD, resulted_on=date(2026, 6, 25))
+    services.confirm_e_school_entry(d, processed_on=date(2026, 6, 26))

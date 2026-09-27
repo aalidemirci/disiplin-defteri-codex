@@ -295,6 +295,12 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   + tebliğ yapılmış + itiraz süresi dolmuş + 5 iş günü tampon.
   Kural hem "Kapat" ucunda hem CLOSED aşama olayında uygulanır; uygun değilse
   yalnız gerekçeli override (iz kaydedilir).
+- **Kapalı dosyada kapanış dayanağı kilitli:** onay, tebliğ, md. 197 iade/sevk ve
+  karar düzenleme/silme reddedilir; itiraz + sonucu, e-Okul, md. 171/2 serbest
+  (`services.decisions._assert_case_open`). Kurula sevk tarihi = **son** müdür kararı
+  (`committee_referred_on`; geri alınmış sevk/uyarı sayılmaz).
+- Okul değiştirme cezası onayla uygulanır; **süresinde itirazda itiraz sonuçlanana
+  dek uygulanmaz** (md. 172/2-ç, `_enforced_state`).
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.

@@ -245,6 +245,20 @@ def record_decision(
     return decision
 
 
+def _assert_case_open(decision: DisciplineDecision) -> None:
+    """Kapanış dayanağı kilidi (kullanıcı kararı 27.09.2026).
+
+    Dosya "onaylı + tebliğli + itiraz süresi dolmuş" olduğu için kapanır; kapalı
+    dosyada karar, onay ve tebliğ değişmez. Sonradan gelen işlemler (süre dışı
+    itiraz ve sonucu, e-Okul işlendi, md. 171/2 ceza kaldırma) bu kilide tabi değildir.
+    """
+    if decision.case.closed_at is not None:
+        raise ValueError(
+            "Dosya kapalı: karar, onay ve tebliğ bilgileri kapanışın dayanağıdır, "
+            "değiştirilemez. Düzeltme gerekiyorsa önce dosyayı yeniden açın (aşama geri alma)."
+        )
+
+
 def _assert_decision_editable(decision: DisciplineDecision) -> None:
     """Karar düzenleme/silme koruması.
 
@@ -252,6 +266,7 @@ def _assert_decision_editable(decision: DisciplineDecision) -> None:
     düzenlenebilir/silinebilir. Onaylanmış/tebliğ edilmiş karar resmî süreçtir;
     düzeltmesi kurula iade (md. 197) / itiraz kanalındandır.
     """
+    _assert_case_open(decision)
     if decision.approval_status != DecisionApprovalStatus.PENDING:
         raise ValueError(
             "Yalnız beklemedeki (onaylanmamış) karar düzenlenebilir/silinebilir; onaylanmış "
@@ -340,6 +355,7 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
     """
     if decision.deleted_at is None:
         raise ValueError("Karar zaten geri yüklenmiş (silinmemiş).")
+    _assert_case_open(decision)
     if not case_has_student(decision.case, decision.student_id):
         raise ValueError("Öğrenci artık bu dosyada değil; karar geri yüklenemez.")
     if DisciplineDecision.objects.filter(
@@ -374,6 +390,7 @@ def set_decision_approval(
     DEĞİŞTİRİR" (md. 200/1-a, 202/1-a). Değiştirilen ceza türü + puan burada
     işlenir; itiraz mercii onaylayan kurulun bir üstü kalır.
     """
+    _assert_case_open(decision)
     if approval_status not in {DecisionApprovalStatus.PENDING, DecisionApprovalStatus.APPROVED}:
         raise ValueError("Müdür kararı yalnız onaylayabilir veya beklemede bırakabilir (md. 197).")
     if decision.approval_status == DecisionApprovalStatus.REJECTED:
@@ -409,9 +426,7 @@ def set_decision_approval(
         fields += _apply_penalty_change(decision, modified_penalty_type, modified_suspension_days)
     decision.approval_status = approval_status
     decision.approved_at = approved_on
-    decision.is_enforced = approval_status == DecisionApprovalStatus.APPROVED and (
-        decision.penalty_type in (PenaltyType.REPRIMAND, PenaltyType.SHORT_TERM_SUSPENSION)
-    )
+    decision.is_enforced = _enforced_state(decision)
     fields.append("is_enforced")
     decision.save(update_fields=fields)
     return decision
@@ -458,6 +473,7 @@ def record_principal_review(
     kurul ısrar edince ilçe kuruluna gönderir — yalnız önce iade edilmiş karar.
     """
     reason = (reason or "").strip()
+    _assert_case_open(decision)
     if not reason:
         raise ValueError("Kurula iade / ilçeye sevk için gerekçe zorunludur (md. 197).")
     if decision.notified_at is not None:
@@ -520,6 +536,7 @@ def notify_decision(
     uygulanır; onaysız kararın tebliği itiraz süresini erken başlatırdı). İtirazı
     olan kararın tebliğ tarihi değiştirilemez (itiraz süre bayrakları bayatlar).
     """
+    _assert_case_open(decision)
     if decision.approval_status != DecisionApprovalStatus.APPROVED:
         raise ValueError(
             "Karar onaylanmadan tebliğ edilemez (md. 163/2, 169/2): önce onay "
@@ -716,8 +733,35 @@ def resolve_appeal(
         decision.approval_status = DecisionApprovalStatus.REJECTED
         decision.is_enforced = False
         decision.save(update_fields=["approval_status", "is_enforced", "updated_at"])
+    else:
+        # Onandı/değiştirildi: md. 172/2-ç bekletmesi biter, (yeni) ceza uygulanır.
+        decision = appeal.decision
+        decision.is_enforced = _enforced_state(decision)
+        decision.save(update_fields=["is_enforced", "updated_at"])
 
     return appeal
+
+
+# Onaydan sonra okulca "uygulanan" cezalar (md. 172). Okul değiştirme de onayla
+# uygulanır; yalnız süresinde itiraz edilmişse itiraz sonuçlanana dek uygulanmaz
+# (md. 172/2-ç — kullanıcı kararı 27.09.2026).
+_ENFORCEABLE_PENALTIES = (
+    PenaltyType.REPRIMAND,
+    PenaltyType.SHORT_TERM_SUSPENSION,
+    PenaltyType.SCHOOL_CHANGE,
+)
+
+
+def _enforced_state(decision: DisciplineDecision) -> bool:
+    if decision.approval_status != DecisionApprovalStatus.APPROVED:
+        return False
+    if decision.penalty_type not in _ENFORCEABLE_PENALTIES:
+        return False
+    if decision.penalty_type == PenaltyType.SCHOOL_CHANGE:
+        return not decision.appeals.filter(
+            within_deadline=True, result=AppealResult.PENDING
+        ).exists()
+    return True
 
 
 # EK-1 anlatı + öğrenci-bağlam alanları — karar sonrası da (dosya kapanana dek)
