@@ -18,6 +18,8 @@ EXIT_SERVER_FAILED = 6
 EXIT_WEBVIEW_UNAVAILABLE = 7
 # Paket teşhis kipi (`--pdf-duman`): Türkçe PDF üretimi/font zinciri bozuk.
 EXIT_PDF_SMOKE_FAILED = 8
+# Paket teşhis kipi (`--kripto-duman`): parola zinciri (Argon2id/Fernet) bozuk.
+EXIT_CRYPTO_SMOKE_FAILED = 9
 
 
 class StartupError(Exception):

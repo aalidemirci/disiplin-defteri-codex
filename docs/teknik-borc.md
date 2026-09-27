@@ -15,7 +15,6 @@ Son güncelleme: 24.09.2026.
 | D4 | **Paketlenmiş ikili üzerinden gerçek evrak üretimi** — duman testi yalnız WeasyPrint+font zincirini izole ediyor, `documents.py` + 25 şablon zinciri paket içinde koşmadı | DB + fixture gerekiyordu | Saha provasında bir dosya açıp EK-1 üretilerek |
 | D5 | **`.deb` yükseltme yolu** (eski sürüm üstüne kurulum) | Yalnız temiz kurulum + kaldırma sınandı | İkinci sürüm çıkarken |
 | D6 | **Windows başlatıcı yolları** (`msvcrt.locking`, `winreg`, `MessageBoxW`) | CI'da `--autotest` geçiyor ama tek-instance kilidinin İKİNCİ kopyayla çakışması ve WebView2 yokluğu senaryosu ayrıca koşulmadı | Saha provasında |
-| D7 | **Argon2 cffi ikilisinin paket içinde toplanması** | Spec'e `hiddenimports` sigortası kondu; CI `--autotest`'i parola KURULU değilken koşuyor, yani Argon2 yolu hiç çalışmıyor | `--autotest`'e parola kurma/açma adımı eklenerek |
 | D8 | **Paketlenmiş pencerede gerçek dosya indirme** (XLSX + PDF + TXT) | pywebview indirme izni ve Blob yaşam döngüsü kod/test düzeyinde düzeltildi; başsız CI işletim sistemi “Kaydet” akışını doğrulamaz | Windows ve Pardus saha provasında üç dosya türü indirilerek |
 
 ## Kabul edilmiş tasarım bedelleri
@@ -50,6 +49,7 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 
 | Kalem | Kapanış |
 |---|---|
+| D7 Argon2 cffi ikilisinin pakette toplandığı hiç sınanmıyordu (`--autotest` parolasız koşar) | KAPANDI 27.09.2026 — `--kripto-duman` teşhis kipi (`packaging/pyinstaller/giris.py`): pakette gerçek KDF parametreleriyle Argon2id türetme + zarf sarmalama + `EncryptedTextField` yazma/okuma; Linux derlemesi, debian:11/12 kurulum provası ve Windows derlemesi bunu koşar (çıkış 9 = zincir bozuk). `--autotest`'e parola adımı yerine ayrı kip seçildi: açılış zincirine veri dizininde `guvenlik.json` bırakan bir test adımı sokmamak için |
 | M2 Grup 3 Form-01 (md. 157/7-a değerlendirme ve öneri formu) yoktu | KAPANDI 27.09.2026 — GUIDANCE_ASSESSMENT: sınıf rehber + rehber öğretmen imzalı, önceki cezalar ("ilk defa" koşulu) ve uyarı özeti dolu, müdür GÖRÜLDÜ; md. 157/7-d imhasına girer. Form-01 kimliği yönetmelik metninden çıkarıldı (saha örneğiyle doğrulanmalı) |
 | M2 Grup 2 tutanaklar yoktu: md. 157/7-b veli davet/görüşme/gelmedi, md. 158/3 arama, md. 195 tespit | KAPANDI 27.09.2026 — 3 yeni belge türü (veli: 3 sürüm); künye, veli ve sınıf sorumluları dolu, beyan elle. Veli görüşmesi belgeleri md. 157/7-d gereği nakil imhasına da girer |
 | M2 Grup 1 süreç yazıları yoktu: md. 197 iade ve ilçeye gönderme, md. 169/1 onaya sevk, md. 175 MEM bilgilendirme/uzatma onayı, md. 192/3 müdür OLUR bloğu | KAPANDI 27.09.2026 — kullanıcı kararıyla (C, sırayla) 4 yeni belge türü + Form-13 OLUR bloğu; kayıttan dolu basılır, yanlış aşamada üretilmez. Resmî MEB örneği yok — saha örneği gelirse metin uyarlanır |

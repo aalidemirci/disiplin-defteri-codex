@@ -219,6 +219,22 @@ sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
 tablo). Program her hatayı buraya yazar; kişisel veri yazmaz, bu yüzden dosya
 paylaşılabilir.
 
+### 6.8 Parola koyarken ya da kilidi açarken program çöküyor
+
+Programın parola/şifreleme bileşenini tek komutla sınayabilirsiniz (veriye
+dokunmaz):
+
+```
+"%LOCALAPPDATA%\Programs\Disiplin Defteri\disiplin-defteri.exe" --kripto-duman
+```
+
+```bash
+disiplin-defteri --kripto-duman
+```
+
+Çıkış kodu 0 ise bileşen sağlamdır. 9 dönerse kurulum eksiktir: programı
+kaldırıp yeniden kurun; sürerse `uygulama.log` ile bilişim sorumlusuna başvurun.
+
 ---
 
 ## 7. Çıkış kodları (bilişim sorumlusu için)
@@ -238,6 +254,7 @@ Uçbirimden `disiplin-defteri --autotest` çalıştırıp kodu okuyabilirsiniz
 | 6 | Yerel sunucu başlamadı | §6.3 güvenlik duvarı/antivirüs |
 | 7 | Pencere motoru yok (WebView2) | §6.1 |
 | 8 | PDF duman testi başarısız | §6.6 |
+| 9 | Parola/şifreleme duman testi başarısız | §6.8 |
 
 ---
 
