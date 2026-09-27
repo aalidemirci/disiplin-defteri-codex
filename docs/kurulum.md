@@ -89,8 +89,12 @@ Program ilk açıldığında **kurulum sihirbazı** çıkar:
 
 1. Okul bilgileri (okul adı, il/ilçe, müdür adı) — evrak antetinde kullanılır.
 2. Ders yılı (örn. 2026-2027) ve başlangıç/bitiş tarihleri.
-3. Tatil takvimi — **resmî ve idari tatiller**. *Ara tatilleri GİRMEYİN:*
-   yasal süreler iş günü üzerinden hesaplanır ve ara tatil iş günüdür.
+3. Tatil takvimi — **resmî ve idari tatiller**. *Ara tatili burada resmî
+   tatil olarak GİRMEYİN:* yasal süreler (itiraz, sevk vb.) iş günü üzerinden
+   hesaplanır ve ara tatil iş günüdür. Kasım/nisan ara tatilini sihirbazdan
+   sonra **Ayarlar → Tatiller** ekranından **"Ara tatil (okul kapalı)"**
+   türüyle ekleyin: böylece yasal süreler değişmez, ama uzaklaştırma cezasının
+   günleri (md. 172, "okulun açık olduğu günler") ara tatile denk getirilmez.
 4. Öğrenci ve personel listelerinin içe aktarılması (e-Okul Excel dosyası veya
    panodan yapıştırma).
 

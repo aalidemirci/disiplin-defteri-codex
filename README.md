@@ -83,8 +83,9 @@ paketleme kodu çalışır durumdadır. Mevzuat uyumu değişikliklerinin tam li
 27.09.2026 tarihinde yeşil koşmuştur.
 
 Gerçek masaüstü ortamında hâlâ saha doğrulaması isteyen başlıklar (Qt penceresi,
-paketlenmiş ikiliden uçtan uca evrak/indirme, `.deb` yükseltmesi ve parola
-kurulu paket yolu) `docs/teknik-borc.md` dosyasında tutulur. “CI yeşil” ifadesi
+paketlenmiş ikiliden uçtan uca evrak/indirme, `.deb` yükseltmesi ve Windows
+başlatıcı senaryoları) `docs/teknik-borc.md` dosyasında tutulur; okulda
+yapılacak prova için adım adım liste: `docs/saha-provasi.md`. “CI yeşil” ifadesi
 bu donanım/GUI senaryolarının doğrulandığı anlamına gelmez.
 
 ## Belgeler
