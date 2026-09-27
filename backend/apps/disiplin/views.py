@@ -77,10 +77,22 @@ def _service_errors() -> Iterator[None]:
         yield
     except (ValueError, InvalidTransitionError, file_storage.FileValidationError) as exc:
         raise drf_serializers.ValidationError(str(exc)) from exc
+    except TypeError as exc:
+        # `int(None)`, `list(5)` gibi tür hatalı gövde de istemci hatasıdır (500 değil).
+        raise drf_serializers.ValidationError("Geçersiz istek gövdesi.") from exc
     except DjangoValidationError as exc:
         # Model full_clean/save hataları da sözleşmeli 400'dür (500 değil).
         detail = getattr(exc, "message_dict", None) or getattr(exc, "messages", str(exc))
         raise drf_serializers.ValidationError(detail) from exc
+
+
+def _parse_bool(value: Any) -> bool:
+    """Gövdedeki evet/hayır alanı. `bool("false")` True olur (çok parçalı form):
+    DRF BooleanField "false"/"0" değerlerini doğru çözer; geçersiz değer → 400."""
+    if value in (None, ""):
+        return False
+    result: bool = drf_serializers.BooleanField().to_internal_value(value)
+    return result
 
 
 def _parse_date(value: Any) -> date:
@@ -214,7 +226,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
         with _service_errors():
             services.close_case(
                 case,
-                override=bool(request.data.get("override", False)),
+                override=_parse_bool(request.data.get("override")),
                 override_reason=str(request.data.get("override_reason", "")),
             )
         return Response(CaseDetailSerializer(case).data)
@@ -667,7 +679,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 start_date=_parse_date(request.data.get("start_date")),
                 requested_days=int(request.data.get("requested_days", 0)),
                 reason=str(request.data.get("reason", "")),
-                mne_notified=bool(request.data.get("mne_notified", False)),
+                mne_notified=_parse_bool(request.data.get("mne_notified")),
                 notes=str(request.data.get("notes", "")),
             )
         return Response(PrecautionSerializer(precaution).data, status=201)
@@ -682,7 +694,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
             services.lift_precaution(
                 precaution,
                 lifted_on=_parse_date(request.data.get("lifted_on")),
-                expired=bool(request.data.get("expired", False)),
+                expired=_parse_bool(request.data.get("expired")),
             )
         return Response(PrecautionSerializer(precaution).data)
 
@@ -696,7 +708,7 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
             services.extend_precaution(
                 precaution,
                 additional_days=int(request.data.get("additional_days", 0)),
-                mne_notified=bool(request.data.get("mne_notified", False)),
+                mne_notified=_parse_bool(request.data.get("mne_notified")),
             )
         return Response(PrecautionSerializer(precaution).data)
 
@@ -947,7 +959,7 @@ class DisciplineCommitteeMemberAddView(APIView):
                 member_type=str(request.data.get("member_type", "")),
                 person_id=int(raw_person) if raw_person.isdigit() else None,
                 member_name=str(request.data.get("member_name", "")),
-                is_substitute=bool(request.data.get("is_substitute", False)),
+                is_substitute=_parse_bool(request.data.get("is_substitute")),
                 order=int(request.data.get("order", 0)),
                 title=str(request.data.get("title", "")),
             )
@@ -1023,8 +1035,8 @@ class HonorBoardMemberAddView(APIView):
                 board,
                 student_id=int(request.data.get("student", 0)),
                 grade_level=request.data.get("grade_level"),
-                is_second_chair=bool(request.data.get("is_second_chair", False)),
-                is_substitute=bool(request.data.get("is_substitute", False)),
+                is_second_chair=_parse_bool(request.data.get("is_second_chair")),
+                is_substitute=_parse_bool(request.data.get("is_substitute")),
                 order=int(request.data.get("order", 0)),
                 title=str(request.data.get("title", "")),
                 assembly_member_id=_to_int(request.data.get("assembly_member")),

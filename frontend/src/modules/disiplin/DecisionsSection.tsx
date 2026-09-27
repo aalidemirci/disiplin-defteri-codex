@@ -384,9 +384,15 @@ export default function DecisionsSection({
                       <span className="text-label-small"> · {d.penalty_type_display}</span>
                       <span className="text-label-small"> · {formatDate(d.decision_date)}</span>
                     </span>
-                    <Button variant="text" icon="restore" onClick={() => void handleRestore(d.id)}>
-                      Geri yükle
-                    </Button>
+                    {caseObj.closed_at === null && (
+                      <Button
+                        variant="text"
+                        icon="restore"
+                        onClick={() => void handleRestore(d.id)}
+                      >
+                        Geri yükle
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -431,17 +437,23 @@ function DecisionCard({
   onDelete: (decision: DisciplineDecision) => void;
 }) {
   const [panel, setPanel] = useState<CardPanel>(null);
+  const snackbar = useSnackbar();
   const hasNarrative = NARRATIVE_FIELDS.some((f) => (d[f.key] || "").trim().length > 0);
   // Görev ayrımı (Tur 112): onay + itiraz müdüre; EK-1 anlatı + tebliğ kurul başkanına.
   // (Tek kullanıcılı masaüstünde hepsi ALL_CAPABILITIES ile açık.)
-  const canApprove = caps.isMudur || caps.isAdmin;
+  // Kapanış dayanağı kilidi (27.09.2026): kapalı dosyada onay, tebliğ, kurula iade ve
+  // düzenleme/silme backend'de reddedilir — düğmeleri de sunulmaz. İtiraz, e-Okul ve
+  // md. 171/2 ceza kaldırma sonradan gelen işlemlerdir; serbest kalır.
+  const caseOpen = caseObj.closed_at === null;
+  const canApprove = (caps.isMudur || caps.isAdmin) && caseOpen;
   const canManageAppeal = caps.isMudur || caps.isAdmin;
   const canEditNarrative = caps.isChair || caps.isAdmin;
-  const canNotify = caps.isChair || caps.isAdmin;
+  const canNotify = (caps.isChair || caps.isAdmin) && caseOpen;
   // Düzenle/sil yalnız BEKLEMEDEKİ kararda (Tur 152/153) — onaylı/tebliğli/itirazlı kilitli
   // (backend de korur); kararı giren başkan/ADMIN.
   const canEditDelete =
     (caps.isChair || caps.isAdmin) &&
+    caseOpen &&
     d.approval_status === "PENDING" &&
     !d.notified_at &&
     (d.appeals?.length ?? 0) === 0;
@@ -493,6 +505,16 @@ function DecisionCard({
             Henüz tebliğ edilmedi
           </span>
         )}
+        {/* md. 172/2-ç: okul değiştirmede süresinde itiraz → itiraz sonuçlanana dek ceza
+            uygulanmaz (nakil yapılmaz). Backend is_enforced'ı buna göre tutar. */}
+        {d.penalty_type === "SCHOOL_CHANGE" &&
+          d.approval_status === "APPROVED" &&
+          d.appeals.some((a) => a.within_deadline && a.result === "PENDING") && (
+            <span className="inline-flex items-center gap-1 rounded-shape-xl bg-error-container px-2.5 py-0.5 text-on-error-container">
+              <Icon name="pause_circle" size="xs" />
+              Uygulama bekletiliyor — itiraz sonuçlanana kadar nakil yapılmaz (md. 172/2-ç)
+            </span>
+          )}
         {d.e_school_processed_on && (
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-success-container px-2.5 py-0.5 text-on-success-container">
             <Icon name="cloud_done" size="xs" />
@@ -512,7 +534,11 @@ function DecisionCard({
                   disiplinApi
                     .undoPenaltyRemoval(caseObj.id, d.id)
                     .then(onChanged)
-                    .catch(() => undefined);
+                    .catch((err: unknown) => {
+                      // Ret sessiz kalmasın; kart da güncel duruma tazelensin.
+                      snackbar.error(asMessage(err, "Ceza kaldırma geri alınamadı."));
+                      onChanged();
+                    });
                 }}
               >
                 geri al
@@ -617,12 +643,16 @@ function DecisionCard({
                 İlçe kuruluna gönder
               </Button>
             )}
-            {/* md. 163/2, 169/2: ceza onaydan sonra uygulanır — onaysız karar tebliğ edilmez. */}
-            {canNotify && !d.notified_at && d.approval_status === "APPROVED" && (
-              <Button variant="text" icon="mark_email_read" onClick={() => setPanel("notify")}>
-                Tebliğ kaydet
-              </Button>
-            )}
+            {/* md. 163/2, 169/2: ceza onaydan sonra uygulanır — onaysız karar tebliğ edilmez.
+                İtirazsız kararda yanlış girilen tebliğ tarihi düzeltilebilir (backend
+                notify_decision yalnız itirazlı kararda reddeder); yoksa tek yönlü kapan olurdu. */}
+            {canNotify &&
+              d.approval_status === "APPROVED" &&
+              (!d.notified_at || d.appeals.length === 0) && (
+                <Button variant="text" icon="mark_email_read" onClick={() => setPanel("notify")}>
+                  {d.notified_at ? "Tebliği düzelt" : "Tebliğ kaydet"}
+                </Button>
+              )}
             {canManageAppeal &&
               d.penalty_type !== "NO_PENALTY" &&
               d.is_final &&
@@ -1383,8 +1413,8 @@ function NotifyForm({
   onDone: () => void;
 }) {
   const today = todayIso();
-  const [notifiedOn, setNotifiedOn] = useState(today);
-  const [method, setMethod] = useState("");
+  const [notifiedOn, setNotifiedOn] = useState(d.notified_at ?? today);
+  const [method, setMethod] = useState(d.notification_method ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
@@ -2118,6 +2148,7 @@ function ResolveAppealForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
+  const confirm = useConfirm();
   const fieldIdBase = useId();
 
   // İnceleniyor (PENDING) bir sonuç değildir; seçilemez.
@@ -2126,6 +2157,15 @@ function ResolveAppealForm({
   );
 
   const submit = async () => {
+    // md. 169/4: itiraz sonucu kesindir; kaydı geri alma yolu yoktur.
+    if (
+      !(await confirm({
+        message: `İtiraz sonucu "${APPEAL_RESULT_TR[result]}" olarak kaydedilecek. İtiraz sonucu kesindir; kayıttan sonra değiştirilemez (md. 169/4). Devam edilsin mi?`,
+        confirmLabel: "Sonucu kaydet",
+      }))
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

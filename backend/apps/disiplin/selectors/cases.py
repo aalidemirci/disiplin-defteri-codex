@@ -54,8 +54,17 @@ def all_cases(*, stage: str = "", search: str = "") -> QuerySet[DisciplineCase]:
     if stage.strip():
         qs = qs.filter(current_stage=stage.strip())
     if search.strip():
-        needle = search.strip()
-        qs = qs.filter(case_no__icontains=needle) | qs.filter(petitioner_name__icontains=needle)
+        # SQLite LIKE yalnız ASCII'de harf duyarsızdır ("şükrü" ≠ "Şükrü"); öğrenci/
+        # personel aramasıyla aynı Türkçe katlama Python tarafında yapılır (≤1000 kayıt).
+        from apps.okul.excel_veli import normalize_header
+
+        needle = normalize_header(search)
+        matched = [
+            pk
+            for pk, case_no, petitioner in qs.values_list("pk", "case_no", "petitioner_name")
+            if needle in normalize_header(case_no) or needle in normalize_header(petitioner)
+        ]
+        qs = qs.filter(pk__in=matched)
     return qs.distinct()
 
 

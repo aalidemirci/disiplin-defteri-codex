@@ -77,8 +77,15 @@ def student_discipline_history(
     )
     if exclude_case_id is not None:
         events = events.exclude(case_id=exclude_case_id)
-    for case_id, decided in events.values_list("case_id", "principal_decisions"):
-        if PrincipalDecision.WRITTEN_WARNING in (decided or []):
+    # Dosya başına YALNIZ SON müdür kararı sayılır: aşama geri alınıp (revert_stage)
+    # değiştirilen "yazılı uyarı" hukuken yoktur, öğrenciyi uyarı almış saydırmaz.
+    latest: dict[int, list[str]] = {}
+    for case_id, decided in events.order_by("event_date", "pk").values_list(
+        "case_id", "principal_decisions"
+    ):
+        latest[case_id] = list(decided or [])
+    for case_id, decided in latest.items():
+        if PrincipalDecision.WRITTEN_WARNING in decided:
             warned_cases.add(case_id)
     warning_count = len(warned_cases)
     return DisciplineHistory(

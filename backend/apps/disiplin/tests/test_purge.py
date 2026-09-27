@@ -167,7 +167,9 @@ def test_dal_b_karar_soft_delete_edilse_de_kapsam_disi() -> None:
     case, student = _committee_case()
     decision = selectors.decisions_for_case(case).first()
     assert decision is not None
-    services.delete_decision(decision)
+    # Kapalı dosyada servis silmeyi reddeder (kapanış dayanağı kilidi); çöp kutusuna
+    # kapanıştan önce atılmış kararın durumu model düzeyinde kurulur.
+    decision.delete()
 
     assert not purge_selectors.is_purgeable_case(case)
 

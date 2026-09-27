@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { DisciplineCase, DisciplineDecision } from "./api";
@@ -23,6 +24,9 @@ const dapi = vi.hoisted(() => ({
   approveDecision: vi.fn(),
   confirmESchoolEntry: vi.fn(),
   createDecision: vi.fn(),
+  notifyDecision: vi.fn(),
+  resolveAppeal: vi.fn(),
+  undoPenaltyRemoval: vi.fn(),
 }));
 
 // Yalnız tel katmanı (disiplinApi) mock'lanır; TR sözlükleri gerçek modülden gelir.
@@ -398,3 +402,146 @@ describe("DecisionsSection — md. 166 aynı yılda tekrar", () => {
     expect(await screen.findByText("Kurul takdiri.")).toBeInTheDocument();
   });
 });
+
+describe("DecisionsSection — 27.09.2026 denetim bulguları", () => {
+  const onayli = {
+    approval_status: "APPROVED" as const,
+    approval_status_display: "Onaylandı",
+    approved_at: "2026-03-03",
+    notified_at: "2026-03-04",
+    appeal_deadline: "2026-03-11",
+  };
+
+  it("itirazsız tebliğli kararda tebliğ tarihi düzeltilebilir (tek yönlü kapan yok)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...onayli, notification_method: "Elden" })],
+      behavior_points: {},
+    });
+    dapi.notifyDecision.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Tebliği düzelt" }));
+    // Form mevcut tebliğ tarihiyle açılır, yeni tarih gövdeye gider.
+    const tarih = screen.getByLabelText(/Tebliğ tarihi/);
+    expect(tarih).toHaveValue("2026-03-04");
+    fireEvent.change(tarih, { target: { value: "2026-03-05" } });
+    await user.click(screen.getAllByRole("button", { name: /Tebliğ kaydet|Kaydet/ }).at(-1)!);
+    await waitFor(() =>
+      expect(dapi.notifyDecision).toHaveBeenCalledWith(
+        1,
+        5,
+        expect.objectContaining({ notified_on: "2026-03-05", notification_method: "Elden" }),
+      ),
+    );
+  });
+
+  it("itirazlı kararda tebliğ düzeltme düğmesi yoktur (backend reddeder)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...onayli, appeals: [itiraz()] })],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText(/Tebliğ: /);
+    expect(screen.queryByRole("button", { name: /Tebliğ/ })).toBeNull();
+  });
+
+  it("kesin itiraz sonucu onay sorulmadan kaydedilmez (md. 169/4)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...onayli, appeals: [itiraz()] })],
+      behavior_points: {},
+    });
+    dapi.resolveAppeal.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Sonucu kaydet/ }));
+    await user.click(screen.getAllByRole("button", { name: /Sonucu kaydet/ }).at(-1)!);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/kesindir/)).toBeInTheDocument();
+    expect(dapi.resolveAppeal).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Sonucu kaydet" }));
+    await waitFor(() => expect(dapi.resolveAppeal).toHaveBeenCalledTimes(1));
+  });
+
+  it("okul değiştirmede süresinde itiraz varken 'uygulama bekletiliyor' uyarısı çıkar (md. 172/2-ç)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...onayli,
+          penalty_type: "SCHOOL_CHANGE",
+          appeals: [itiraz()],
+        } as Partial<DisciplineDecision>),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText(/Uygulama bekletiliyor/)).toBeInTheDocument();
+  });
+
+  it("süre dışı itirazda bekletme uyarısı çıkmaz", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...onayli,
+          penalty_type: "SCHOOL_CHANGE",
+          appeals: [{ ...itiraz(), within_deadline: false }],
+        } as Partial<DisciplineDecision>),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText(/Tebliğ: /);
+    expect(screen.queryByText(/Uygulama bekletiliyor/)).toBeNull();
+  });
+
+  it("kapalı dosyada onay/tebliğ/düzenleme düğmeleri sunulmaz, itiraz sunulur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...onayli })],
+      behavior_points: {},
+    });
+    renderSection(makeCase({ closed_at: "2026-04-01T10:00:00+03:00" }));
+    await screen.findByText(/Tebliğ: /);
+    expect(screen.queryByRole("button", { name: /Tebliği düzelt|Onay durumu|Düzenle/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /İtiraz/ })).toBeInTheDocument();
+  });
+
+  it("ceza kaldırmayı geri alma hatası kullanıcıya gösterilir", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...onayli,
+          is_final: true,
+          e_school_processed_on: "2026-03-20",
+          penalty_removed_on: "2026-05-01",
+        } as Partial<DisciplineDecision>),
+      ],
+      behavior_points: {},
+    });
+    dapi.undoPenaltyRemoval.mockRejectedValue(
+      new ApiError(400, "validation", "Bu cezada kaldırma kaydı yok."),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "geri al" }));
+    expect(await screen.findByText(/kaldırma kaydı yok/)).toBeInTheDocument();
+  });
+});
+
+function itiraz() {
+  return {
+    id: 9,
+    decision: 5,
+    filed_on: "2026-03-05",
+    filed_by_role: "PARENT",
+    filed_by_name: "",
+    within_deadline: true,
+    appeal_authority: "DISTRICT_BOARD",
+    appeal_authority_display: "İlçe",
+    forward_deadline: null,
+    forwarded_on: "2026-03-06",
+    result: "PENDING",
+    result_display: "İnceleniyor",
+    resulted_on: null,
+    result_notes: "",
+    previous_penalty_type: "",
+  } as unknown as DisciplineDecision["appeals"][number];
+}

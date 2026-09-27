@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from django.utils import timezone
+
 from apps.disiplin.models import (
     CaseStage,
     DisciplineCase,
@@ -242,7 +244,8 @@ def case_purge_item(
         case_id=case.pk,
         case_no=case.case_no,
         petition_date=case.petition_date,
-        closed_on=case.closed_at.date() if case.closed_at is not None else None,
+        # §7.1: UTC'den .date() gece 00:00-02:59 kapanışı bir gün geri kaydırır.
+        closed_on=timezone.localdate(case.closed_at) if case.closed_at is not None else None,
         students=tuple(
             link.student.full_name or f"#{link.student_id}" for link in case.case_students.all()
         ),
