@@ -271,7 +271,7 @@ describe("YilDevriPage — 5. Öğrenciler", () => {
     await user.click(await screen.findByRole("button", { name: /Toplu yükseltmeyi uygula/ }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/GERİ ALINAMAZ/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/Ayrıldı/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/"Mezun"/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Yükselt" }));
 
     await waitFor(() =>
