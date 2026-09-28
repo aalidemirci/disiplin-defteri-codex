@@ -9,6 +9,8 @@
 # için — ör. secret'lar Release'ten sonra eklendiyse).
 #
 # Kimlik: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID ortam değişkenleri.
+# Token izni R2 **Admin Read & Write** olmalı: wrangler REST API kullanır ve
+# Cloudflare, Object Read & Write token'larını REST'te reddeder (403, kod 10000).
 # Yoksa İŞ DURMAZ: uyarı basılır ve 0 ile çıkılır (paketler Release'te kalır).
 # =============================================================================
 set -euo pipefail

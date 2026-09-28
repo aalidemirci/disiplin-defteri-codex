@@ -267,8 +267,10 @@ jobs:
       # GitHub Release'den SONRA: MEB ağında GitHub çoğu zaman engelli, okullar
       # paketi siteden indirir; R2 yüklemesi kırılırsa sürüm Release'te kalır ve
       # adım kırmızı olur. Kimlik yoksa iş DURMAZ, uyarıyla atlanır.
-      # Gereken depo secret'ları: CLOUDFLARE_API_TOKEN (R2 Object Read & Write) +
-      # CLOUDFLARE_ACCOUNT_ID.
+      # Gereken depo secret'ları: CLOUDFLARE_API_TOKEN (R2 **Admin Read & Write**;
+      # Object Read & Write YETMEZ — wrangler REST API kullanır ve Cloudflare
+      # object-düzeyi token'ları REST'te reddeder: 403, kod 10000, bkz.
+      # developers.cloudflare.com/r2/platform/troubleshooting) + CLOUDFLARE_ACCOUNT_ID.
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
