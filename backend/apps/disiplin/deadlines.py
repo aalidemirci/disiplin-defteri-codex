@@ -124,8 +124,23 @@ def collect_deadline_items(today: date) -> list[DeadlineItem]:
                 )
             )
 
-    # 4) Tebliğ bekleyen kararlar (tarihsiz — BİLGİ). NOT: öğrenci adı tek
+    # 4) Onay ve tebliğ bekleyen kararlar (tarihsiz — BİLGİ). NOT: öğrenci adı tek
     #    kullanıcılı cihazın panelinde görünür — KVKK açısından kabul (inceleme #19).
+    #    Onaysız karar tebliğ edilemez (md. 163/2): önce onay, sonra tebliğ listelenir.
+    for decision in selectors.decisions_awaiting_approval():
+        items.append(
+            DeadlineItem(
+                severity=Severity.INFO,
+                case_no=decision.case.case_no,
+                title=(
+                    f"Karar onay bekliyor ({decision.student.full_name} — "
+                    f"{decision.get_approval_authority_display()})"
+                ),
+                due_date=None,
+                statute_ref="md. 163/2",
+                link=f"/disiplin/{decision.case_id}",
+            )
+        )
     for decision in selectors.decisions_awaiting_notification():
         items.append(
             DeadlineItem(

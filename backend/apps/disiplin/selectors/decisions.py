@@ -277,19 +277,29 @@ def behavior_point_for_student(student_id: int, school_year_id: int | None = Non
 
 
 def decisions_awaiting_notification() -> QuerySet[DisciplineDecision]:
-    """Tebliğ bekleyen kararlar (md. 169/5) — açık dosyada, askıda/bozulmuş olmayan.
+    """Tebliğ bekleyen kararlar (md. 169/5) — açık dosyada, ONAYLANMIŞ ve tebliğsiz.
 
-    "Yaklaşan Süreler" paneli 4. bölümü bunu okur.
+    Onaysız karar tebliğ edilemez (md. 163/2, 169/2; `services.notify_decision`):
+    onay bekleyenler `decisions_awaiting_approval`'dadır. "Yaklaşan Süreler" paneli
+    4. bölümü bunu okur.
     """
     return (
-        DisciplineDecision.objects.filter(notified_at__isnull=True)
-        .exclude(
-            approval_status__in=[
-                DecisionApprovalStatus.RETURNED_TO_COMMITTEE,
-                DecisionApprovalStatus.REFERRED_TO_DISTRICT,
-                DecisionApprovalStatus.REJECTED,
-            ]
+        DisciplineDecision.objects.filter(
+            notified_at__isnull=True, approval_status=DecisionApprovalStatus.APPROVED
         )
+        .filter(case__closed_at__isnull=True)
+        .select_related("case", "student")
+    )
+
+
+def decisions_awaiting_approval() -> QuerySet[DisciplineDecision]:
+    """Onay bekleyen kurul kararları (md. 163/2) — açık dosyada, onay mercii ne olursa olsun.
+
+    Okul müdürü onayındakiler Panel'in "Müdür onayı bekleyenler" kartında da görünür;
+    üst kurul (ilçe/il) onayındakiler yalnız buradan izlenir.
+    """
+    return (
+        DisciplineDecision.objects.filter(approval_status=DecisionApprovalStatus.PENDING)
         .filter(case__closed_at__isnull=True)
         .select_related("case", "student")
     )

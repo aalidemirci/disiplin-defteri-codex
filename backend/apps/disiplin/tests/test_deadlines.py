@@ -58,11 +58,24 @@ def test_kurul_karar_suresi_yaklasirken_ve_gecince() -> None:
 
 
 def test_teblig_bekleyen_karar_bilgi_olarak_listelenir() -> None:
+    """Onaysız karar tebliğ edilemez (md. 163/2): önce "onay bekliyor", onaydan sonra
+    "tebliğ bekliyor" olarak listelenir (05.10.2026 — onaysız karar "tebliğ bekliyor"
+    görünüyordu)."""
     case, sid = _committee_case()
-    services.record_decision(
+    d = services.record_decision(
         case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
     items = collect_deadline_items(date(2026, 5, 23))
+    assert [i for i in items if "tebliğ bekliyor" in i.title] == []
+    onay = [i for i in items if "onay bekliyor" in i.title]
+    assert len(onay) == 1
+    assert onay[0].severity == Severity.INFO
+    assert onay[0].statute_ref == "md. 163/2"
+    assert "Okul müdürü" in onay[0].title
+
+    approve(d)
+    items = collect_deadline_items(date(2026, 5, 23))
+    assert [i for i in items if "onay bekliyor" in i.title] == []
     teblig = [i for i in items if "tebliğ bekliyor" in i.title]
     assert len(teblig) == 1
     assert teblig[0].severity == Severity.INFO

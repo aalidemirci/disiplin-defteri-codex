@@ -473,7 +473,7 @@ class TestDecisionTypeAndDeadlinesApi:
             case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
         )
         items = client.get("/api/v1/disiplin/yaklasan-sureler/").json()
-        assert any("tebliğ bekliyor" in i["title"] for i in items)
+        assert any("onay bekliyor" in i["title"] for i in items)  # onaysız karar (md. 163/2)
         assert all(
             {"severity", "case_no", "title", "due_date", "statute_ref", "link"} <= set(i)
             for i in items
