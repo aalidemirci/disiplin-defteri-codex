@@ -32,7 +32,11 @@ from rest_framework.views import APIView
 from apps.disiplin import deadlines, file_storage, honor_documents, selectors, services
 from apps.disiplin import documents as doc_engine
 from apps.disiplin.models import (
+    AgendaItemOutcome,
     AttachmentType,
+    CouncilAgendaItem,
+    CouncilMeeting,
+    CouncilType,
     DisciplineCase,
     DisciplineDecision,
     DisciplineDecisionType,
@@ -113,6 +117,21 @@ def _to_int(raw: str | None) -> int | None:
         return int(str(raw))
     except (TypeError, ValueError):
         return None
+
+
+def _int_list(raw: Any) -> list[int]:
+    """İstek gövdesindeki kimlik listesini çözer; liste değilse sözleşmeli 400."""
+    if raw in (None, ""):
+        return []
+    if not isinstance(raw, list):
+        raise drf_serializers.ValidationError("Kimlik listesi bekleniyor.")
+    result: list[int] = []
+    for value in raw:
+        parsed = _to_int(str(value))
+        if parsed is None:
+            raise drf_serializers.ValidationError("Geçersiz kimlik.")
+        result.append(parsed)
+    return result
 
 
 def _get_case_or_404(pk: str | None) -> DisciplineCase:
@@ -1173,27 +1192,8 @@ class HonorCertificateViewSet(viewsets.GenericViewSet[HonorCertificate]):
             raise NotFound("Onur belgesi bulunamadı.")
         return certificate
 
-    @action(detail=True, methods=["post"], url_path="recommend")
-    def recommend(self, request: Request, pk: str | None = None) -> Response:
-        certificate = self._get(pk)
-        with _service_errors():
-            services.recommend_honor_certificate(
-                certificate,
-                recommended_on=_parse_date(request.data.get("recommended_on")),
-                meeting_id=_to_int(request.data.get("meeting")),
-            )
-        return Response(HonorCertificateSerializer(certificate).data)
-
-    @action(detail=True, methods=["post"], url_path="award")
-    def award(self, request: Request, pk: str | None = None) -> Response:
-        certificate = self._get(pk)
-        with _service_errors():
-            services.award_honor_certificate(
-                certificate,
-                awarded_on=_parse_date(request.data.get("awarded_on")),
-                meeting_id=_to_int(request.data.get("meeting")),
-            )
-        return Response(HonorCertificateSerializer(certificate).data)
+    # Kurul kararları (uygun görüş / kabul / ret) bu uçlarda YOK: yalnız toplantı
+    # gündeminden verilir — `council/meetings/<id>/agenda-items/<item>/decide/` (04.10.2026).
 
     @action(detail=True, methods=["post"], url_path="principal-approve")
     def principal_approve(self, request: Request, pk: str | None = None) -> Response:
@@ -1214,18 +1214,6 @@ class HonorCertificateViewSet(viewsets.GenericViewSet[HonorCertificate]):
                 certificate,
                 decided_on=_parse_date(request.data.get("decided_on")),
                 reason=str(request.data.get("reason", "")),
-            )
-        return Response(HonorCertificateSerializer(certificate).data)
-
-    @action(detail=True, methods=["post"], url_path="reject")
-    def reject(self, request: Request, pk: str | None = None) -> Response:
-        certificate = self._get(pk)
-        with _service_errors():
-            services.reject_honor_certificate(
-                certificate,
-                reason=str(request.data.get("reason", "")),
-                decided_on=_parse_date(request.data.get("decided_on")),
-                meeting_id=_to_int(request.data.get("meeting")),
             )
         return Response(HonorCertificateSerializer(certificate).data)
 
@@ -1273,21 +1261,27 @@ class CouncilMeetingViewSet(viewsets.GenericViewSet[Any]):
                 minutes_type=str(request.data.get("minutes_type", "GENERAL")),
                 discipline_case_id=int(raw_case) if raw_case else None,
                 honor_meeting_kind=str(request.data.get("honor_meeting_kind", "BOARD")),
+                honor_certificate_ids=_int_list(request.data.get("honor_certificate_ids")),
             )
-        return Response(CouncilMeetingSerializer(meeting).data, status=201)
+        refreshed = selectors.get_council_meeting(meeting.pk)
+        return Response(CouncilMeetingSerializer(refreshed or meeting).data, status=201)
+
+    def _get(self, pk: str | None) -> CouncilMeeting:
+        meeting_id = _to_int(pk)
+        meeting = selectors.get_council_meeting(meeting_id) if meeting_id is not None else None
+        if meeting is None:
+            raise NotFound("Tutanak bulunamadı.")
+        return meeting
+
+    def _fresh(self, meeting: CouncilMeeting) -> Response:
+        # Gündem/katılımcı değişikliğinden sonra prefetch önbelleği bayatlar — tazele.
+        return Response(CouncilMeetingSerializer(selectors.get_council_meeting(meeting.pk)).data)
 
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
-        meeting_id = _to_int(pk)
-        meeting = selectors.get_council_meeting(meeting_id) if meeting_id is not None else None
-        if meeting is None:
-            raise NotFound("Tutanak bulunamadı.")
-        return Response(CouncilMeetingSerializer(meeting).data)
+        return Response(CouncilMeetingSerializer(self._get(pk)).data)
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
-        meeting_id = _to_int(pk)
-        meeting = selectors.get_council_meeting(meeting_id) if meeting_id is not None else None
-        if meeting is None:
-            raise NotFound("Tutanak bulunamadı.")
+        meeting = self._get(pk)
         raw_date = request.data.get("meeting_date")
         with _service_errors():
             council_service.update_council_meeting(
@@ -1299,17 +1293,68 @@ class CouncilMeetingViewSet(viewsets.GenericViewSet[Any]):
                 notes=request.data.get("notes"),
                 attendees=request.data.get("attendees"),
             )
-        # Katılımcılar değiştirildiyse prefetch önbelleği bayatlar — tazele.
-        refreshed = selectors.get_council_meeting(meeting.pk)
-        return Response(CouncilMeetingSerializer(refreshed or meeting).data)
+        return self._fresh(meeting)
 
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        meeting_id = _to_int(pk)
-        meeting = selectors.get_council_meeting(meeting_id) if meeting_id is not None else None
-        if meeting is None:
-            raise NotFound("Tutanak bulunamadı.")
-        council_service.delete_council_meeting(meeting)
+        meeting = self._get(pk)
+        with _service_errors():
+            council_service.delete_council_meeting(meeting)
         return Response(status=204)
+
+    @action(detail=True, methods=["post"], url_path="agenda-items")
+    def agenda_items(self, request: Request, pk: str | None = None) -> Response:
+        """Onur belgesi tekliflerini gündeme alır (`honor_certificate_ids`)."""
+        meeting = self._get(pk)
+        with _service_errors():
+            council_service.add_agenda_items(
+                meeting,
+                honor_certificate_ids=_int_list(request.data.get("honor_certificate_ids")),
+            )
+        return self._fresh(meeting)
+
+    def _get_item(self, pk: str | None, item_id: str) -> CouncilAgendaItem:
+        meeting = self._get(pk)
+        parsed = _to_int(item_id)
+        item = selectors.get_agenda_item(meeting.pk, parsed) if parsed is not None else None
+        if item is None:
+            raise NotFound("Gündem maddesi bulunamadı.")
+        return item
+
+    @action(detail=True, methods=["delete"], url_path=r"agenda-items/(?P<item_id>[0-9]+)")
+    def agenda_item_remove(self, request: Request, item_id: str, pk: str | None = None) -> Response:
+        item = self._get_item(pk, item_id)
+        with _service_errors():
+            council_service.remove_agenda_item(item)
+        return self._fresh(item.meeting)
+
+    @action(detail=True, methods=["post"], url_path=r"agenda-items/(?P<item_id>[0-9]+)/decide")
+    def agenda_item_decide(self, request: Request, item_id: str, pk: str | None = None) -> Response:
+        """Maddeyi toplantıda karara bağlar: outcome FAVORABLE/UNFAVORABLE (+ gerekçe)."""
+        item = self._get_item(pk, item_id)
+        with _service_errors():
+            council_service.decide_agenda_item(
+                item,
+                outcome=str(request.data.get("outcome", "")),
+                decision_text=str(request.data.get("decision_text", "")),
+                decision_basis=str(request.data.get("decision_basis", "UNANIMITY")),
+                dissent_note=str(request.data.get("dissent_note", "")),
+            )
+        return self._fresh(item.meeting)
+
+    @action(detail=False, methods=["get"], url_path="agenda-candidates")
+    def agenda_candidates(self, request: Request) -> Response:
+        """Gündeme alınmayı bekleyen teklifler (`council_type`, isteğe bağlı `school_year`)."""
+        year_id = _to_int(request.query_params.get("school_year"))
+        if year_id is None:
+            active_year = okul_selectors.active_school_year()
+            if active_year is None:
+                return Response([])
+            year_id = active_year.pk
+        candidates = selectors.honor_agenda_candidates(
+            council_type=str(request.query_params.get("council_type", "")),
+            school_year_id=year_id,
+        )
+        return Response(HonorCertificateSerializer(candidates, many=True).data)
 
     @action(detail=False, methods=["get"], url_path="prefill")
     def prefill(self, request: Request) -> Response:
@@ -1351,6 +1396,38 @@ class DeadlinesView(APIView):
     def get(self, request: Request) -> Response:
         items = deadlines.collect_deadline_items(timezone.localdate())
         return Response([item.to_dict() for item in items])
+
+
+class PrincipalPendingView(APIView):
+    """Panel "Müdür onayı bekleyenler" kartı — onur belgesi + disiplin kurulu kararları."""
+
+    def get(self, request: Request) -> Response:
+        pending = selectors.principal_pending()
+        return Response(
+            {
+                "honor_certificates": [
+                    {
+                        "id": c.pk,
+                        "student_name": c.student.full_name,
+                        "class_label": c.student.class_label,
+                        "awarded_at": c.awarded_at,
+                    }
+                    for c in pending["honor_certificates"]
+                ],
+                "decisions": [
+                    {
+                        "id": d.pk,
+                        "case": d.case_id,
+                        "case_no": d.case.case_no,
+                        "student_name": d.student.full_name,
+                        "penalty_type_display": d.get_penalty_type_display(),
+                        "decision_no": d.decision_no,
+                        "decision_date": d.decision_date,
+                    }
+                    for d in pending["decisions"]
+                ],
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1419,8 +1496,48 @@ class HonorProposalFormView(APIView):
         return _pdf_response(pdf, "onur-belgesi-teklif-formu.pdf")
 
 
+def _meeting_favorable_certificates(
+    raw_meeting: Any, *, council_type: str
+) -> tuple[Any, list[Any]]:
+    """Çizelge toplantıdan üretilir: toplantının olumlu karara bağlanmış teklifleri.
+
+    Onur Kurulu toplantısı → uygun görülenler; Ödül ve Disiplin Kurulu → kabul edilenler.
+    """
+    meeting_id = _to_int(str(raw_meeting))
+    meeting = selectors.get_council_meeting(meeting_id) if meeting_id is not None else None
+    if meeting is None:
+        raise NotFound("Tutanak bulunamadı.")
+    if meeting.council_type != council_type:
+        raise drf_serializers.ValidationError("Çizelge bu kurulun toplantısından üretilemez.")
+    certificates = [
+        item.honor_certificate
+        for item in meeting.agenda_items.all()
+        if item.outcome == AgendaItemOutcome.FAVORABLE and item.honor_certificate is not None
+    ]
+    if not certificates:
+        raise drf_serializers.ValidationError(
+            "Bu toplantıda olumlu karara bağlanmış onur belgesi teklifi yok."
+        )
+    return meeting, certificates
+
+
 class HonorRecommendationRecordView(APIView):
     def post(self, request: Request) -> FileResponse:
+        if request.data.get("meeting") not in (None, ""):
+            meeting, approved = _meeting_favorable_certificates(
+                request.data.get("meeting"), council_type=CouncilType.HONOR
+            )
+            with _service_errors():
+                pdf = honor_documents.render_recommendation_record(
+                    approved,
+                    board=meeting.honor_board or selectors.get_active_honor_board(),
+                    committee=selectors.get_active_committee(),
+                    meeting=meeting,
+                )
+            return _pdf_response(
+                pdf, f"onur-kurulu-teklif-tutanagi-{meeting.meeting_no_display}.pdf"
+            )
+        # Toplantısız eski kayıtlar için (04.10.2026 öncesi) belge listesiyle üretim.
         certificates = _certificates_or_400(
             request.data.get("certificate_ids"),
             required_status=HonorCertificateStatus.HONOR_BOARD_RECOMMENDED,
@@ -1437,6 +1554,16 @@ class HonorRecommendationRecordView(APIView):
 
 class HonorAwardRecordView(APIView):
     def post(self, request: Request) -> FileResponse:
+        if request.data.get("meeting") not in (None, ""):
+            meeting, accepted = _meeting_favorable_certificates(
+                request.data.get("meeting"), council_type=CouncilType.DISCIPLINE
+            )
+            with _service_errors():
+                pdf = honor_documents.render_award_decision_record(accepted, meeting=meeting)
+            return _pdf_response(
+                pdf, f"odul-disiplin-kurulu-onur-karari-{meeting.meeting_no_display}.pdf"
+            )
+        # Toplantısız eski kayıtlar için (04.10.2026 öncesi) belge listesiyle üretim.
         certificates = _certificates_or_400(
             request.data.get("certificate_ids"),
             required_status=(

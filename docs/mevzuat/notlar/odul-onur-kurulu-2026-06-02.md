@@ -114,3 +114,25 @@ Bu uygulama **onur belgesi düzenlemez veya basmaz**. Uygulamadaki iş bölümü
 Yönetmelik teklif için zorunlu bir “dönemin son haftası” aralığı belirtmediğinden,
 iki dönemli işlem çevrimi zorunlu tutulur; teklif tarih aralığı mevzuat hükmü gibi
 sabitlenmez. Okul uygulamasında süreçler dönem sonlarında yürütülebilir.
+
+## Kurul işleyişi güncellemesi (2026-10-04, Aşama 1)
+
+Kullanıcı tespiti: menü ve ekranlar iki kurulun ayrı işleyişini yansıtmıyordu. Kararlar:
+
+1. Menü yönetmeliğin kurul yapısını izler (md. 176): **Ödül ve Disiplin Kurulu** (Gündem ·
+   Toplantılar · Müdür Onayı · Kurul Üyeleri) ve **Onur Kurulu** (Teklifler · Gündem ·
+   Toplantılar · Genel Kurul · Kurul Üyeleri) ayrı menü kalemleridir.
+2. Kurul kararı **toplantıda** alınır: teklif önce kurulun gündemine alınır, madde toplantı
+   ekranında karara bağlanır (md. 183/b uygun görüş; md. 161/1 kabul/ret). Karar tarihi toplantı
+   tarihidir; karar defteri (md. 184, 196) maddelerden derlenir. Ödül ve Disiplin Kurulunda
+   md. 191/1 yeter sayısı sağlanmadan karar verilemez; Onur Kurulu için yönetmelikte yeter sayı
+   hükmü yoktur.
+3. Olumsuz sonuç hangi kurulda alındıysa ona göre ayrı kayıttır: "Onur kurulu uygun görmedi" /
+   "Ödül ve disiplin kurulu reddetti". Gerekçe zorunludur (md. 196/1, 206/2); oy birliği /
+   çoğunluğu ve karşı görüş madde başına yazılır (md. 196/2).
+4. Teklif çizelgesi (Onur Kurulu → ÖDK) ve karar çizelgesi (ÖDK → müdür) ilgili toplantıdan,
+   o toplantının katılımcılarıyla imzalı üretilir.
+5. Kurul kabul kararı okul müdürüne sunulur (md. 196/3); müdür onayı ÖDK ekranında ve Panel'de
+   "Müdür onayı bekleyenler" kartında görünür.
+
+Disiplin dosyasının Ödül ve Disiplin Kurulunda görüşülmesi Aşama 2'ye bırakıldı (teknik borç M9).

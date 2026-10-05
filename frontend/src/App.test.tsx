@@ -9,7 +9,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import postcss from "postcss";
 import { MemoryRouter } from "react-router-dom";
@@ -58,6 +58,32 @@ vi.mock("./modules/disiplin/api", async (importOriginal) => {
     ...actual,
     disiplinApi: { ...actual.disiplinApi, listCases: vi.fn().mockResolvedValue([]) },
     deadlinesApi: deadlinesApiMock,
+  };
+});
+
+// Kurul sayfaları (Gündem, Müdür onayı, Panel kartı) ağ çağrısı yapmasın.
+vi.mock("./modules/kurul/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules/kurul/api")>();
+  return {
+    ...actual,
+    kurulApi: {
+      ...actual.kurulApi,
+      listMeetings: vi.fn().mockResolvedValue([]),
+      agendaCandidates: vi.fn().mockResolvedValue([]),
+      principalPending: vi.fn().mockResolvedValue({ honor_certificates: [], decisions: [] }),
+    },
+  };
+});
+
+vi.mock("./modules/odul/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules/odul/api")>();
+  return {
+    ...actual,
+    odulApi: {
+      ...actual.odulApi,
+      listCertificates: vi.fn().mockResolvedValue([]),
+      getBoard: vi.fn().mockResolvedValue({ board: null }),
+    },
   };
 });
 
@@ -157,9 +183,19 @@ describe("App — kabuk gezinmesi", () => {
   it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Panel" });
-    for (const ad of ["Panel", "Disiplin", "Onur / Ödül", "Bilgi Notları", "Kişiler", "Ayarlar"]) {
+    for (const ad of [
+      "Panel",
+      "Disiplin Dosyaları",
+      "Ödül ve Disiplin Kurulu",
+      "Onur Kurulu",
+      "Bilgi Notları",
+      "Kişiler",
+      "Ayarlar",
+    ]) {
       expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
     }
+    // Menü kurul yapısını izler (md. 176): eski "Onur / Ödül" kalemi yok.
+    expect(screen.queryByRole("link", { name: "Onur / Ödül" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(
       "href",
       "/hakkinda",
@@ -171,8 +207,10 @@ describe("App — kabuk gezinmesi", () => {
     ekranaBas("/");
     await user.click(await screen.findByRole("link", { name: "Bilgi Notları" }));
     expect(await screen.findByRole("heading", { name: "Kurul bilgi notları" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Disiplin Kurulu/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Onur Kurulu/ })).toBeInTheDocument();
+    // Menüde de kurul bağlantıları var; not seçicisi sayfa içeriğinde aranır.
+    const icerik = within(screen.getByRole("main"));
+    expect(icerik.getByRole("link", { name: /Disiplin Kurulu/ })).toBeInTheDocument();
+    expect(icerik.getByRole("link", { name: /Onur Kurulu/ })).toBeInTheDocument();
   });
 
   it("Hakkında ve Lisans bağlantısı geliştirici ve kullanım koşullarını gösterir", async () => {
@@ -195,11 +233,38 @@ describe("App — kabuk gezinmesi", () => {
     expect(screen.queryByRole("link", { name: "Karar Tipleri" })).not.toBeInTheDocument();
   });
 
-  it("Disiplin bağlantısına tıklayınca dosya listesi sayfası açılır", async () => {
+  it("Disiplin Dosyaları bağlantısına tıklayınca dosya listesi sayfası açılır", async () => {
     const user = userEvent.setup();
     ekranaBas("/");
-    await user.click(await screen.findByRole("link", { name: "Disiplin" }));
-    expect(await screen.findByRole("heading", { name: "Disiplin" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("link", { name: "Disiplin Dosyaları" }));
+    expect(
+      await screen.findByRole("heading", { name: "Disiplin Dosyaları", level: 1 }),
+    ).toBeInTheDocument();
+  });
+
+  it("kurul bağlantıları kurul sayfalarını açar", async () => {
+    const user = userEvent.setup();
+    ekranaBas("/");
+    await user.click(await screen.findByRole("link", { name: "Ödül ve Disiplin Kurulu" }));
+    expect(
+      await screen.findByRole("heading", { name: "Ödül ve Disiplin Kurulu", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Müdür Onayı/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Onur Kurulu" }));
+    expect(
+      await screen.findByRole("heading", { name: "Onur Kurulu", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Genel Kurul/ })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["/odul", "Onur Kurulu", /Teklifler/],
+    ["/disiplin/kurul", "Ödül ve Disiplin Kurulu", /Kurul Üyeleri/],
+    ["/disiplin/onur-teklifleri", "Ödül ve Disiplin Kurulu", /Müdür Onayı/],
+  ])("eski adres %s yeni kurul sayfasına yönlenir", async (yol, baslik, sekme) => {
+    ekranaBas(yol);
+    expect(await screen.findByRole("heading", { name: baslik, level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: sekme })).toHaveAttribute("aria-selected", "true");
   });
 
   it("Kişiler bağlantısına tıklayınca sicil sayfası açılır", async () => {

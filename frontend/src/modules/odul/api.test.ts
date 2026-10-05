@@ -153,26 +153,10 @@ describe("odulApi — onur belgesi uçları (md. 161 + 183/b)", () => {
     });
   });
 
-  it("recommendCertificate → POST /honor/certificates/<id>/recommend/", () => {
-    odulApi.recommendCertificate(8, { recommended_on: "2026-05-26" });
-    expect(apiMock.post).toHaveBeenCalledWith("/honor/certificates/8/recommend/", {
-      recommended_on: "2026-05-26",
-    });
-  });
-
-  it("awardCertificate → POST /honor/certificates/<id>/award/", () => {
-    odulApi.awardCertificate(8, { awarded_on: "2026-05-27" });
-    expect(apiMock.post).toHaveBeenCalledWith("/honor/certificates/8/award/", {
-      awarded_on: "2026-05-27",
-    });
-  });
-
-  it("rejectCertificate → POST /honor/certificates/<id>/reject/", () => {
-    odulApi.rejectCertificate(8, { reason: "Yetersiz", decided_on: "2026-05-27" });
-    expect(apiMock.post).toHaveBeenCalledWith("/honor/certificates/8/reject/", {
-      reason: "Yetersiz",
-      decided_on: "2026-05-27",
-    });
+  it("kurul karar uçları yok — karar toplantı gündeminden verilir (04.10.2026)", () => {
+    expect(odulApi).not.toHaveProperty("recommendCertificate");
+    expect(odulApi).not.toHaveProperty("awardCertificate");
+    expect(odulApi).not.toHaveProperty("rejectCertificate");
   });
 });
 
@@ -197,30 +181,31 @@ describe("odulApi — onur evrak uçları (3 PDF)", () => {
     });
   });
 
-  it("recommendationRecord → POST(blob) /honor/documents/recommendation-record/ + id'ler", () => {
-    odulApi.recommendationRecord([3]);
+  it("recommendationRecord → POST(blob) /honor/documents/recommendation-record/ + toplantı", () => {
+    odulApi.recommendationRecord(3);
     expect(apiMock.postBlob).toHaveBeenCalledWith("/honor/documents/recommendation-record/", {
-      certificate_ids: [3],
+      meeting: 3,
     });
   });
 
-  it("awardRecord → POST(blob) /honor/documents/award-record/ + id'ler", () => {
-    odulApi.awardRecord([4, 5]);
+  it("awardRecord → POST(blob) /honor/documents/award-record/ + toplantı", () => {
+    odulApi.awardRecord(4);
     expect(apiMock.postBlob).toHaveBeenCalledWith("/honor/documents/award-record/", {
-      certificate_ids: [4, 5],
+      meeting: 4,
     });
   });
 });
 
 describe("odul etiket/yardımcıları", () => {
-  it("HONOR_STATUS_TR — lite durum makinesi (SUPERSEDED yok)", () => {
+  it("HONOR_STATUS_TR — lite durum makinesi; olumsuz sonuç kurula göre ayrı", () => {
     expect(Object.keys(HONOR_STATUS_TR)).toEqual([
       "PROPOSED",
       "HONOR_BOARD_RECOMMENDED",
+      "HONOR_BOARD_DECLINED",
       "AWARDED",
+      "COMMITTEE_REJECTED",
       "PRINCIPAL_APPROVED",
       "PRINCIPAL_REJECTED",
-      "REJECTED",
     ]);
   });
 

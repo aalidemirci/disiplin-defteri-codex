@@ -364,10 +364,26 @@ const HONOR_SECTIONS: Section[] = [
     content: (
       <div className="grid gap-3 md:grid-cols-4">
         {[
-          ["1", "Teklif", "Öğrenci, öğretmen veya okul yönetimi adayı teklif eder."],
-          ["2", "Ön inceleme", "Koşullar ve örnek davranışı destekleyen bilgiler kontrol edilir."],
-          ["3", "Uygun görüş", "Onur Kurulu görüşür, gerekçeli kararını deftere yazar."],
-          ["4", "Nihai karar", "Ödül ve Disiplin Kurulu kabul veya ret kararı verir."],
+          [
+            "1",
+            "Teklif",
+            "Öğrenci, öğretmen veya okul yönetimi adayı teklif eder (Onur Kurulu → Teklifler).",
+          ],
+          [
+            "2",
+            "Uygun görüş",
+            "Onur Kurulu toplantısında teklif görüşülür, gerekçeli karar deftere yazılır (Onur Kurulu → Gündem).",
+          ],
+          [
+            "3",
+            "Kurul kararı",
+            "Ödül ve Disiplin Kurulu toplantısında yeter sayıyla kabul veya ret kararı verilir (Ödül ve Disiplin Kurulu → Gündem).",
+          ],
+          [
+            "4",
+            "Müdür onayı",
+            "Kurul kararı okul müdürüne sunulur; onaylanan belge törenle verilir (Ödül ve Disiplin Kurulu → Müdür Onayı).",
+          ],
         ].map(([number, title, text]) => (
           <div key={number} className="relative rounded-shape-md border border-outline-variant p-4">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-label-medium font-bold text-on-primary">

@@ -13,6 +13,7 @@
 
 import { api } from "../../lib/api";
 import { unwrap, type Paginated } from "../../lib/pagination";
+import type { HonorCertificate } from "../odul/api";
 
 export type { Paginated };
 
@@ -80,6 +81,75 @@ export interface CouncilMeeting {
   discipline_case: number | null;
   discipline_case_no: string | null;
   attendees: CouncilAttendee[];
+  // Kurul işleyişi (04.10.2026): kurul kararı gündem maddesinde verilir.
+  agenda_items: AgendaItem[];
+  // Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda null.
+  quorum: Quorum | null;
+}
+
+export type AgendaOutcome = "PENDING" | "FAVORABLE" | "UNFAVORABLE";
+
+export interface AgendaItem {
+  id: number;
+  order: number;
+  item_type: "HONOR_PROPOSAL";
+  honor_certificate: number | null;
+  student: number | null;
+  student_name: string;
+  class_label: string;
+  criteria: string[];
+  justification: string;
+  proposer_role_display: string;
+  certificate_status: string;
+  outcome: AgendaOutcome;
+  outcome_display: string;
+  decision_text: string;
+  decision_basis: DecisionBasis;
+  dissent_note: string;
+}
+
+export interface Quorum {
+  full: number;
+  required: number;
+  present: number;
+  ok: boolean;
+}
+
+export interface AgendaDecisionBody {
+  outcome: Exclude<AgendaOutcome, "PENDING">;
+  decision_text?: string;
+  decision_basis?: DecisionBasis;
+  dissent_note?: string;
+}
+
+// Kurulun olumlu/olumsuz karar adı (md. 183/b uygun görüş; md. 161/1 kabul/ret).
+export const OUTCOME_ACTION_TR: Record<CouncilType, { favorable: string; unfavorable: string }> = {
+  HONOR: { favorable: "Uygun gör", unfavorable: "Uygun görme" },
+  DISCIPLINE: { favorable: "Kabul et", unfavorable: "Reddet" },
+};
+
+/** Toplantıda karar bekleyen gündem maddesi var mı (açık toplantı). */
+export function hasPendingItems(meeting: CouncilMeeting): boolean {
+  return (meeting.agenda_items ?? []).some((item) => item.outcome === "PENDING");
+}
+
+// Panel "Müdür onayı bekleyenler" kartı.
+export interface PrincipalPending {
+  honor_certificates: {
+    id: number;
+    student_name: string;
+    class_label: string;
+    awarded_at: string | null;
+  }[];
+  decisions: {
+    id: number;
+    case: number;
+    case_no: string;
+    student_name: string;
+    penalty_type_display: string;
+    decision_no: string;
+    decision_date: string;
+  }[];
 }
 
 // Dosya görüşme tutanağına bağlanabilecek dosya seçeneği (kurula sevkli + kararlı).
@@ -113,6 +183,8 @@ export interface MeetingCreateBody {
   minutes_type?: MinutesType;
   discipline_case_id?: number | null;
   attendees: AttendeeInput[];
+  // Toplantı açılırken gündeme alınacak onur belgesi teklifleri.
+  honor_certificate_ids?: number[];
 }
 
 // --- Ders yılları (okul modülü /school-years/ ucu) ---
@@ -158,6 +230,37 @@ export const kurulApi = {
   },
 
   deleteMeeting: (id: number) => api.del<void>(`${BASE}/${id}/`),
+
+  // Katılımcı/metin düzeltmesi (tarih: karara bağlı madde varsa backend reddeder).
+  updateMeeting: (
+    id: number,
+    body: Partial<{
+      meeting_date: string;
+      agenda: string;
+      decision_text: string;
+      decision_basis: DecisionBasis;
+      notes: string;
+      attendees: AttendeeInput[];
+    }>,
+  ) => api.patch<CouncilMeeting>(`${BASE}/${id}/`, body),
+
+  // Gündeme alınmayı bekleyen onur belgesi teklifleri (Onur Kurulu: teklif aşaması;
+  // Ödül ve Disiplin Kurulu: Onur Kurulunca uygun görülenler).
+  agendaCandidates: (councilType: CouncilType) =>
+    api.get<HonorCertificate[]>(`${BASE}/agenda-candidates/?council_type=${councilType}`),
+
+  addAgendaItems: (meetingId: number, honorCertificateIds: number[]) =>
+    api.post<CouncilMeeting>(`${BASE}/${meetingId}/agenda-items/`, {
+      honor_certificate_ids: honorCertificateIds,
+    }),
+
+  removeAgendaItem: (meetingId: number, itemId: number) =>
+    api.del<CouncilMeeting>(`${BASE}/${meetingId}/agenda-items/${itemId}/`),
+
+  decideAgendaItem: (meetingId: number, itemId: number, body: AgendaDecisionBody) =>
+    api.post<CouncilMeeting>(`${BASE}/${meetingId}/agenda-items/${itemId}/decide/`, body),
+
+  principalPending: () => api.get<PrincipalPending>("/disiplin/mudur-onayi-bekleyenler/"),
 
   // Aktif kuruldan katılımcı taslağı (form ön-doldurma). Backend düz liste döner;
   // OYS bileşen sözleşmesi `{attendees: [...]}` zarfıdır — çeviri burada.

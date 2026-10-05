@@ -228,11 +228,11 @@ describe("YilDevriPage — 4. Kurullar", () => {
     await waitFor(() => expect(screen.getAllByText("tanımsız")).toHaveLength(2));
     expect(screen.getByRole("link", { name: /Kurulu tanımla/ })).toHaveAttribute(
       "href",
-      "/disiplin/kurul",
+      "/odul-disiplin-kurulu?sekme=uyeler",
     );
     expect(screen.getByRole("link", { name: /Onur kurulunu tanımla/ })).toHaveAttribute(
       "href",
-      "/odul",
+      "/onur-kurulu?sekme=uyeler",
     );
     // Kurul KOPYALANMAZ — üyeler her yıl yeniden belirlenir (md. 185-188).
     expect(screen.getByText(/her ders yılı yeniden belirlenir/)).toBeInTheDocument();

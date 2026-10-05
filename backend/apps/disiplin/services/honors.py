@@ -3,7 +3,8 @@
 OYS `services/honors.py`'den SADELEŞTİRİLEREK taşındı (tasarım §4.2): teklif
 penceresi/limiti, form-teslim takibi, kardeş eleme (SUPERSEDED), toplu teklif ve
 bildirim ALINMADI. Kalan çekirdek: kurul yönetimi + teklif → uygun görüş →
-belge/ret durum makinesi (davranış puanı kapısı AYNEN — md. 161).
+belge/ret durum makinesi (davranış puanı kapısı AYNEN — md. 161). Kurul kararı
+geçişleri (04.10.2026) yalnız toplantı gündeminden çağrılır (`services.council`).
 """
 
 from __future__ import annotations
@@ -13,6 +14,10 @@ from datetime import date
 from django.db import transaction
 
 from apps.disiplin.models import (
+    AgendaItemOutcome,
+    CouncilAgendaItem,
+    CouncilMeeting,
+    CouncilType,
     HonorBoard,
     HonorBoardMember,
     HonorCertificate,
@@ -330,6 +335,10 @@ def end_general_assembly_membership(
 # ---------------------------------------------------------------------------
 # Onur belgesi durum makinesi (md. 161 + 183/b) — tek yönlü süreç
 # ---------------------------------------------------------------------------
+# Kurul kararları (uygun görüş / uygun görmeme, kabul / ret) yalnız bir kurul
+# toplantısının gündem maddesinden verilir (`services.council.decide_agenda_item`,
+# kullanıcı kararı 04.10.2026). Karar tarihi toplantı tarihidir; olay toplantıya
+# açıkça bağlanır (eski "aynı gün tek toplantı" tahmini kaldırıldı).
 def _validate_criteria(criteria: list[str] | None) -> list[str]:
     """Kriter kodlarını doğrular (md. 161 a-ğ + 161/2). Geçersiz kod → ValueError."""
     cleaned = list(criteria or [])
@@ -347,38 +356,10 @@ def _record_event(
     *,
     event_type: str,
     event_date: date,
-    meeting_id: int | None = None,
+    meeting: CouncilMeeting | None = None,
     explanation: str = "",
 ) -> HonorCertificateEvent:
-    from apps.disiplin.models import CouncilMeeting, CouncilType, HonorMeetingKind
     from apps.okul.services.terms import term_for_date
-
-    meetings = CouncilMeeting.objects.filter(
-        school_year=certificate.school_year,
-        meeting_date=event_date,
-    )
-    if event_type == HonorCertificateEventType.RECOMMENDED:
-        meetings = meetings.filter(
-            council_type=CouncilType.HONOR,
-            honor_meeting_kind=HonorMeetingKind.BOARD,
-        )
-    elif event_type == HonorCertificateEventType.AWARDED:
-        meetings = meetings.filter(council_type=CouncilType.DISCIPLINE)
-    elif event_type in {
-        HonorCertificateEventType.PRINCIPAL_APPROVED,
-        HonorCertificateEventType.PRINCIPAL_REJECTED,
-        HonorCertificateEventType.UNDONE,
-    }:
-        meetings = meetings.none()
-    if meeting_id is not None:
-        meeting = meetings.filter(pk=meeting_id).first()
-        if meeting is None:
-            raise ValueError(
-                "Seçilen toplantı işlem tarihi, ders yılı veya kurul türüyle uyumlu değil."
-            )
-    else:
-        candidates = list(meetings[:2])
-        meeting = candidates[0] if len(candidates) == 1 else None
 
     event: HonorCertificateEvent = HonorCertificateEvent.objects.create(
         certificate=certificate,
@@ -465,53 +446,103 @@ def propose_honor_certificate(
     return certificate
 
 
-@transaction.atomic
-def recommend_honor_certificate(
-    certificate: HonorCertificate, *, recommended_on: date, meeting_id: int | None = None
+def apply_honor_board_decision(
+    certificate: HonorCertificate,
+    *,
+    meeting: CouncilMeeting,
+    favorable: bool,
+    reason: str = "",
 ) -> HonorCertificate:
-    """Onur kurulunun uygun görüşü (md. 183/b): PROPOSED → HONOR_BOARD_RECOMMENDED."""
+    """Onur Kurulunun teklif hakkındaki kararı (md. 183/b) — gündem maddesinden çağrılır.
+
+    Olumlu: PROPOSED → HONOR_BOARD_RECOMMENDED (Ödül ve Disiplin Kuruluna öneri).
+    Olumsuz: PROPOSED → HONOR_BOARD_DECLINED (gerekçe zorunlu). Tarih = toplantı tarihi.
+    """
     if certificate.status != HonorCertificateStatus.PROPOSED:
-        raise ValueError("Yalnız teklif aşamasındaki belge onur kurulu görüşüne sunulabilir.")
-    certificate.status = HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
-    certificate.recommended_at = recommended_on
-    certificate.save(update_fields=["status", "recommended_at", "updated_at"])
+        raise ValueError("Yalnız teklif aşamasındaki belge Onur Kurulunda görüşülebilir.")
+    on = meeting.meeting_date
+    if favorable:
+        certificate.status = HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
+        certificate.recommended_at = on
+        certificate.save(update_fields=["status", "recommended_at", "updated_at"])
+        _record_event(
+            certificate,
+            event_type=HonorCertificateEventType.RECOMMENDED,
+            event_date=on,
+            meeting=meeting,
+        )
+        return certificate
+    reason = reason.strip()
+    if not reason:
+        raise ValueError("Uygun görmeme gerekçesi zorunludur (md. 206/2).")
+    certificate.status = HonorCertificateStatus.HONOR_BOARD_DECLINED
+    certificate.rejected_at = on
+    certificate.rejection_reason = reason
+    certificate.save(update_fields=["status", "rejected_at", "rejection_reason", "updated_at"])
     _record_event(
         certificate,
-        event_type=HonorCertificateEventType.RECOMMENDED,
-        event_date=recommended_on,
-        meeting_id=meeting_id,
+        event_type=HonorCertificateEventType.DECLINED,
+        event_date=on,
+        meeting=meeting,
+        explanation=reason,
     )
     return certificate
 
 
-@transaction.atomic
-def award_honor_certificate(
+def apply_committee_decision(
     certificate: HonorCertificate,
     *,
-    awarded_on: date,
-    meeting_id: int | None = None,
+    meeting: CouncilMeeting,
+    favorable: bool,
+    reason: str = "",
 ) -> HonorCertificate:
-    """Ödül-disiplin kurulunun kabul kararı (md. 161): RECOMMENDED → AWARDED.
+    """Ödül ve Disiplin Kurulunun kararı (md. 161/1, 189/ç) — gündem maddesinden çağrılır.
 
-    Davranış puanı yeniden doğrulanır (puan teklif ile karar arasında düşmüş
-    olabilir; md. 161).
+    Olumlu: HONOR_BOARD_RECOMMENDED → AWARDED; davranış puanı yeniden doğrulanır
+    (puan uygun görüş ile karar arasında düşmüş olabilir — md. 161).
+    Olumsuz: → COMMITTEE_REJECTED (gerekçe zorunlu). Tarih = toplantı tarihi; uygun
+    görüşten önce olamaz.
     """
     from apps.disiplin.selectors import is_eligible_for_honor
 
     if certificate.status != HonorCertificateStatus.HONOR_BOARD_RECOMMENDED:
         raise ValueError(
-            "Yalnız onur kurulunun uygun gördüğü belge ödül-disiplin kurulunca verilebilir."
+            "Yalnız Onur Kurulunun uygun gördüğü teklif Ödül ve Disiplin Kurulunda görüşülebilir."
         )
-    if not is_eligible_for_honor(certificate.student_id, certificate.school_year_id):
-        raise ValueError("Öğrencinin davranış puanı indirilmiş; onur belgesi verilemez (md. 161).")
-    certificate.status = HonorCertificateStatus.AWARDED
-    certificate.awarded_at = awarded_on
-    certificate.save(update_fields=["status", "awarded_at", "updated_at"])
+    on = meeting.meeting_date
+    if certificate.recommended_at is not None and on < certificate.recommended_at:
+        raise ValueError(
+            "Ödül ve Disiplin Kurulu kararı, Onur Kurulunun uygun görüşünden önceki bir "
+            "tarihte olamaz."
+        )
+    if favorable:
+        if not is_eligible_for_honor(certificate.student_id, certificate.school_year_id):
+            raise ValueError(
+                "Öğrencinin davranış puanı indirilmiş; onur belgesi verilemez (md. 161)."
+            )
+        certificate.status = HonorCertificateStatus.AWARDED
+        certificate.awarded_at = on
+        certificate.save(update_fields=["status", "awarded_at", "updated_at"])
+        _record_event(
+            certificate,
+            event_type=HonorCertificateEventType.AWARDED,
+            event_date=on,
+            meeting=meeting,
+        )
+        return certificate
+    reason = reason.strip()
+    if not reason:
+        raise ValueError("Ret gerekçesi zorunludur (md. 196/1).")
+    certificate.status = HonorCertificateStatus.COMMITTEE_REJECTED
+    certificate.rejected_at = on
+    certificate.rejection_reason = reason
+    certificate.save(update_fields=["status", "rejected_at", "rejection_reason", "updated_at"])
     _record_event(
         certificate,
-        event_type=HonorCertificateEventType.AWARDED,
-        event_date=awarded_on,
-        meeting_id=meeting_id,
+        event_type=HonorCertificateEventType.COMMITTEE_REJECTED,
+        event_date=on,
+        meeting=meeting,
+        explanation=reason,
     )
     return certificate
 
@@ -594,38 +625,27 @@ def reject_honor_proposal_by_principal(
     return certificate
 
 
-@transaction.atomic
-def reject_honor_certificate(
-    certificate: HonorCertificate,
-    *,
-    reason: str,
-    decided_on: date,
-    meeting_id: int | None = None,
-) -> HonorCertificate:
-    """Onur belgesini uygun görmez (terminal red): PROPOSED|RECOMMENDED → REJECTED.
+def _reopen_agenda_item(certificate: HonorCertificate, *, council_type: str) -> None:
+    """Geri alınan kurul kararının gündem maddesini yeniden 'karar bekliyor' yapar.
 
-    Geri dönüş yoktur; yeniden değerlendirme yeni teklif gerektirir.
+    Tutanak düzeltmesidir: madde aynı toplantıda yeniden karara bağlanabilir veya
+    gündemden çıkarılıp başka toplantıya alınabilir. Toplantısız eski kayıtta madde yoktur.
     """
-    reason = (reason or "").strip()
-    if not reason:
-        raise ValueError("Ret için gerekçe zorunludur.")
-    if certificate.status not in {
-        HonorCertificateStatus.PROPOSED,
-        HonorCertificateStatus.HONOR_BOARD_RECOMMENDED,
-    }:
-        raise ValueError("Yalnız teklif veya uygun görüş aşamasındaki belge reddedilebilir.")
-    certificate.status = HonorCertificateStatus.REJECTED
-    certificate.rejection_reason = reason
-    certificate.rejected_at = decided_on
-    certificate.save(update_fields=["status", "rejection_reason", "rejected_at", "updated_at"])
-    _record_event(
-        certificate,
-        event_type=HonorCertificateEventType.REJECTED,
-        event_date=decided_on,
-        meeting_id=meeting_id,
-        explanation=reason,
+    item = (
+        CouncilAgendaItem.objects.filter(
+            honor_certificate=certificate,
+            meeting__council_type=council_type,
+        )
+        .exclude(outcome=AgendaItemOutcome.PENDING)
+        .order_by("-meeting__meeting_date", "-id")
+        .first()
     )
-    return certificate
+    if item is None:
+        return
+    item.outcome = AgendaItemOutcome.PENDING
+    item.decision_text = ""
+    item.dissent_note = ""
+    item.save(update_fields=["outcome", "decision_text", "dissent_note", "updated_at"])
 
 
 @transaction.atomic
@@ -634,10 +654,10 @@ def undo_honor_certificate_step(
 ) -> HonorCertificate:
     """Onur belgesi sürecinin SON adımını gerekçeyle geri alır (kullanıcı kararı M8).
 
-    RECOMMENDED → PROPOSED, AWARDED → RECOMMENDED, PRINCIPAL_REJECTED → AWARDED,
-    REJECTED → (uygun görüş varsa) RECOMMENDED / PROPOSED. Müdür onayı (belge
-    verilmiş sayılır) ve teklif aşaması geri alınamaz. Geri alınan adımın tarihleri
-    temizlenir; iz `UNDONE` olayı olarak gerekçesiyle kalır.
+    RECOMMENDED/DECLINED → PROPOSED, AWARDED/COMMITTEE_REJECTED → RECOMMENDED,
+    PRINCIPAL_REJECTED → AWARDED. Müdür onayı (belge verilmiş sayılır) ve teklif
+    aşaması geri alınamaz. Kurul kararıysa ilgili gündem maddesi yeniden karar
+    bekler; geri alınan adımın tarihleri temizlenir; iz `UNDONE` olayı olarak kalır.
     """
     from django.utils import timezone
 
@@ -646,33 +666,46 @@ def undo_honor_certificate_step(
         raise ValueError("Geri alma gerekçesi zorunludur.")
     status = certificate.status
     fields = ["status", "updated_at"]
-    if status == HonorCertificateStatus.HONOR_BOARD_RECOMMENDED:
+    reopen: str | None = None
+    if status in (
+        HonorCertificateStatus.HONOR_BOARD_RECOMMENDED,
+        HonorCertificateStatus.HONOR_BOARD_DECLINED,
+    ):
+        if CouncilAgendaItem.objects.filter(
+            honor_certificate=certificate, outcome=AgendaItemOutcome.PENDING
+        ).exists():
+            raise ValueError(
+                "Teklif Ödül ve Disiplin Kurulu gündeminde karar bekliyor; önce gündemden "
+                "çıkarın."
+            )
         certificate.status = HonorCertificateStatus.PROPOSED
         certificate.recommended_at = None
-        fields.append("recommended_at")
-    elif status == HonorCertificateStatus.AWARDED:
+        certificate.rejected_at = None
+        certificate.rejection_reason = ""
+        fields += ["recommended_at", "rejected_at", "rejection_reason"]
+        reopen = CouncilType.HONOR
+    elif status in (
+        HonorCertificateStatus.AWARDED,
+        HonorCertificateStatus.COMMITTEE_REJECTED,
+    ):
         certificate.status = HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
         certificate.awarded_at = None
-        fields.append("awarded_at")
+        certificate.rejected_at = None
+        certificate.rejection_reason = ""
+        fields += ["awarded_at", "rejected_at", "rejection_reason"]
+        reopen = CouncilType.DISCIPLINE
     elif status == HonorCertificateStatus.PRINCIPAL_REJECTED:
         certificate.status = HonorCertificateStatus.AWARDED
         certificate.principal_decided_at = None
         certificate.principal_decision_reason = ""
         fields += ["principal_decided_at", "principal_decision_reason"]
-    elif status == HonorCertificateStatus.REJECTED:
-        certificate.status = (
-            HonorCertificateStatus.HONOR_BOARD_RECOMMENDED
-            if certificate.recommended_at is not None
-            else HonorCertificateStatus.PROPOSED
-        )
-        certificate.rejected_at = None
-        certificate.rejection_reason = ""
-        fields += ["rejected_at", "rejection_reason"]
     elif status == HonorCertificateStatus.PRINCIPAL_APPROVED:
         raise ValueError("Okul müdürünce onaylanmış onur belgesi geri alınamaz.")
     else:
         raise ValueError("Teklif aşamasında geri alınacak adım yok.")
     certificate.save(update_fields=fields)
+    if reopen is not None:
+        _reopen_agenda_item(certificate, council_type=reopen)
     _record_event(
         certificate,
         event_type=HonorCertificateEventType.UNDONE,

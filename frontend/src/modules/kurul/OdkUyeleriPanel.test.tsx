@@ -1,6 +1,6 @@
-// Disiplin Kurulu sayfası testi (Tur 71/Faz 4; Tur 212 sekmeli): kurul yoksa
-// oluşturma kartı, kurul varsa başkan + üye listesi + üye çıkarma, veli üye
-// ad snapshot'ı ile ekleme, tutanak sekmesi.
+// Ödül ve Disiplin Kurulu üyeleri paneli testi (Tur 71/Faz 4; 04.10.2026 panele ayrıldı):
+// kurul yoksa oluşturma kartı, kurul varsa başkan + üye listesi + üye çıkarma, veli üye
+// ad snapshot'ı ile ekleme. Sekme kabuğu OdulDisiplinKuruluPage testinde.
 //
 // OYS `modules/disiplin/DisiplinKuruluPage.test.tsx`'ten UYARLANDI (F4-D2). Sapmalar:
 // auth yok — yetkisiz/memur kilit senaryoları kalktı (rol kapısı yok, hepsi-yetkili);
@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { DisciplineCommittee } from "./api";
+import type { DisciplineCommittee } from "../disiplin/api";
 
 const dapi = vi.hoisted(() => ({
   getCommittee: vi.fn(),
@@ -26,7 +26,7 @@ const dapi = vi.hoisted(() => ({
   removeCommitteeMember: vi.fn(),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("../disiplin/api", () => ({
   disiplinApi: dapi,
   personnelLookupApi: { search: vi.fn(() => Promise.resolve([])) },
   studentLookupApi: { search: vi.fn(() => Promise.resolve([])) },
@@ -49,14 +49,7 @@ vi.mock("../okul/api", () => ({
   },
 }));
 
-// Tutanak listesi ayrı bileşen olarak test edilir; sayfa testi sekme kabuğuna odaklanır.
-vi.mock("../kurul/TutanakListesi", () => ({
-  default: ({ councilType }: { councilType: string }) => (
-    <div data-testid="tutanak-listesi">{councilType}</div>
-  ),
-}));
-
-import DisiplinKuruluPage from "./DisiplinKuruluPage";
+import OdkUyeleriPanel from "./OdkUyeleriPanel";
 
 const COMMITTEE: DisciplineCommittee = {
   id: 1,
@@ -95,7 +88,7 @@ function renderPage() {
     <SnackbarProvider>
       <ConfirmProvider>
         <MemoryRouter>
-          <DisiplinKuruluPage />
+          <OdkUyeleriPanel />
         </MemoryRouter>
       </ConfirmProvider>
     </SnackbarProvider>,
@@ -106,14 +99,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("DisiplinKuruluPage", () => {
-  it("üyeler varsayılan sekme, tutanak sekmesi erişilebilir", async () => {
+describe("OdkUyeleriPanel", () => {
+  it("kurul varsa başkan gösterilir", async () => {
     dapi.getCommittee.mockResolvedValue({ committee: COMMITTEE });
-    const user = userEvent.setup();
     renderPage();
     expect(await screen.findByText("Ayşe Müdür Yardımcısı")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /Toplantı Tutanakları/ }));
-    expect(await screen.findByTestId("tutanak-listesi")).toHaveTextContent("DISCIPLINE");
   });
 
   it("kurul yoksa: oluşturma kartı gösterilir", async () => {

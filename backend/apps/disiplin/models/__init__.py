@@ -24,6 +24,10 @@ from apps.disiplin.models.committee import (
     DisciplineMeeting,
 )
 from apps.disiplin.models.council_meeting import (
+    AGENDA_OUTCOME_LABELS,
+    AgendaItemOutcome,
+    AgendaItemType,
+    CouncilAgendaItem,
     CouncilAttendeeRole,
     CouncilDecisionBasis,
     CouncilMeeting,
@@ -69,12 +73,16 @@ from apps.disiplin.models.precautions import (
 )
 
 __all__ = [
+    "AGENDA_OUTCOME_LABELS",
+    "AgendaItemOutcome",
+    "AgendaItemType",
     "AppealFiledByRole",
     "AppealResult",
     "ApprovalAuthority",
     "AttachmentType",
     "CaseStage",
     "CommitteeMemberType",
+    "CouncilAgendaItem",
     "CouncilAttendeeRole",
     "CouncilDecisionBasis",
     "CouncilMeeting",

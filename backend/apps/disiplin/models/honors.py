@@ -22,15 +22,20 @@ class HonorCertificateStatus(models.TextChoices):
     """Onur belgesi durum makinesi (md. 161 + 183/b).
 
     İleri yönlüdür; müdür onayından ÖNCEKİ son adım gerekçeyle geri alınabilir
-    (`services.undo_honor_certificate_step`). Müdür onayı kesindir.
+    (`services.undo_honor_certificate_step`). Müdür onayı kesindir. Olumsuz sonuç
+    hangi kurulda alındıysa ona göre ayrı durumdur (04.10.2026 — iki kurul ayrımı):
+    Onur Kurulu uygun görmezse `HONOR_BOARD_DECLINED`, Ödül ve Disiplin Kurulu
+    reddederse `COMMITTEE_REJECTED`. Kurul kararları yalnız toplantı gündeminden
+    verilir (`services.decide_agenda_item`).
     """
 
     PROPOSED = "PROPOSED", "Teklif edildi"
     HONOR_BOARD_RECOMMENDED = "HONOR_BOARD_RECOMMENDED", "Onur kurulu uygun gördü"
+    HONOR_BOARD_DECLINED = "HONOR_BOARD_DECLINED", "Onur kurulu uygun görmedi"
     AWARDED = "AWARDED", "Ödül ve disiplin kurulu kabul etti"
+    COMMITTEE_REJECTED = "COMMITTEE_REJECTED", "Ödül ve disiplin kurulu reddetti"
     PRINCIPAL_APPROVED = "PRINCIPAL_APPROVED", "Okul müdürü onayladı"
     PRINCIPAL_REJECTED = "PRINCIPAL_REJECTED", "Okul müdürü onaylamadı"
-    REJECTED = "REJECTED", "Uygun görülmedi"
 
 
 class HonorProposerRole(models.TextChoices):
@@ -326,10 +331,11 @@ class HonorCertificate(BaseModel):
 class HonorCertificateEventType(models.TextChoices):
     PROPOSED = "PROPOSED", "Teklif edildi"
     RECOMMENDED = "RECOMMENDED", "Onur kurulu uygun gördü"
+    DECLINED = "DECLINED", "Onur kurulu uygun görmedi"
     AWARDED = "AWARDED", "Ödül ve disiplin kurulu kabul etti"
+    COMMITTEE_REJECTED = "COMMITTEE_REJECTED", "Ödül ve disiplin kurulu reddetti"
     PRINCIPAL_APPROVED = "PRINCIPAL_APPROVED", "Okul müdürü onayladı"
     PRINCIPAL_REJECTED = "PRINCIPAL_REJECTED", "Okul müdürü onaylamadı"
-    REJECTED = "REJECTED", "Uygun görülmedi"
     # Kullanıcı kararı 26.09.2026 (M8): son adım gerekçeyle geri alınır; iz korunur.
     UNDONE = "UNDONE", "Son adım geri alındı"
 

@@ -24,13 +24,16 @@ export type { Paginated };
 
 // --- TextChoices (backend models/honors.py ile birebir) ---
 
+// Olumsuz sonuç kurula göre ayrıdır (04.10.2026): Onur Kurulu uygun görmezse
+// HONOR_BOARD_DECLINED, Ödül ve Disiplin Kurulu reddederse COMMITTEE_REJECTED.
 export type HonorCertificateStatus =
   | "PROPOSED"
   | "HONOR_BOARD_RECOMMENDED"
+  | "HONOR_BOARD_DECLINED"
   | "AWARDED"
+  | "COMMITTEE_REJECTED"
   | "PRINCIPAL_APPROVED"
-  | "PRINCIPAL_REJECTED"
-  | "REJECTED";
+  | "PRINCIPAL_REJECTED";
 
 export type HonorProposerRole = "STUDENT" | "TEACHER" | "ADMINISTRATION";
 
@@ -51,10 +54,11 @@ export type HonorCriterion =
 export const HONOR_STATUS_TR: Record<HonorCertificateStatus, string> = {
   PROPOSED: "Teklif edildi",
   HONOR_BOARD_RECOMMENDED: "Onur kurulu uygun gördü",
+  HONOR_BOARD_DECLINED: "Onur kurulu uygun görmedi",
   AWARDED: "Ödül ve disiplin kurulu kabul etti",
+  COMMITTEE_REJECTED: "Ödül ve disiplin kurulu reddetti",
   PRINCIPAL_APPROVED: "Okul müdürü onayladı",
   PRINCIPAL_REJECTED: "Okul müdürü onaylamadı",
-  REJECTED: "Uygun görülmedi",
 };
 
 export const HONOR_PROPOSER_ROLE_TR: Record<HonorProposerRole, string> = {
@@ -242,25 +246,12 @@ export interface HonorBoardMemberCreateBody {
 export interface HonorCertificateCreateBody {
   student_id: number;
   proposer_role: HonorProposerRole;
-  // TEK kriter (e-Okul tek madde kuralı; backend tam olarak bir eleman ister — md. 161).
+  // Bir veya birden çok örnek davranış (md. 161/1 a-ğ + 161/2).
   criteria: HonorCriterion[];
   school_year_id?: number | null; // verilmezse aktif yıl
   school_term_id?: number;
   justification?: string;
   proposer_name?: string;
-}
-
-export interface HonorCertificateRecommendBody {
-  recommended_on: string; // YYYY-MM-DD
-}
-
-export interface HonorCertificateAwardBody {
-  awarded_on: string; // YYYY-MM-DD
-}
-
-export interface HonorCertificateRejectBody {
-  reason: string;
-  decided_on: string; // YYYY-MM-DD
 }
 
 export interface HonorPrincipalDecisionBody {
@@ -372,14 +363,6 @@ export const odulApi = {
     });
   },
 
-  // Onur kurulu uygun görüşü (md. 183/b): PROPOSED → HONOR_BOARD_RECOMMENDED.
-  recommendCertificate: (id: number, body: HonorCertificateRecommendBody) =>
-    api.post<HonorCertificate>(`${BASE}/certificates/${id}/recommend/`, body),
-
-  // Ödül-disiplin kurulu kararı (md. 161): RECOMMENDED → AWARDED.
-  awardCertificate: (id: number, body: HonorCertificateAwardBody) =>
-    api.post<HonorCertificate>(`${BASE}/certificates/${id}/award/`, body),
-
   principalApproveCertificate: (id: number, body: HonorPrincipalDecisionBody) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/principal-approve/`, body),
 
@@ -389,10 +372,6 @@ export const odulApi = {
   // Son adımı gerekçeyle geri al (müdür onayı hariç; kullanıcı kararı 26.09.2026, M8).
   undoCertificateStep: (id: number, body: { reason: string }) =>
     api.post<HonorCertificate>(`${BASE}/certificates/${id}/undo/`, body),
-
-  // Uygun görülmedi: PROPOSED|RECOMMENDED → REJECTED (son adım olarak geri alınabilir).
-  rejectCertificate: (id: number, body: HonorCertificateRejectBody) =>
-    api.post<HonorCertificate>(`${BASE}/certificates/${id}/reject/`, body),
 
   // Evrak (PDF blob): boş teklif formu (GET) + dolu teklif formu / teklif tutanağı (POST id'ler).
   proposalFormBlank: () => api.getBlob(`${BASE}/documents/proposal-form-blank/`),
@@ -404,16 +383,15 @@ export const odulApi = {
       ...(proposerName !== undefined ? { proposer_name: proposerName } : {}),
     }),
 
-  // Uygun görüş tutanağı: YALNIZ HONOR_BOARD_RECOMMENDED belgeler kabul edilir;
-  // aksi halde backend 400 döner (mesaj kullanıcıya gösterilir).
-  recommendationRecord: (certificateIds: number[]) =>
-    api.postBlob(`${BASE}/documents/recommendation-record/`, {
-      certificate_ids: certificateIds,
-    }),
+  // Çizelgeler bir TOPLANTININ çıktısıdır (04.10.2026): o toplantıda olumlu karara
+  // bağlanan teklifler; imzacılar toplantı katılımcıları, tarih toplantı tarihi.
+  // Onur Kurulu teklif çizelgesi → Ödül ve Disiplin Kuruluna sunulur (md. 183/b).
+  recommendationRecord: (meetingId: number) =>
+    api.postBlob(`${BASE}/documents/recommendation-record/`, { meeting: meetingId }),
 
-  // Nihai tutanak: belge verilenler (YALNIZ AWARDED) — ödül-disiplin kurulu kararı.
-  awardRecord: (certificateIds: number[]) =>
-    api.postBlob(`${BASE}/documents/award-record/`, { certificate_ids: certificateIds }),
+  // Ödül ve Disiplin Kurulu karar çizelgesi → okul müdürüne sunulur (md. 161/1, 196/3).
+  awardRecord: (meetingId: number) =>
+    api.postBlob(`${BASE}/documents/award-record/`, { meeting: meetingId }),
 };
 
 // Kişi arama (öğrenci/personel) burada YOK: tek doğruluk kaynağı ../disiplin/api —

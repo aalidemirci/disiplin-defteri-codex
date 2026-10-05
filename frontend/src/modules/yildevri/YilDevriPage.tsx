@@ -571,16 +571,16 @@ function KurulAdimi() {
           baslik="Ödül ve Disiplin Kurulu"
           ikon="gavel"
           tanimli={kurulVar}
-          yol="/disiplin/kurul"
+          yol="/odul-disiplin-kurulu?sekme=uyeler"
           eylem="Kurulu tanımla"
         />
         <KurulKarti
           baslik="Onur Kurulu"
           ikon="workspace_premium"
           tanimli={onurVar}
-          yol="/odul"
+          yol="/onur-kurulu?sekme=uyeler"
           eylem="Onur kurulunu tanımla"
-          ipucu='Onur Kurulu ekranında "Kurul Üyeleri" sekmesini kullanın.'
+          ipucu='Onur Genel Kurulu temsilcileri "Genel Kurul" sekmesinden girilir; Onur Kurulu bu temsilciler arasından seçilir.'
         />
       </div>
     </div>

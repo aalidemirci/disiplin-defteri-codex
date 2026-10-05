@@ -29,6 +29,7 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     approve,
+    ensure_terms,
 )
 from apps.okul.models import Student
 from apps.okul.services import setup as okul_setup
@@ -391,22 +392,67 @@ def test_onur_evraklari_uc_pdf(client: APIClient) -> None:
     assert "ÖRNEK ÖĞRENCİ" in text
     assert "ĞÜŞİÖÇ" in text
 
-    services.recommend_honor_certificate(cert, recommended_on=date(2026, 5, 25))
+    # Onur Kurulu toplantısı: teklif gündeme alınır, uygun görülür (md. 183/b).
+    ensure_terms(year)
+    onur = services.create_council_meeting(
+        school_year_id=year.pk,
+        council_type="HONOR",
+        meeting_date=date(2026, 5, 25),
+        attendees=[
+            {"person_name": "ONUR BAŞKANI", "attendee_role": "VOTING_MEMBER", "is_chair": True},
+            {
+                "person_name": "KURUL ÜYESİ",
+                "attendee_role": "VOTING_MEMBER",
+                "is_chair": False,
+                "member_student_id": uye.pk,
+            },
+        ],
+        honor_certificate_ids=[cert.pk],
+    )
+    services.decide_agenda_item(onur.agenda_items.get(), outcome="FAVORABLE")
     tutanak = client.post(
+        "/api/v1/honor/documents/recommendation-record/", {"meeting": onur.pk}, format="json"
+    )
+    text = _pdf_text(b"".join(tutanak.streaming_content))  # type: ignore[attr-defined]
+    assert "ONUR BAŞKANI" in text  # toplantı başkanı imza satırı
+    assert "İkinci Başkan" in text  # kurul kaydındaki ikinci başkan işaretlenir
+    assert "DİSİPLİN BAŞKANI" in text  # teslim-tesellüm
+    # Toplantısız eski kayıt yolu korunur.
+    eski = client.post(
         "/api/v1/honor/documents/recommendation-record/",
         {"certificate_ids": [cert.pk]},
         format="json",
     )
-    text = _pdf_text(b"".join(tutanak.streaming_content))  # type: ignore[attr-defined]
-    assert "ONUR BAŞKANI" in text  # kurul başkanı imza satırı
+    assert eski.status_code == 200
 
-    services.award_honor_certificate(cert, awarded_on=date(2026, 6, 1))
-    karar = client.post(
-        "/api/v1/honor/documents/award-record/",
-        {"certificate_ids": [cert.pk]},
-        format="json",
+    # Ödül ve Disiplin Kurulu toplantısı: kabul (md. 161/1); kurul = başkan → yeter sayı 1.
+    odk = services.create_council_meeting(
+        school_year_id=year.pk,
+        council_type="DISCIPLINE",
+        meeting_date=date(2026, 6, 1),
+        attendees=[
+            {"person_name": "DİSİPLİN BAŞKANI", "attendee_role": "VOTING_MEMBER", "is_chair": True}
+        ],
+        honor_certificate_ids=[cert.pk],
     )
-    assert b"".join(karar.streaming_content).startswith(b"%PDF")  # type: ignore[attr-defined]
+    services.decide_agenda_item(odk.agenda_items.get(), outcome="FAVORABLE")
+    karar = client.post("/api/v1/honor/documents/award-record/", {"meeting": odk.pk}, format="json")
+    text = _pdf_text(b"".join(karar.streaming_content))  # type: ignore[attr-defined]
+    assert "DİSİPLİN BAŞKANI" in text
+    assert "01.06.2026" in text  # karar tarihi = toplantı tarihi
+    yanlis = client.post(
+        "/api/v1/honor/documents/award-record/", {"meeting": onur.pk}, format="json"
+    )
+    assert yanlis.status_code == 400  # çizelge kendi kurulunun toplantısından üretilir
+
+    # Karar defteri gündem maddelerini basar (bilinçli istisna — yalnız ekleme).
+    minutes = client.get(f"/api/v1/council/meetings/{odk.pk}/minutes/")
+    text = _pdf_text(b"".join(minutes.streaming_content))  # type: ignore[attr-defined]
+    assert "GÜNDEM MADDELERİ VE KARARLAR" in text
+    assert "ÖRNEK ÖĞRENCİ" in text
+    assert "Kabul edildi" in text
+    # Genel karar metni yokken boş "KARAR" bölümü ve "oy birliği" cümlesi basılmaz.
+    assert "İşbu karar" not in text
 
 
 def test_karar_defteri_tutanagi_pdf(client: APIClient) -> None:
@@ -429,6 +475,10 @@ def test_karar_defteri_tutanagi_pdf(client: APIClient) -> None:
     assert "ÖDÜL VE DİSİPLİN KURULU TOPLANTI TUTANAĞI" in text
     assert "ığüşiöç" in text
     assert "T001" in text
+    # Gündem maddesiz toplantıda OYS çıktısı aynen: ek blok basılmaz.
+    assert doc_engine._council_minutes_context(meeting)["agenda_items"] == []
+    assert "GÜNDEM MADDELERİ" not in text
+    assert "İşbu karar" in text
 
 
 # ---------------------------------------------------------------------------

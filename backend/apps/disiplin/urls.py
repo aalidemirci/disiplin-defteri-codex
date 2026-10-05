@@ -101,6 +101,11 @@ urlpatterns = [
         views.DeadlinesView.as_view(),
         name="discipline-deadlines",
     ),
+    path(
+        "disiplin/mudur-onayi-bekleyenler/",
+        views.PrincipalPendingView.as_view(),
+        name="discipline-principal-pending",
+    ),
     # md. 157/7 imha aracı — önizleme → tutanak (kalıcı tek iz) → uygula.
     path(
         "disiplin/imha/onizleme/",

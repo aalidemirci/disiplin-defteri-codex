@@ -152,6 +152,17 @@ def remove_committee_member(member: DisciplineCommitteeMember) -> None:
     member.delete()
 
 
+def committee_quorum(committee: DisciplineCommittee, present: int) -> dict[str, Any]:
+    """md. 191/1 ölçüsü: kurul üyelerin SALT ÇOĞUNLUĞUYLA toplanır.
+
+    Üye tam sayısı = başkan + asıl üyeler (md. 185/1); `present` toplantıda oy
+    hakkı olan katılımcı sayısıdır (başkan ve yerine çağrılan yedekler dahil).
+    """
+    full = 1 + committee.members.filter(is_substitute=False).count()
+    required = full // 2 + 1
+    return {"full": full, "required": required, "present": present, "ok": present >= required}
+
+
 def _check_quorum(committee: DisciplineCommittee, attendee_count: int) -> None:
     """md. 191/1: kurul üyelerin SALT ÇOĞUNLUĞUYLA toplanır.
 
@@ -159,13 +170,12 @@ def _check_quorum(committee: DisciplineCommittee, attendee_count: int) -> None:
     (yokluğunda md. 188 gereği öğretmen üye başkanlık eder, yedek katılır — o
     yedek de katılımcı listesine girer).
     """
-    full = 1 + committee.members.filter(is_substitute=False).count()
-    present = attendee_count + 1
-    if attendee_count < 1 or present * 2 <= full:
-        needed = full // 2 + 1
+    quorum = committee_quorum(committee, attendee_count + 1)
+    if attendee_count < 1 or not quorum["ok"]:
         raise ValueError(
-            f"Toplantı yeter sayısı yok: kurul {full} kişi, en az {needed} kişi (başkan "
-            "dahil) katılmalı (md. 191/1 — üyelerin salt çoğunluğu)."
+            f"Toplantı yeter sayısı yok: kurul {quorum['full']} kişi, en az "
+            f"{quorum['required']} kişi (başkan dahil) katılmalı (md. 191/1 — üyelerin salt "
+            "çoğunluğu)."
         )
 
 

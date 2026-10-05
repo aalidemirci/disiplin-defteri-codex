@@ -36,6 +36,9 @@
    `search_record`, `non_compliance_record` (M2 Grup 2), `guidance_assessment` (Form-01)
    OYS'de yoktur, yeni eklendi — bunları OYS'ye "geri
    döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
+   `council_meeting_minutes` (karar defteri) 04.10.2026'dan beri yalnız EKLEME ile
+   "GÜNDEM MADDELERİ VE KARARLAR" bloğu basar (kurul işleyişi Aşama 1); gündemsiz
+   toplantıda çıktı OYS ile aynıdır — bloğu kaldırma.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek
    kusur bu iki sınıftan çıktı.
@@ -95,7 +98,9 @@ backend/
 frontend/src/
   ui/               M3 bileşen kiti (OYS'den AYNEN)
   lib/              api.ts (authsuz istemci), format.ts (todayIso!), download, pagination
-  modules/          disiplin/ kurul/ odul/ kisiler/ kurulum/ ayarlar/ panel/
+  modules/          disiplin/ (dosyalar) kurul/ (Ödül ve Disiplin Kurulu + Onur Kurulu
+                    sayfaları, gündem, toplantı ekranı, müdür onayı) odul/ (onur panelleri)
+                    kisiler/ kurulum/ ayarlar/ panel/
                     imha/ yildevri/ guvenlik/ okul/
 desktop/            main.py (kilit→yedek→migrate→waitress thread→pencere), server.py,
                     lock.py, backup.py, integrity.py, session_guard.py, paths.py, dialogs.py
@@ -308,6 +313,13 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - **Onur kurulu (md. 180-181):** üye sınıf seviyesi sicilden, seviye başına tek asıl
   üye, asıl ikinci başkan 11/12. sınıftan; onur belgesi müdür onayında uygunluk
   yeniden denetlenir, müdür onayı geri alınamaz (öncesi gerekçeyle geri alınır).
+- **Onur belgesinde kurul kararı yalnız toplantıda** (kurul işleyişi, 04.10.2026):
+  uygun görüş (md. 183/b) ve kabul/ret (md. 161/1) yalnız bir kurul toplantısının
+  gündem maddesi karara bağlanarak verilir (`services.council.decide_agenda_item`);
+  karar tarihi = toplantı tarihi; ÖDK maddesi md. 191/1 yeter sayısı olmadan karara
+  bağlanmaz; olumsuz kararda gerekçe zorunlu; ret kurula göre ayrı durumdur
+  (`HONOR_BOARD_DECLINED` / `COMMITTEE_REJECTED`). Karara bağlı maddesi olan toplantı
+  silinemez, tarihi değişmez; geri alma maddeyi yeniden "karar bekliyor" yapar.
 
 Süre matrisi (iş günü): itiraz tebliğ+5, sevk+5, kurul 10 (+1 uzatma), tedbir ≤10
 (+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri

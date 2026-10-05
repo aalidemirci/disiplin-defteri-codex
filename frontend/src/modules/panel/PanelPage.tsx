@@ -11,6 +11,7 @@ import { deadlinesApi, disiplinApi, SEVERITY_ORDER } from "../disiplin/api";
 import type { CaseStage, DeadlineItem, DeadlineSeverity, DisciplineCase } from "../disiplin/api";
 import { okulApi } from "../okul/api";
 import type { SetupStatus } from "../okul/api";
+import MudurOnayiKarti from "./MudurOnayiKarti";
 
 const SEVERITY_STYLE: Record<
   DeadlineSeverity,
@@ -100,6 +101,7 @@ export default function PanelPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [caseError, setCaseError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -180,7 +182,14 @@ export default function PanelPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outlined" icon="refresh" onClick={load}>
+          <Button
+            variant="outlined"
+            icon="refresh"
+            onClick={() => {
+              load();
+              setReloadKey((key) => key + 1);
+            }}
+          >
             Yenile
           </Button>
           <Link
@@ -394,6 +403,8 @@ export default function PanelPage() {
           </div>
         </section>
       </div>
+
+      <MudurOnayiKarti reloadKey={reloadKey} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]">
         <section className="dd-panel p-5">

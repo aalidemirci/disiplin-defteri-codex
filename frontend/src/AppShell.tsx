@@ -13,10 +13,13 @@ interface NavItem {
   icon: string;
 }
 
+// Menü yönetmeliğin kurul yapısını izler (md. 176; 04.10.2026): disiplin dosyaları,
+// Okul Öğrenci Ödül ve Disiplin Kurulu (md. 185-191) ve Onur Kurulu (md. 178-184).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Panel", icon: "space_dashboard" },
-  { to: "/disiplin", label: "Disiplin", icon: "folder_open" },
-  { to: "/odul", label: "Onur / Ödül", icon: "workspace_premium" },
+  { to: "/disiplin", label: "Disiplin Dosyaları", icon: "folder_open" },
+  { to: "/odul-disiplin-kurulu", label: "Ödül ve Disiplin Kurulu", icon: "gavel" },
+  { to: "/onur-kurulu", label: "Onur Kurulu", icon: "workspace_premium" },
   { to: "/bilgi-notlari", label: "Bilgi Notları", icon: "library_books" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
@@ -24,10 +27,10 @@ const NAV_ITEMS: NavItem[] = [
 
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   ["/disiplin/karar-tipleri", "Karar tipleri"],
-  ["/disiplin/kurul", "Disiplin Kurulu"],
   ["/disiplin/", "Dosya detayı"],
   ["/disiplin", "Disiplin dosyaları"],
-  ["/odul", "Onur ve Ödül"],
+  ["/odul-disiplin-kurulu", "Ödül ve Disiplin Kurulu"],
+  ["/onur-kurulu", "Onur Kurulu"],
   ["/bilgi-notlari", "Bilgi Notları"],
   ["/kisiler", "Kişiler"],
   ["/ayarlar/sinif-sorumlulari", "Sınıf sorumluları"],

@@ -1572,8 +1572,42 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
         "dissenters": dissenters,
         "case": case,
         "case_decisions": case_decisions,
+        "agenda_items": _council_agenda_rows(meeting),
     }
     return context
+
+
+def _council_agenda_rows(meeting: Any) -> list[dict[str, Any]]:
+    """Karar defterine basılacak gündem maddeleri (04.10.2026 — yalnız ekleme).
+
+    Konu teklifin öğrencisinden ve kriter maddelerinden derlenir; karar adı kurula
+    göre (uygun görüldü / kabul edildi …). Karar esası yalnız karara bağlanmış maddede.
+    """
+    from apps.disiplin.honor_documents import _regulation_articles
+    from apps.disiplin.models import AGENDA_OUTCOME_LABELS, AgendaItemOutcome
+
+    labels = AGENDA_OUTCOME_LABELS.get(meeting.council_type, {})
+    rows: list[dict[str, Any]] = []
+    for item in meeting.agenda_items.all():
+        certificate = item.honor_certificate
+        subject = ""
+        if certificate is not None:
+            student = certificate.student
+            subject = (
+                f"{student.full_name} ({student.class_label}) — onur belgesi teklifi "
+                f"({_regulation_articles(certificate)})"
+            )
+        decided = item.outcome != AgendaItemOutcome.PENDING
+        rows.append(
+            {
+                "subject": subject,
+                "outcome_display": labels.get(item.outcome, item.get_outcome_display()),
+                "decision_text": item.decision_text,
+                "basis_display": item.get_decision_basis_display() if decided else "",
+                "dissent_note": item.dissent_note,
+            }
+        )
+    return rows
 
 
 def render_council_meeting_minutes(meeting: Any) -> bytes:

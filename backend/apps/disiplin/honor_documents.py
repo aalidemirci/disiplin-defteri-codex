@@ -10,16 +10,28 @@ Onur belgesi süreci için iki resmî PDF; disiplin `documents.py` motorunu (ren
 
 İçerik DB'de saklanmaz (disiplin evrak felsefesi; kütük tutulmaz). Modül sınırı (ADR-0002):
 `core.services` + `shared.letterhead` açık arayüzleri kullanılır.
+
+Çizelgeler bir **toplantının** çıktısıdır (04.10.2026, kurul işleyişi Aşama 1): `meeting`
+verilirse imzacılar o toplantının oy hakkı olan katılımcıları, karar tarihi toplantı
+tarihidir (görevi biten üye basılmaz). `meeting` yoksa (toplantısız eski kayıt) yıl
+kurulunun asıl üyelerine düşülür. Şablonlar değişmez; bağlam anahtarları aynıdır.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from django.utils import timezone
 
 from apps.disiplin.documents import render_pdf
-from apps.disiplin.models import HonorCertificate, HonorCriterion, HonorProposerRole
+from apps.disiplin.models import (
+    CouncilAttendeeRole,
+    CouncilMeeting,
+    HonorCertificate,
+    HonorCriterion,
+    HonorProposerRole,
+)
 from shared.letterhead import letterhead_context
 
 _UNIT = "Onur Kurulu"
@@ -165,32 +177,81 @@ def render_proposal_form(certificates: list[HonorCertificate], *, proposer_name:
     return render_pdf(PROPOSAL_FORM_TEMPLATE, ctx)
 
 
+def _term_names(certificates: list[HonorCertificate]) -> str:
+    """Belgelerin teklif dönem(ler)i — tek toplantıda birden çok dönem olabilir."""
+    names = [c.school_term.name for c in certificates if c.school_term is not None]
+    return ", ".join(dict.fromkeys(names))
+
+
+def _meeting_signers(
+    meeting: CouncilMeeting, *, second_chair_student_ids: set[int] | None = None
+) -> tuple[str, list[dict[str, Any]]]:
+    """Toplantının imzacıları: (başkan adı, diğer oy hakkı olan katılımcılar).
+
+    Davetliler (md. 185/6) imzalamaz. Onur Kurulu çizelgesinde ikinci başkan, kurul
+    kaydındaki `is_second_chair` öğrencisiyle işaretlenir.
+    """
+    second = second_chair_student_ids or set()
+    chair_name = ""
+    members: list[dict[str, Any]] = []
+    for attendee in meeting.attendees.all():
+        if attendee.attendee_role != CouncilAttendeeRole.VOTING_MEMBER:
+            continue
+        if attendee.is_chair:
+            chair_name = attendee.person_name
+            continue
+        members.append(
+            {
+                "member_name": attendee.person_name,
+                "title": attendee.title,
+                "is_second_chair": attendee.member_student_id in second,
+            }
+        )
+    return chair_name, members
+
+
 def render_recommendation_record(
-    certificates: list[HonorCertificate], *, board: Any = None, committee: Any = None
+    certificates: list[HonorCertificate],
+    *,
+    board: Any = None,
+    committee: Any = None,
+    meeting: CouncilMeeting | None = None,
 ) -> bytes:
     """Onur Kurulu Teklif Tutanağı — uygun görülenleri gerekçeleriyle listeler (md. 161 + 183/b).
 
-    `board` verilirse imza ızgarasında onur kurulu başkanı + asıl üyeler yer alır.
-    `committee` (ödül-disiplin kurulu) verilirse tutanağın altına teslim-tesellüm bölümü
-    eklenir (talep i): Onur Kurulu Başkanı teslim eder → Ödül-Disiplin Kurulu Başkanı tesellüm
-    eder. Teslim tarihi PDF'te boş bırakılır (elle yazılır; teslim günü değişebilir).
+    `meeting` verilirse imza ızgarası o toplantının başkanı + oy hakkı olan katılımcılarıdır;
+    yoksa `board` (onur kurulu) başkanı + görevdeki asıl üyeler. `committee` (ödül-disiplin
+    kurulu) verilirse tutanağın altına teslim-tesellüm bölümü eklenir (talep i): Onur Kurulu
+    Başkanı teslim eder → Ödül-Disiplin Kurulu Başkanı tesellüm eder. Teslim tarihi PDF'te
+    boş bırakılır (elle yazılır; teslim günü değişebilir).
     """
     ctx = _base_context()
-    members = [m for m in board.members.all() if not m.is_substitute] if board is not None else []
+    members: list[Any]
     chair_name = ""
-    if board is not None and board.chair_id:
-        chair_name = board.chair.full_name
+    if meeting is not None:
+        second_chairs: set[int] = set()
+        if board is not None:
+            second_chairs = {
+                m.member_student_id
+                for m in board.members.all()
+                if m.is_second_chair and m.effective_until is None
+            }
+        chair_name, members = _meeting_signers(meeting, second_chair_student_ids=second_chairs)
+    else:
+        members = (
+            [m for m in board.members.all() if not m.is_substitute and m.effective_until is None]
+            if board is not None
+            else []
+        )
+        if board is not None and board.chair_id:
+            chair_name = board.chair.full_name
     committee_chair_name = ""
     if committee is not None and committee.chair_id:
         committee_chair_name = committee.chair.full_name
     ctx.update(
         {
             "rows": _proposal_rows(certificates),
-            "term_name": (
-                certificates[0].school_term.name
-                if certificates and certificates[0].school_term is not None
-                else ""
-            ),
+            "term_name": _term_names(certificates),
             "members": members,
             "chair_name": chair_name,
             "committee_chair_name": committee_chair_name,
@@ -217,31 +278,40 @@ def _award_rows(certificates: list[HonorCertificate]) -> list[dict[str, Any]]:
 
 
 def render_award_decision_record(
-    certificates: list[HonorCertificate], *, committee: Any = None
+    certificates: list[HonorCertificate],
+    *,
+    committee: Any = None,
+    meeting: CouncilMeeting | None = None,
 ) -> bytes:
     """Ödül-Disiplin Kurulu Kararı — Onur Belgesi verilen öğrencileri listeler (talep 3).
 
     Onur kurulunca uygun görülüp ödül-disiplin kuruluna sevk edilen ve kurulca belge
     verilmesine karar verilen (AWARDED) öğrencilerin nihai listesi; Okul Müdürlüğüne
-    sunulur (md. 161, md. 183/b). İmza ızgarasında ödül-disiplin kurulu başkanı + asıl
-    üyeler yer alır (`committee` verilirse). İçerik DB'de saklanmaz.
+    sunulur (md. 161, md. 183/b). `meeting` verilirse imzacılar o toplantının katılımcıları
+    ve karar tarihi toplantı tarihidir; yoksa `committee` başkanı + asıl üyeler ve ilk
+    belgenin karar tarihi. İçerik DB'de saklanmaz.
     """
     ctx = _base_context(unit=_AWARD_UNIT)
-    members = (
-        [m for m in committee.members.all() if not m.is_substitute] if committee is not None else []
-    )
+    members: list[Any]
     committee_chair_name = ""
-    if committee is not None and committee.chair_id:
-        committee_chair_name = committee.chair.full_name
+    decision_date: date | None
+    if meeting is not None:
+        committee_chair_name, members = _meeting_signers(meeting)
+        decision_date = meeting.meeting_date
+    else:
+        members = (
+            [m for m in committee.members.all() if not m.is_substitute]
+            if committee is not None
+            else []
+        )
+        if committee is not None and committee.chair_id:
+            committee_chair_name = committee.chair.full_name
+        decision_date = certificates[0].awarded_at if certificates else None
     ctx.update(
         {
             "rows": _award_rows(certificates),
-            "term_name": (
-                certificates[0].school_term.name
-                if certificates and certificates[0].school_term is not None
-                else ""
-            ),
-            "decision_date": certificates[0].awarded_at if certificates else None,
+            "term_name": _term_names(certificates),
+            "decision_date": decision_date,
             "members": members,
             "committee_chair_name": committee_chair_name,
         }

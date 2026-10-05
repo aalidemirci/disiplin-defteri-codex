@@ -3,6 +3,10 @@
 OYS `services/council_meeting.py`'den temizlenerek taşındı: audit + kullanıcı
 parametreleri + `member_parent_id` silindi (veli katılımcı yalnız ad snapshot).
 Defter numarası + katılımcı doğrulama kuralları AYNEN.
+
+Gündem maddeleri (04.10.2026, kurul işleyişi Aşama 1): kurul toplanır → teklif
+gündeme alınır → madde toplantıda karara bağlanır → karar defteri maddelerden
+derlenir. Onur belgesi teklifine ilişkin kurul kararı başka yoldan verilemez.
 """
 
 from __future__ import annotations
@@ -13,6 +17,9 @@ from typing import Any
 from django.db import transaction
 
 from apps.disiplin.models import (
+    AgendaItemOutcome,
+    AgendaItemType,
+    CouncilAgendaItem,
     CouncilAttendeeRole,
     CouncilDecisionBasis,
     CouncilMeeting,
@@ -20,6 +27,9 @@ from apps.disiplin.models import (
     CouncilMinutesType,
     CouncilType,
     DisciplineCase,
+    DisciplineCommittee,
+    HonorCertificate,
+    HonorCertificateStatus,
     HonorMeetingKind,
 )
 from apps.okul import selectors as okul_selectors
@@ -101,12 +111,14 @@ def create_council_meeting(
     minutes_type: str = CouncilMinutesType.GENERAL,
     discipline_case_id: int | None = None,
     honor_meeting_kind: str = HonorMeetingKind.BOARD,
+    honor_certificate_ids: list[int] | None = None,
 ) -> CouncilMeeting:
     """Bir kurulun genel toplantı kararını karar defterine yazar (md. 184/206).
 
     `meeting_no` ders yılı + kurul türü başına artar (silinmiş kayıtlar dahil —
     defter numarası tekrarlanmaz). CASE_REVIEW: kurula sevkli + kararlı bir
     disiplin dosyası bağlanır; kararlar render anında dosyadan derlenir.
+    `honor_certificate_ids` verilirse teklifler gündem maddesi olarak eklenir.
     """
     if council_type not in CouncilType.values:
         raise ValueError("Geçersiz kurul türü.")
@@ -167,6 +179,8 @@ def create_council_meeting(
         honor_board=honor_board,
     )
     _create_attendees(meeting, attendees)
+    if honor_certificate_ids:
+        add_agenda_items(meeting, honor_certificate_ids=honor_certificate_ids)
     return meeting
 
 
@@ -186,8 +200,18 @@ def update_council_meeting(
     Yanlış dosya seçildiyse tutanak silinip yeniden oluşturulur (meeting_no
     atlar — defter mantığıyla tutarlı). `attendees` verilirse mevcut katılımcılar
     soft-delete edilip yeniden oluşturulur.
+
+    Karara bağlanmış gündem maddesi varsa tarih değişmez (karar tarihleri toplantı
+    tarihidir) ve Ödül ve Disiplin Kurulunda katılımcı değişikliği yeter sayıyı
+    (md. 191/1) bozamaz.
     """
+    decided = _decided_items(meeting).exists()
     fields: list[str] = []
+    if meeting_date is not None and meeting_date != meeting.meeting_date and decided:
+        raise ValueError(
+            "Karara bağlanmış gündem maddesi olan toplantının tarihi değiştirilemez; önce "
+            "kararları geri alın."
+        )
     if meeting_date is not None:
         if meeting.council_type == CouncilType.HONOR:
             from apps.okul.services.terms import require_term_for_date
@@ -219,15 +243,222 @@ def update_council_meeting(
         for old in meeting.attendees.all():
             old.delete()
         _create_attendees(meeting, attendees)
+        if decided and meeting.council_type == CouncilType.DISCIPLINE:
+            _require_quorum(meeting)
     return meeting
 
 
 @transaction.atomic
 def delete_council_meeting(meeting: CouncilMeeting) -> None:
-    """Tutanağı ve katılımcılarını soft-delete eder (kayıt korunur)."""
+    """Tutanağı, katılımcılarını ve bekleyen gündem maddelerini soft-delete eder.
+
+    Karara bağlanmış maddesi olan toplantı silinemez: o kararlar bu toplantıya
+    dayanır (önce teklifin son adımı geri alınır).
+    """
+    if _decided_items(meeting).exists():
+        raise ValueError(
+            "Karara bağlanmış gündem maddesi olan toplantı silinemez; önce kararları geri alın."
+        )
+    for item in meeting.agenda_items.all():
+        item.delete()
     for att in meeting.attendees.all():
         att.delete()
     meeting.delete()
+
+
+# ---------------------------------------------------------------------------
+# Gündem maddeleri — kurul kararı toplantıda alınır (04.10.2026)
+# ---------------------------------------------------------------------------
+_STAGE_BOARD = "BOARD"
+_STAGE_COMMITTEE = "COMMITTEE"
+
+
+def _decided_items(meeting: CouncilMeeting) -> Any:
+    return meeting.agenda_items.exclude(outcome=AgendaItemOutcome.PENDING)
+
+
+def _agenda_stage(meeting: CouncilMeeting) -> str:
+    """Toplantının onur belgesi teklifinde hangi kurul kararını verdiği."""
+    if meeting.council_type == CouncilType.HONOR:
+        if meeting.honor_meeting_kind != HonorMeetingKind.BOARD:
+            raise ValueError(
+                "Onur Genel Kurulu onur belgesi teklifi görüşmez; teklifler Onur Kurulunda "
+                "görüşülür (md. 183/b)."
+            )
+        return _STAGE_BOARD
+    if meeting.minutes_type != CouncilMinutesType.GENERAL:
+        raise ValueError(
+            "Dosya görüşme tutanağına onur belgesi teklifi eklenemez; ayrı bir kurul "
+            "toplantısı açın."
+        )
+    return _STAGE_COMMITTEE
+
+
+def meeting_committee(meeting: CouncilMeeting) -> DisciplineCommittee | None:
+    """Toplantının bağlı olduğu Ödül ve Disiplin Kurulu (yoksa toplantı yılının kurulu)."""
+    if meeting.council_type != CouncilType.DISCIPLINE:
+        return None
+    if meeting.discipline_committee_id is not None:
+        return meeting.discipline_committee
+    committee: DisciplineCommittee | None = DisciplineCommittee.objects.filter(
+        school_year_id=meeting.school_year_id
+    ).first()
+    return committee
+
+
+def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
+    """Ödül ve Disiplin Kurulu toplantısının yeter sayı durumu (md. 191/1).
+
+    Oy hakkı olan katılımcılar sayılır (başkan ve yerine çağrılan yedekler dahil;
+    md. 185/6 davetlileri hariç). Onur Kurulu için yönetmelikte yeter sayı yoktur → None.
+    """
+    from apps.disiplin.services.committee import committee_quorum
+
+    committee = meeting_committee(meeting)
+    if committee is None:
+        return None
+    # `.filter()` önbelleği (prefetch) atlar — katılımcı değişikliğinden hemen sonra da doğru.
+    present = meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER).count()
+    return committee_quorum(committee, present)
+
+
+def _require_quorum(meeting: CouncilMeeting) -> None:
+    quorum = meeting_quorum(meeting)
+    if quorum is None:
+        raise ValueError(
+            "Bu ders yılı için Ödül ve Disiplin Kurulu tanımlı değil; toplantı yeter sayısı "
+            "denetlenemez (md. 191/1)."
+        )
+    if not quorum["ok"]:
+        raise ValueError(
+            f"Toplantı yeter sayısı yok: kurul {quorum['full']} kişi, en az "
+            f"{quorum['required']} oy hakkı olan üye katılmalı; bu toplantıda "
+            f"{quorum['present']} (md. 191/1)."
+        )
+
+
+_EXPECTED_STATUS = {
+    _STAGE_BOARD: (
+        HonorCertificateStatus.PROPOSED,
+        "Yalnız teklif aşamasındaki belge Onur Kurulu gündemine alınabilir.",
+    ),
+    _STAGE_COMMITTEE: (
+        HonorCertificateStatus.HONOR_BOARD_RECOMMENDED,
+        "Yalnız Onur Kurulunun uygun gördüğü teklif Ödül ve Disiplin Kurulu gündemine "
+        "alınabilir (md. 183/b).",
+    ),
+}
+
+
+@transaction.atomic
+def add_agenda_items(
+    meeting: CouncilMeeting, *, honor_certificate_ids: list[int]
+) -> list[CouncilAgendaItem]:
+    """Onur belgesi tekliflerini toplantının gündemine ekler.
+
+    Onur Kurulu toplantısı teklif aşamasındakileri, Ödül ve Disiplin Kurulu
+    toplantısı Onur Kurulunca uygun görülenleri alır. Teklif aynı anda yalnız bir
+    toplantıda karar bekleyebilir; ders yılı toplantıyla aynı olmalıdır.
+    """
+    stage = _agenda_stage(meeting)
+    ids = list(dict.fromkeys(int(i) for i in honor_certificate_ids))
+    if not ids:
+        raise ValueError("Gündeme alınacak en az bir teklif seçilmelidir.")
+    expected_status, status_message = _EXPECTED_STATUS[stage]
+    last = meeting.agenda_items.order_by("-order").first()
+    order = (last.order if last else 0) + 1
+    created: list[CouncilAgendaItem] = []
+    for certificate_id in ids:
+        certificate = (
+            HonorCertificate.objects.select_related("student").filter(pk=certificate_id).first()
+        )
+        if certificate is None:
+            raise ValueError("Onur belgesi teklifi bulunamadı.")
+        if certificate.school_year_id != meeting.school_year_id:
+            raise ValueError("Teklif ile toplantı aynı ders yılına ait olmalıdır.")
+        if certificate.status != expected_status:
+            raise ValueError(f"{certificate.student.full_name}: {status_message}")
+        if CouncilAgendaItem.objects.filter(
+            honor_certificate=certificate, outcome=AgendaItemOutcome.PENDING
+        ).exists():
+            raise ValueError(
+                f"{certificate.student.full_name}: teklif başka bir toplantının gündeminde "
+                "karar bekliyor."
+            )
+        if meeting.agenda_items.filter(honor_certificate=certificate).exists():
+            raise ValueError(
+                f"{certificate.student.full_name}: teklif bu toplantının gündeminde zaten var."
+            )
+        item = CouncilAgendaItem(
+            meeting=meeting,
+            order=order,
+            item_type=AgendaItemType.HONOR_PROPOSAL,
+            honor_certificate=certificate,
+        )
+        item.save()
+        created.append(item)
+        order += 1
+    return created
+
+
+@transaction.atomic
+def remove_agenda_item(item: CouncilAgendaItem) -> None:
+    """Karar bekleyen maddeyi gündemden çıkarır (soft-delete; teklif başka toplantıya alınabilir)."""
+    if item.outcome != AgendaItemOutcome.PENDING:
+        raise ValueError(
+            "Karara bağlanmış madde gündemden çıkarılamaz; önce teklifin son adımını geri alın."
+        )
+    item.delete()
+
+
+@transaction.atomic
+def decide_agenda_item(
+    item: CouncilAgendaItem,
+    *,
+    outcome: str,
+    decision_text: str = "",
+    decision_basis: str = CouncilDecisionBasis.UNANIMITY,
+    dissent_note: str = "",
+) -> CouncilAgendaItem:
+    """Gündem maddesini toplantıda karara bağlar ve teklifin durumunu ilerletir.
+
+    Onur Kurulu: olumlu = uygun görüş (md. 183/b), olumsuz = uygun görmeme.
+    Ödül ve Disiplin Kurulu: olumlu = kabul (md. 161/1), olumsuz = ret; toplantı
+    yeter sayısı (md. 191/1) yoksa karar verilemez. Olumsuz kararda gerekçe
+    zorunludur (md. 196/1, 206/2). Karar tarihi toplantı tarihidir.
+    """
+    from apps.disiplin.services.honors import (
+        apply_committee_decision,
+        apply_honor_board_decision,
+    )
+
+    if item.outcome != AgendaItemOutcome.PENDING:
+        raise ValueError(
+            "Bu madde zaten karara bağlandı; değiştirmek için teklifin son adımını geri alın."
+        )
+    if outcome not in (AgendaItemOutcome.FAVORABLE, AgendaItemOutcome.UNFAVORABLE):
+        raise ValueError("Geçersiz karar.")
+    if decision_basis not in CouncilDecisionBasis.values:
+        raise ValueError("Geçersiz karar esası.")
+    certificate = item.honor_certificate
+    if certificate is None:
+        raise ValueError("Gündem maddesine bağlı teklif bulunamadı.")
+    meeting = item.meeting
+    favorable = outcome == AgendaItemOutcome.FAVORABLE
+    reason = decision_text.strip()
+    if _agenda_stage(meeting) == _STAGE_COMMITTEE:
+        _require_quorum(meeting)
+        apply_committee_decision(certificate, meeting=meeting, favorable=favorable, reason=reason)
+    else:
+        apply_honor_board_decision(certificate, meeting=meeting, favorable=favorable, reason=reason)
+    item.outcome = outcome
+    item.decision_text = reason
+    item.decision_basis = decision_basis
+    item.dissent_note = dissent_note.strip()
+    item.save(
+        update_fields=["outcome", "decision_text", "decision_basis", "dissent_note", "updated_at"]
+    )
+    return item
 
 
 def prefill_attendees(
