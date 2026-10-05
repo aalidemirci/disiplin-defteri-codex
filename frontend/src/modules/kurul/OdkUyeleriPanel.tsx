@@ -1,8 +1,8 @@
-// Disiplin kurulu sayfası (Tur 70/Faz 4; Tur 212'de sekmeli) — iki sekme:
-//   "Kurul Üyeleri": ders yılı başına bir "Okul Öğrenci Ödül ve Disiplin Kurulu"
-//   tanımı — başkan müdür yardımcısı (md. 185/188), asıl/yedek üyeler
-//   öğretmen/öğrenci/veli (md. 185-186).
-//   "Toplantı Tutanakları": karar defteri (md. 184/206) — dosya görüşme tutanağı dahil.
+// Ödül ve Disiplin Kurulu üyeleri paneli — ders yılı başına bir "Okul Öğrenci Ödül ve
+// Disiplin Kurulu" tanımı: başkan müdür yardımcısı (md. 185/188), asıl/yedek üyeler
+// öğretmen/öğrenci/veli (md. 185-186). Kurul işleyişi Aşama 1 (04.10.2026): eski
+// `disiplin/DisiplinKuruluPage` sayfasının üye bölümü; sayfa kabuğu (başlık + sekmeler)
+// `OdulDisiplinKuruluPage`'e geçti, tutanaklar orada ayrı sekmedir.
 //
 // OYS `modules/disiplin/DisiplinKuruluPage.tsx`'ten UYARLANDI (F4-D2). Sapmalar: auth yok
 // (rol kapıları/kilit kartları kalktı, hepsi-yetkili koşulsuz render); ders yılları
@@ -12,12 +12,8 @@
 // — üye listesi dönüşle tazelenir (yeniden yükleme yok).
 
 import { useCallback, useEffect, useId, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
-import Tabs, { tabPanelProps } from "../../ui/Tabs";
-import type { TabItem } from "../../ui/Tabs";
-import TutanakListesi from "../kurul/TutanakListesi";
 import { okulApi } from "../okul/api";
 import Autocomplete from "../../ui/Autocomplete";
 import Button from "../../ui/Button";
@@ -28,25 +24,23 @@ import Select from "../../ui/Select";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
-import { COMMITTEE_MEMBER_TYPE_TR, disiplinApi, personnelLookupApi, studentLookupApi } from "./api";
+import {
+  COMMITTEE_MEMBER_TYPE_TR,
+  disiplinApi,
+  personnelLookupApi,
+  studentLookupApi,
+} from "../disiplin/api";
 import type {
   CommitteeMember,
   CommitteeMemberType,
   DisciplineCommittee,
   PersonnelSearchRow,
-} from "./api";
+} from "../disiplin/api";
 
-export default function DisiplinKuruluPage() {
+export default function OdkUyeleriPanel() {
   const [committee, setCommittee] = useState<DisciplineCommittee | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Authsuz masaüstünde rol kapısı yok — varsayılan sekme daima üyeler.
-  const [active, setActive] = useState("uyeler");
-
-  const tabs: TabItem[] = [
-    { key: "uyeler", label: "Kurul Üyeleri", icon: "groups" },
-    { key: "tutanaklar", label: "Toplantı Tutanakları", icon: "menu_book" },
-  ];
 
   const load = useCallback(() => {
     setLoading(true);
@@ -63,66 +57,32 @@ export default function DisiplinKuruluPage() {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb />
-      <div className="dd-page-header">
-        <div>
-          <h1 className="dd-page-title">Disiplin Kurulu</h1>
-          <p className="dd-page-description">
-            Aktif ders yılı için Okul Öğrenci Ödül ve Disiplin Kurulu. Başkan, müdürün
-            görevlendirdiği müdür yardımcısıdır (md. 188); asıl ve yedek üyeler öğretmen, öğrenci ve
-            veliden oluşur (md. 185-186).
-          </p>
+      <p className="max-w-3xl text-body-medium text-on-surface-variant">
+        Aktif ders yılının kurulu. Başkan, müdürün görevlendirdiği müdür yardımcısıdır (md. 188);
+        öğretmenler kurulunca seçilen iki öğretmen, onur kurulu ikinci başkanı ve okul-aile birliği
+        velisi asıl üyedir; yedekler oy sırasıyla seçilir (md. 185-186).
+      </p>
+      {error && (
+        <div className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
+          <Icon name="error" size="lg" />
+          <span>{error}</span>
         </div>
-      </div>
+      )}
 
-      <Tabs
-        items={tabs}
-        active={active}
-        onChange={setActive}
-        ariaLabel="Disiplin Kurulu bölümleri"
-        idBase="disiplin-kurul"
-      />
-
-      <div {...tabPanelProps("disiplin-kurul", active)}>
-        {active === "uyeler" && (
-          <div className="space-y-6">
-            {error && (
-              <div className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
-                <Icon name="error" size="lg" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {loading ? (
-              <SkeletonList rows={4} />
-            ) : committee === null ? (
-              <CommitteeCreateCard onCreated={(c) => setCommittee(c)} />
-            ) : (
-              <>
-                <ChairCard committee={committee} onChanged={(c) => setCommittee(c)} />
-                <MembersCard
-                  committee={committee}
-                  onChanged={load}
-                  onCommittee={(c) => setCommittee(c)}
-                />
-              </>
-            )}
-          </div>
-        )}
-        {active === "tutanaklar" && <TutanakListesi councilType="DISCIPLINE" />}
-      </div>
-    </div>
-  );
-}
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-2 text-label-large text-on-surface-variant">
-      <Link to="/disiplin" className="hover:text-on-surface">
-        ← Disiplin
-      </Link>
-      <span>/</span>
-      <span className="text-on-surface">Disiplin Kurulu</span>
+      {loading ? (
+        <SkeletonList rows={4} />
+      ) : committee === null ? (
+        <CommitteeCreateCard onCreated={(c) => setCommittee(c)} />
+      ) : (
+        <>
+          <ChairCard committee={committee} onChanged={(c) => setCommittee(c)} />
+          <MembersCard
+            committee={committee}
+            onChanged={load}
+            onCommittee={(c) => setCommittee(c)}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -158,7 +118,7 @@ function CommitteeCreateCard({ onCreated }: { onCreated: (c: DisciplineCommittee
         chair_id: chair.id,
         notes: notes.trim(),
       });
-      snackbar.success("Disiplin kurulu oluşturuldu.");
+      snackbar.success("Ödül ve Disiplin Kurulu oluşturuldu.");
       onCreated(created);
     } catch (err) {
       setError(
@@ -176,7 +136,7 @@ function CommitteeCreateCard({ onCreated }: { onCreated: (c: DisciplineCommittee
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">Kurul oluştur</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Aktif ders yılı için yeni bir disiplin kurulu tanımlanır. Önce başkanı seçin; üyeler
+        Aktif ders yılı için Ödül ve Disiplin Kurulu tanımlanır. Önce başkanı seçin; üyeler
         oluşturulduktan sonra eklenir.
       </p>
       <div className="mt-4 space-y-4">

@@ -5,12 +5,16 @@
 // gösterilir. 403 kilit kartı savunmacı olarak korunur (authsuz masaüstünde
 // pratikte oluşmaz).
 //
+// Kurul işleyişi (04.10.2026): satırdaki "Aç" toplantı ekranını (ToplantiDetay — gündem
+// maddeleri madde madde karara bağlanır) açar; açık toplantı `?toplanti=<id>` ile
+// derin bağlantılanır (Gündem sekmesi toplantı açınca buraya yönlendirir).
+//
 // OYS `modules/kurul/TutanakListesi.tsx`'ten UYARLANDI (F4-D3); sapmalar:
 // serializer display türevi taşımadığından tür etiketi MINUTES_TYPE_TR'den,
 // katılımcı sayısı `attendees.length`'ten türetilir (attendee_count yok).
 
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
@@ -19,9 +23,16 @@ import Icon from "../../ui/Icon";
 import Skeleton from "../../ui/Skeleton";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import { COUNCIL_TYPE_TR, DECISION_BASIS_TR, MINUTES_TYPE_TR, kurulApi } from "./api";
+import {
+  COUNCIL_TYPE_TR,
+  DECISION_BASIS_TR,
+  MINUTES_TYPE_TR,
+  hasPendingItems,
+  kurulApi,
+} from "./api";
 import type { CouncilMeeting, CouncilType } from "./api";
 import { saveBlob } from "../../lib/download";
+import ToplantiDetay from "./ToplantiDetay";
 import ToplantiForm from "./ToplantiForm";
 
 interface Props {
@@ -36,7 +47,21 @@ export default function TutanakListesi({ councilType }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const isDiscipline = councilType === "DISCIPLINE";
+  const openMeetingId = Number(searchParams.get("toplanti")) || null;
+
+  const openMeeting = (id: number | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id === null) next.delete("toplanti");
+        else next.set("toplanti", String(id));
+        return next;
+      },
+      { replace: false },
+    );
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,6 +110,18 @@ export default function TutanakListesi({ councilType }: Props) {
     }
   };
 
+  if (openMeetingId !== null) {
+    return (
+      <ToplantiDetay
+        meetingId={openMeetingId}
+        onBack={() => {
+          openMeeting(null);
+          void load();
+        }}
+      />
+    );
+  }
+
   if (forbidden) {
     return (
       <Card elevation={1} className="flex flex-col items-center gap-2 p-10 text-center">
@@ -101,12 +138,14 @@ export default function TutanakListesi({ councilType }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-body-medium text-on-surface-variant">
           {isDiscipline
-            ? "Ödül-Disiplin Kurulu (md. 185-191) toplantı kararlarının karar defteri. " +
-              "Dosya görüşme tutanağında seçilen dosyanın öğrenci bazlı resmî kararları " +
-              "tutanağa otomatik derlenir; toplantılar T001, T002 biçiminde numaralanır."
-            : "Onur Kurulu (md. 180-184) toplantı kararlarının karar defteri (md. 184). " +
-              "Her tutanak gerekçeli karar + oy birliği/çoğunluğu (md. 191/206) + katılan " +
-              "üyeler ile imzalı PDF olarak üretilir; toplantılar T001, T002 biçiminde numaralanır."}
+            ? "Ödül ve Disiplin Kurulu (md. 185-191) karar defteri. Onur belgesi teklifleri " +
+              "toplantı ekranında madde madde karara bağlanır; dosya görüşme tutanağında " +
+              "seçilen dosyanın öğrenci bazlı resmî kararları tutanağa otomatik derlenir. " +
+              "Toplantılar T001, T002 biçiminde numaralanır."
+            : "Onur Kurulu (md. 180-184) karar defteri (md. 184). Teklifler toplantı ekranında " +
+              "madde madde karara bağlanır; tutanak gerekçeli kararlar + oy birliği/çoğunluğu " +
+              "(md. 206) + katılan üyelerle imzalı PDF olarak üretilir. Toplantılar T001, T002 " +
+              "biçiminde numaralanır."}
         </p>
         {!creating && (
           <Button icon="add" onClick={() => setCreating(true)}>
@@ -118,9 +157,9 @@ export default function TutanakListesi({ councilType }: Props) {
       {creating && (
         <ToplantiForm
           councilType={councilType}
-          onCreated={() => {
+          onCreated={(created) => {
             setCreating(false);
-            void load();
+            openMeeting(created.id);
           }}
           onCancel={() => setCreating(false)}
         />
@@ -157,7 +196,7 @@ export default function TutanakListesi({ councilType }: Props) {
                 {!isDiscipline && <th className="px-4 py-3 text-left">Toplantı</th>}
                 {!isDiscipline && <th className="px-4 py-3 text-left">Dönem</th>}
                 <th className="px-4 py-3 text-left">Tarih</th>
-                <th className="px-4 py-3 text-left">Karar Esası</th>
+                <th className="px-4 py-3 text-left">Gündem</th>
                 <th className="px-4 py-3 text-left">Katılımcı</th>
                 <th className="px-4 py-3 text-right">İşlem</th>
               </tr>
@@ -203,11 +242,23 @@ export default function TutanakListesi({ councilType }: Props) {
                     {new Date(m.meeting_date).toLocaleDateString("tr-TR")}
                   </td>
                   <td className="px-4 py-3 text-on-surface-variant">
-                    {DECISION_BASIS_TR[m.decision_basis]}
+                    {(m.agenda_items ?? []).length > 0 ? (
+                      <span>
+                        {m.agenda_items.length} madde
+                        {hasPendingItems(m) && (
+                          <span className="ml-1 text-tertiary">· karar bekliyor</span>
+                        )}
+                      </span>
+                    ) : (
+                      DECISION_BASIS_TR[m.decision_basis]
+                    )}
                   </td>
                   <td className="px-4 py-3 text-on-surface-variant">{m.attendees.length}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
+                      <Button variant="text" icon="open_in_new" onClick={() => openMeeting(m.id)}>
+                        Aç
+                      </Button>
                       <Button
                         variant="text"
                         icon="picture_as_pdf"

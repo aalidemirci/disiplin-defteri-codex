@@ -7,10 +7,14 @@ YALINLAŞTIRILDI: rol/yetki fonksiyonları (`can_manage_council_meeting`,
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.db.models import Exists, OuterRef, QuerySet
 
 from apps.disiplin.discipline_periods import BEHAVIOR_POINT_START
 from apps.disiplin.models import (
+    AgendaItemOutcome,
+    CouncilAgendaItem,
     CouncilMeeting,
     CouncilType,
     DisciplineCase,
@@ -100,7 +104,7 @@ def list_council_meetings(
     """Kurul toplantı tutanakları (karar defteri) — katılımcılar önceden çekilir."""
     qs = (
         CouncilMeeting.objects.select_related("discipline_case", "school_term")
-        .prefetch_related("attendees")
+        .prefetch_related("attendees", "agenda_items__honor_certificate__student")
         .all()
     )
     if council_type in CouncilType.values:
@@ -115,7 +119,7 @@ def get_council_meeting(meeting_id: int) -> CouncilMeeting | None:
     return (
         CouncilMeeting.objects.filter(pk=meeting_id)
         .select_related("discipline_case", "school_term")
-        .prefetch_related("attendees")
+        .prefetch_related("attendees", "agenda_items__honor_certificate__student")
         .first()
     )
 
@@ -302,3 +306,72 @@ def honor_list_for_year(school_year_id: int) -> list[int]:
     for sid in qs:
         counts[sid] = counts.get(sid, 0) + 1
     return sorted(sid for sid, n in counts.items() if n >= 2)
+
+
+# ---------------------------------------------------------------------------
+# Kurul gündemi + müdür onayı (04.10.2026, kurul işleyişi Aşama 1)
+# ---------------------------------------------------------------------------
+def get_agenda_item(meeting_id: int, item_id: int) -> CouncilAgendaItem | None:
+    """Toplantının tek gündem maddesi (silinmemiş) — yoksa None."""
+    return (
+        CouncilAgendaItem.objects.select_related(
+            "meeting", "meeting__discipline_committee", "honor_certificate__student"
+        )
+        .filter(pk=item_id, meeting_id=meeting_id, meeting__deleted_at__isnull=True)
+        .first()
+    )
+
+
+def honor_agenda_candidates(
+    *, council_type: str, school_year_id: int
+) -> QuerySet[HonorCertificate]:
+    """Kurul gündemine alınmayı bekleyen onur belgesi teklifleri.
+
+    Onur Kurulu: teklif aşamasındakiler (md. 161/1 → 183/b). Ödül ve Disiplin Kurulu:
+    Onur Kurulunca uygun görülenler (md. 161/1). Bir toplantıda karar bekleyenler hariç.
+    """
+    statuses: dict[str, str] = {
+        CouncilType.HONOR: HonorCertificateStatus.PROPOSED,
+        CouncilType.DISCIPLINE: HonorCertificateStatus.HONOR_BOARD_RECOMMENDED,
+    }
+    status = statuses.get(council_type)
+    if status is None:
+        return HonorCertificate.objects.none()
+    pending = CouncilAgendaItem.objects.filter(
+        honor_certificate=OuterRef("pk"), outcome=AgendaItemOutcome.PENDING
+    )
+    return (
+        HonorCertificate.objects.select_related("student", "school_term")
+        .filter(school_year_id=school_year_id, status=status)
+        .exclude(Exists(pending))
+        .order_by("school_term__sequence", "created_at")
+    )
+
+
+def principal_pending(school_year_id: int | None = None) -> dict[str, list[Any]]:
+    """Okul müdürünün onayını bekleyen kurul kararları (Panel kartı).
+
+    - Onur belgesi: Ödül ve Disiplin Kurulunca kabul edilmiş (AWARDED) teklifler.
+    - Disiplin: onay mercii okul müdürü olan, onay bekleyen kurul kararları (md. 163/2).
+      Üst merci (ilçe/il) onayındaki kararlar müdür onayı değildir, listelenmez.
+    """
+    from apps.disiplin.models import ApprovalAuthority, DecisionApprovalStatus
+
+    certificates = HonorCertificate.objects.select_related("student").filter(
+        status=HonorCertificateStatus.AWARDED
+    )
+    if school_year_id is not None:
+        certificates = certificates.filter(school_year_id=school_year_id)
+    decisions = (
+        DisciplineDecision.objects.select_related("student", "case")
+        .filter(
+            approval_status=DecisionApprovalStatus.PENDING,
+            approval_authority=ApprovalAuthority.PRINCIPAL,
+            case__deleted_at__isnull=True,
+        )
+        .order_by("decision_date", "id")
+    )
+    return {
+        "honor_certificates": list(certificates.order_by("awarded_at", "id")),
+        "decisions": list(decisions),
+    }

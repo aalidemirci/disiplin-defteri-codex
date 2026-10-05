@@ -6,7 +6,13 @@ göre (`articles` bağlamı — _COUNCIL_ARTICLES, Tur 216). Katılanlar oy hakk
 oy hakkı olmayan davetli ayrı; karar gerekçeli + oy birliği/çoğunluğu (md. 206);
 imza ızgarası başkan + oy hakkı olan üyeler. Dosya görüşme tutanağında
 (CASE_REVIEW, Tur 212) görüşülen dosya + öğrenci-bazlı resmî kararlar (md. 163)
-dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.{% endcomment %}
+dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.
+BİLİNÇLİ İSTİSNA (kullanıcı kararı 04.10.2026, kurul işleyişi Aşama 1): "GÜNDEM
+MADDELERİ VE KARARLAR" bloğu OYS'de yoktur, YALNIZ EKLEMEDİR — gündem maddesiz
+toplantıda çıktı değişmez. Madde başına karar, gerekçe, oy birliği/çoğunluğu ve
+karşı görüş (md. 196/2, 206/2) `agenda_items` bağlamından basılır. Gündemli toplantıda
+genel "KARAR" bölümü yalnız serbest karar metni varsa basılır (her maddenin karar esası
+kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın).{% endcomment %}
 {% block content %}
 <div class="doc-title">{{ title }}</div>
 <div class="doc-subtitle">{{ articles.subtitle }}</div>
@@ -54,6 +60,31 @@ dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.{% endcomment 
 </div>
 {% endif %}
 
+{% if agenda_items %}
+<div class="section">
+  <div class="section-title">GÜNDEM MADDELERİ VE KARARLAR</div>
+  <table class="doc-table">
+    <tr>
+      <th style="width: 6%; text-align: center;">Sıra</th>
+      <th style="width: 40%;">Konu</th>
+      <th style="width: 18%;">Karar</th>
+      <th style="width: 36%;">Gerekçe / Karar Esası</th>
+    </tr>
+    {% for item in agenda_items %}
+    <tr>
+      <td style="text-align: center;">{{ forloop.counter }}</td>
+      <td>{{ item.subject }}</td>
+      <td>{{ item.outcome_display }}</td>
+      <td>{{ item.decision_text|default:'—' }}{% if item.basis_display %}<br><span class="muted">{{ item.basis_display }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% for item in agenda_items %}{% if item.dissent_note %}
+  <p class="para"><strong>{{ forloop.counter }}. madde — karşı görüş (md. 196/2):</strong> {{ item.dissent_note }}</p>
+  {% endif %}{% endfor %}
+</div>
+{% endif %}
+
 <div class="section">
   <div class="section-title">KATILANLAR — OY HAKKI OLAN ÜYELER{% if articles.attendees %} ({{ articles.attendees }}){% endif %}</div>
   <table class="doc-table">
@@ -94,6 +125,7 @@ dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.{% endcomment 
 </div>
 {% endif %}
 
+{% if not agenda_items or meeting.decision_text %}
 <div class="section flow">
   <div class="section-title">KARAR (Gerekçeli — md. 206)</div>
   <div class="field-box tall">{{ meeting.decision_text|default:'—' }}</div>
@@ -102,6 +134,7 @@ dosyadan derlenir (case/case_decisions bağlamı); TCKN yazılmaz.{% endcomment 
 <p class="para">İşbu karar, kurul üyelerince
 <strong>{% if meeting.decision_basis == 'UNANIMITY' %}oy birliği{% else %}oy çoğunluğu{% endif %}</strong>
 ile alınmıştır ({{ articles.closing }}).</p>
+{% endif %}
 
 {% if dissenters %}
 <div class="section">

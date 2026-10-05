@@ -98,7 +98,9 @@ disiplin-defteri/
 │   ├── shared/            # FK'sız BaseModel (UYARLA), working_days.py (AYNEN), letterhead.py (AYNEN)
 │   └── templates/documents/base.html + templates/print/_design.css  (AYNEN — DOKUNMA)
 ├── frontend/src/          # ui/ M3 kiti (AYNEN), lib/api.ts (authsuz), hooks/,
-│   └── modules/           # disiplin/ (uyarlama) + kurulum/ + kisiler/ + ayarlar/ + panel/ (YENİ)
+│   └── modules/           # disiplin/ (uyarlama) + kurul/ (iki kurulun sayfaları, gündem,
+│                          #   toplantı ekranı — 04.10.2026) + odul/ (onur panelleri) + kurulum/
+│                          #   + kisiler/ + ayarlar/ + panel/ + bilgi-notlari/ (YENİ)
 ├── desktop/               # main.py (kilit→yedek→migrate→waitress thread→pywebview), server.py, lock.py
 ├── packaging/             # PyInstaller spec, windows/ (Inno + DLL kapanışı), linux/ (.deb)
 └── docs/, scripts/
@@ -124,7 +126,11 @@ disiplin-defteri/
   `chair/member_user→Personnel`, `member_parent` KALKAR (ad snapshot yeter).
   `DisciplineAttachment` TAŞINIR (dilekçe taraması pratik ihtiyaç; media veri dizininde).
   Onur tarafı **honors-lite**: `HonorBoard` + sadeleşmiş `HonorCertificate` (yalnız 3 PDF'in
-  şablon gereksinimleri kadar alan).
+  şablon gereksinimleri kadar alan). **Kurul işleyişi (04.10.2026, Aşama 1):** onur belgesine
+  ilişkin kurul kararı yalnız kurul toplantısının gündem maddesinde verilir
+  (`CouncilAgendaItem`; karar tarihi = toplantı tarihi; ÖDK'da md. 191/1 yeter sayısı);
+  olumsuz sonuç kurula göre ayrı durumdur (`HONOR_BOARD_DECLINED` / `COMMITTEE_REJECTED`).
+  Menü kurul bazlıdır (md. 176). Disiplin dosyasının kurul görüşmesi Aşama 2 (teknik borç M9).
 - **SQLite koşullu UniqueConstraint: DESTEKLENİR** (SQLite 3.8+ partial index; Django kısıtı yalnız
   MySQL/Oracle). Projedeki 6+ canlı-unique aynen çalışır; F2'de IntegrityError regresyon testi yazılır.
   `select_for_update` SQLite'ta no-op — tek yazar olduğundan kabul, yorumla belgelenir.
@@ -170,7 +176,7 @@ iki bölüm ekler: tebliğ bekleyen kararlar + kapanışa hazır dosyalar (`clos
 ### 4.6 Yıl devri + md. 157/7 imha
 
 - **Yıl devri sihirbazı:** yeni SchoolYear → is_active taşınır (case_no yeni prefix; eski numaralar
-  regex-izole) → yeni yıl tatilleri → yeni kurul tanımı (yıl başına tek kurul) → öğrenci güncelleme
+  regex-izole) → yeni yıl tatilleri → yeni kurul tanımları (yıl başına tek Ödül ve Disiplin Kurulu + tek Onur Kurulu; sihirbaz kopyalamaz, kurul ekranına yönlendirir) → öğrenci güncelleme
   (önerilen yol: yeni e-Okul listesini yeniden import — upsert; alternatif toplu `class_level+1`) →
   kapanmamış eski-yıl dosyaları UYARILIR (engellenmez — süreç yıl aşabilir).
 - **İmha aracı (md. 157/7):** yalnız uyarı belgeleri — `DisciplineWarning` + bağlı `WARNING_LETTER`

@@ -19,6 +19,7 @@ from apps.disiplin.tests.factories import (
     PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
+    ensure_terms,
 )
 
 pytestmark = pytest.mark.django_db
@@ -329,16 +330,39 @@ class TestHonorApi:
         )
         assert resp.status_code == 201
         cid = resp.json()["id"]
-        resp = client.post(
-            f"/api/v1/honor/certificates/{cid}/recommend/",
-            {"recommended_on": "2026-05-25"},
-            format="json",
-        )
-        assert resp.json()["status"] == "HONOR_BOARD_RECOMMENDED"
-        resp = client.post(
-            f"/api/v1/honor/certificates/{cid}/award/", {"awarded_on": "2026-06-01"}, format="json"
-        )
-        assert resp.json()["status"] == "AWARDED"
+        ensure_terms(year)
+
+        def karar(council_type: str, on: str) -> str:
+            """Toplantı aç (teklif gündemde) → maddeyi olumlu karara bağla → belge durumu."""
+            meeting = client.post(
+                "/api/v1/council/meetings/",
+                {
+                    "school_year": year.pk,
+                    "council_type": council_type,
+                    "meeting_date": on,
+                    "attendees": [
+                        {
+                            "person_name": "Başkan",
+                            "attendee_role": "VOTING_MEMBER",
+                            "is_chair": True,
+                        }
+                    ],
+                    "honor_certificate_ids": [cid],
+                },
+                format="json",
+            ).json()
+            item = meeting["agenda_items"][0]
+            client.post(
+                f"/api/v1/council/meetings/{meeting['id']}/agenda-items/{item['id']}/decide/",
+                {"outcome": "FAVORABLE"},
+                format="json",
+            )
+            status: str = client.get(f"/api/v1/honor/certificates/{cid}/").json()["status"]
+            return status
+
+        assert karar("HONOR", "2026-05-25") == "HONOR_BOARD_RECOMMENDED"
+        services.create_committee(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
+        assert karar("DISCIPLINE", "2026-06-01") == "AWARDED"
 
     def test_kurul_uye_ekleme_yaniti_yeni_uyeyi_icerir(self, client: APIClient) -> None:
         """Onur kurulu üye ekleme yanıtı da güncel listeyi taşımalı (FE bununla tazeler)."""
@@ -449,7 +473,7 @@ class TestDecisionTypeAndDeadlinesApi:
             case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
         )
         items = client.get("/api/v1/disiplin/yaklasan-sureler/").json()
-        assert any("tebliğ bekliyor" in i["title"] for i in items)
+        assert any("onay bekliyor" in i["title"] for i in items)  # onaysız karar (md. 163/2)
         assert all(
             {"severity", "case_no", "title", "due_date", "statute_ref", "link"} <= set(i)
             for i in items

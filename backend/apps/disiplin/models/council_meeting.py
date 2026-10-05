@@ -3,6 +3,9 @@
 OYS `council_meeting.py`'den FK-ikameli uyarlama (tasarım §4.2):
 `member_user` → `okul.Personnel`; `member_parent` KALDIRILDI (katılımcı zaten
 zorunlu ad snapshot'ıyla tutulur — veli katılımcı yalnız adla kaydedilir).
+
+`CouncilAgendaItem` (04.10.2026, kurul işleyişi Aşama 1) OYS'de yoktur: kurul
+kararı toplantının gündem maddesinde alınır; tarih tahmini ile bağ kurulmaz.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ from django.db import models
 
 from apps.disiplin.models.cases import DisciplineCase
 from apps.disiplin.models.committee import DisciplineCommittee
-from apps.disiplin.models.honors import HonorBoard
+from apps.disiplin.models.honors import HonorBoard, HonorCertificate
 from shared.models import BaseModel
 
 
@@ -201,6 +204,126 @@ class CouncilMeeting(BaseModel):
                     "discipline_case": "Disiplin dosyası yalnız dosya görüşme tutanağına bağlanabilir."
                 }
             )
+
+
+class AgendaItemType(models.TextChoices):
+    """Gündem maddesinin konusu — kurul kararının bağlandığı kayıt.
+
+    Aşama 1 (04.10.2026): onur belgesi teklifi. Genel konular toplantının serbest
+    `agenda`/`decision_text` alanlarında kalır; disiplin dosyası Aşama 2'de eklenir.
+    """
+
+    HONOR_PROPOSAL = "HONOR_PROPOSAL", "Onur belgesi teklifi"
+
+
+class AgendaItemOutcome(models.TextChoices):
+    """Gündem maddesinin karar sonucu — etiket kurula göre değişir (serializer).
+
+    Onur Kurulu: olumlu = uygun görüldü (md. 183/b), olumsuz = uygun görülmedi.
+    Ödül ve Disiplin Kurulu: olumlu = kabul (md. 161/1), olumsuz = ret.
+    """
+
+    PENDING = "PENDING", "Karar bekliyor"
+    FAVORABLE = "FAVORABLE", "Olumlu"
+    UNFAVORABLE = "UNFAVORABLE", "Olumsuz"
+
+
+# Gündem maddesi kararının kurula göre adı (md. 183/b uygun görüş; md. 161/1 kabul/ret).
+AGENDA_OUTCOME_LABELS: dict[str, dict[str, str]] = {
+    "HONOR": {
+        "PENDING": "Karar bekliyor",
+        "FAVORABLE": "Uygun görüldü",
+        "UNFAVORABLE": "Uygun görülmedi",
+    },
+    "DISCIPLINE": {
+        "PENDING": "Karar bekliyor",
+        "FAVORABLE": "Kabul edildi",
+        "UNFAVORABLE": "Reddedildi",
+    },
+}
+
+
+class CouncilAgendaItem(BaseModel):
+    """Kurul toplantısının gündem maddesi ve o maddede alınan karar (md. 184, 196, 206).
+
+    Kurul kararı toplantıda alınır: onur belgesi teklifine ilişkin uygun görüş
+    (Onur Kurulu) ve kabul/ret (Ödül ve Disiplin Kurulu) yalnız bir gündem maddesi
+    karara bağlanarak kaydedilir (`services.decide_agenda_item`). Karar tarihi
+    toplantı tarihidir; karar defteri (tutanak PDF'i) maddelerden derlenir.
+    `decision_basis`/`dissent_note` madde başınadır — her karar için oy birliği /
+    çoğunluğu ve karşı görüş ayrı yazılır (md. 196/2, 206/2).
+    """
+
+    meeting = models.ForeignKey(
+        CouncilMeeting,
+        on_delete=models.CASCADE,
+        related_name="agenda_items",
+        verbose_name="toplantı",
+    )
+    order = models.PositiveSmallIntegerField("sıra", default=0)
+    item_type = models.CharField(
+        "madde türü",
+        max_length=20,
+        choices=AgendaItemType.choices,
+        default=AgendaItemType.HONOR_PROPOSAL,
+    )
+    honor_certificate = models.ForeignKey(
+        HonorCertificate,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="agenda_items",
+        verbose_name="onur belgesi teklifi",
+    )
+    outcome = models.CharField(
+        "karar",
+        max_length=12,
+        choices=AgendaItemOutcome.choices,
+        default=AgendaItemOutcome.PENDING,
+        db_index=True,
+    )
+    decision_text = models.TextField(
+        "karar gerekçesi",
+        blank=True,
+        default="",
+        help_text="Olumsuz kararda zorunlu (md. 196/1, 206/2 — kararlar gerekçeli yazılır).",
+    )
+    decision_basis = models.CharField(
+        "karar esası",
+        max_length=10,
+        choices=CouncilDecisionBasis.choices,
+        default=CouncilDecisionBasis.UNANIMITY,
+    )
+    dissent_note = models.TextField(
+        "karşı görüş",
+        blank=True,
+        default="",
+        help_text="Karara katılmayan üyenin adı ve gerekçesi (md. 196/2).",
+    )
+
+    class Meta:
+        verbose_name = "kurul gündem maddesi"
+        verbose_name_plural = "kurul gündem maddeleri"
+        ordering = ["order", "id"]
+        constraints = [
+            # Bir teklif aynı anda yalnız bir toplantıda karar bekleyebilir.
+            models.UniqueConstraint(
+                fields=["honor_certificate"],
+                condition=models.Q(outcome="PENDING", deleted_at__isnull=True),
+                name="uq_agenda_certificate_pending_alive",
+            ),
+            models.UniqueConstraint(
+                fields=["meeting", "honor_certificate"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_agenda_meeting_certificate_alive",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["meeting", "order"], name="agenda_meeting_order_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.meeting} — madde {self.order} ({self.get_outcome_display()})"
 
 
 class CouncilMeetingAttendee(BaseModel):

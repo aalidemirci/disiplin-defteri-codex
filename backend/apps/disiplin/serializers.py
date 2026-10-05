@@ -12,6 +12,8 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.disiplin.models import (
+    AGENDA_OUTCOME_LABELS,
+    CouncilAgendaItem,
     CouncilMeeting,
     CouncilMeetingAttendee,
     DisciplineAppeal,
@@ -617,10 +619,61 @@ class CouncilAttendeeSerializer(serializers.ModelSerializer[CouncilMeetingAttend
         ]
 
 
+class CouncilAgendaItemSerializer(serializers.ModelSerializer[CouncilAgendaItem]):
+    """Gündem maddesi + bağlı teklifin özeti (konu karar defterine buradan basılır)."""
+
+    outcome_display = serializers.SerializerMethodField()
+    student = serializers.IntegerField(source="honor_certificate.student_id", read_only=True)
+    student_name = serializers.CharField(
+        source="honor_certificate.student.full_name", read_only=True, default=""
+    )
+    class_label = serializers.CharField(
+        source="honor_certificate.student.class_label", read_only=True, default=""
+    )
+    criteria = serializers.JSONField(source="honor_certificate.criteria", read_only=True)
+    justification = serializers.CharField(
+        source="honor_certificate.justification", read_only=True, default=""
+    )
+    proposer_role_display = serializers.CharField(
+        source="honor_certificate.get_proposer_role_display", read_only=True, default=""
+    )
+    certificate_status = serializers.CharField(
+        source="honor_certificate.status", read_only=True, default=""
+    )
+
+    class Meta:
+        model = CouncilAgendaItem
+        fields = [
+            "id",
+            "order",
+            "item_type",
+            "honor_certificate",
+            "student",
+            "student_name",
+            "class_label",
+            "criteria",
+            "justification",
+            "proposer_role_display",
+            "certificate_status",
+            "outcome",
+            "outcome_display",
+            "decision_text",
+            "decision_basis",
+            "dissent_note",
+        ]
+        read_only_fields = fields
+
+    def get_outcome_display(self, obj: CouncilAgendaItem) -> str:
+        labels = AGENDA_OUTCOME_LABELS.get(obj.meeting.council_type, {})
+        return labels.get(obj.outcome, obj.get_outcome_display())
+
+
 class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
     council_type_display = serializers.CharField(source="get_council_type_display", read_only=True)
     meeting_no_display = serializers.CharField(read_only=True)
     attendees = CouncilAttendeeSerializer(many=True, read_only=True)
+    agenda_items = CouncilAgendaItemSerializer(many=True, read_only=True)
+    quorum = serializers.SerializerMethodField()
     discipline_case_no = serializers.CharField(
         source="discipline_case.case_no", read_only=True, default=None
     )
@@ -652,8 +705,16 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
             "discipline_case",
             "discipline_case_no",
             "attendees",
+            "agenda_items",
+            "quorum",
         ]
         read_only_fields = ["meeting_no", "council_type", "minutes_type", "discipline_case"]
+
+    def get_quorum(self, obj: CouncilMeeting) -> dict[str, Any] | None:
+        """Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda None."""
+        from apps.disiplin.services.council import meeting_quorum
+
+        return meeting_quorum(obj)
 
 
 class DecisionNarrativeSerializer(serializers.Serializer[dict[str, Any]]):

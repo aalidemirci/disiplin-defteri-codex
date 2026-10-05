@@ -79,7 +79,7 @@ export default function DisiplinPage() {
     <div className="space-y-[var(--dd-page-gap)]">
       <div className="dd-page-header">
         <div className="min-w-0">
-          <h1 className="dd-page-title">Disiplin</h1>
+          <h1 className="dd-page-title">Disiplin Dosyaları</h1>
           <p className="dd-page-description">
             Disiplin dosyaları, aşama akışı (dilekçe → rehberlik → müdür/kurul kararı → kapanış) ve
             dosya ekleri. KVKK kapsamında hassas kişisel veri içerir.
@@ -91,20 +91,6 @@ export default function DisiplinPage() {
               Yeni dosya
             </Button>
           )}
-          <Link
-            to="/disiplin/kurul"
-            className="inline-flex min-h-[var(--dd-control-height)] items-center gap-2 rounded-shape-md border border-outline-variant bg-surface-container-lowest px-3 text-label-large font-semibold text-on-surface transition hover:border-primary/40 hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <Icon name="groups" size="lg" />
-            Disiplin Kurulu
-          </Link>
-          <Link
-            to="/disiplin/onur-teklifleri"
-            className="inline-flex min-h-[var(--dd-control-height)] items-center gap-2 rounded-shape-md border border-outline-variant bg-surface-container-lowest px-3 text-label-large font-semibold text-on-surface transition hover:border-primary/40 hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <Icon name="workspace_premium" size="lg" />
-            Onur teklifleri
-          </Link>
           <Link
             to="/disiplin/karar-tipleri"
             className="inline-flex min-h-[var(--dd-control-height)] items-center gap-2 rounded-shape-md border border-outline-variant bg-surface-container-lowest px-3 text-label-large font-semibold text-on-surface transition hover:border-primary/40 hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

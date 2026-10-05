@@ -73,7 +73,7 @@ güncelleme öncesi yedekleri de aynı şifreli `.ddbak` biçimindedir.
 
 ## Durum
 
-**F0-F5 geliştirme fazları tamamlandı; sürüm `2026.9.0-beta.2`.** Okul kurulumu ve
+**F0-F5 geliştirme fazları tamamlandı; sürüm `2026.10.0-beta.1`.** Okul kurulumu ve
 kişi aktarımı, disiplin/onur kurulu iş akışları, resmî evrak şablonları (eylül
 2026 mevzuat uyumu sürümünde 11 yeni belge: md. 197 iade/ilçeye gönderme, md. 169/1
 onaya sevk, md. 175 MEM yazıları, veli görüşmesi, arama ve md. 195 tespit

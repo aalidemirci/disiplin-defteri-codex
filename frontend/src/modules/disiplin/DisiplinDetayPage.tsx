@@ -1648,10 +1648,10 @@ function RecordMeetingDialog({
         <p className="text-body-medium text-on-surface-variant">Kurul yükleniyor…</p>
       ) : committee === null ? (
         <p className="text-body-medium text-on-surface-variant">
-          Aktif disiplin kurulu tanımlı değil. Toplantı katılımcıları kurul üyelerinden seçilir;
-          önce{" "}
-          <Link to="/disiplin/kurul" className="text-primary underline">
-            Disiplin Kurulu
+          Aktif Ödül ve Disiplin Kurulu tanımlı değil. Toplantı katılımcıları kurul üyelerinden
+          seçilir; önce{" "}
+          <Link to="/odul-disiplin-kurulu?sekme=uyeler" className="text-primary underline">
+            Ödül ve Disiplin Kurulu
           </Link>{" "}
           tanımlanmalıdır.
         </p>

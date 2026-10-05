@@ -28,10 +28,11 @@ import type {
 const STATUS_CHIP: Record<HonorCertificateStatus, string> = {
   PROPOSED: "bg-secondary-container text-on-secondary-container",
   HONOR_BOARD_RECOMMENDED: "bg-tertiary-container text-on-tertiary-container",
+  HONOR_BOARD_DECLINED: "bg-error-container text-on-error-container",
   AWARDED: "bg-primary-container text-on-primary-container",
+  COMMITTEE_REJECTED: "bg-error-container text-on-error-container",
   PRINCIPAL_APPROVED: "bg-primary-container text-on-primary-container",
   PRINCIPAL_REJECTED: "bg-error-container text-on-error-container",
-  REJECTED: "bg-error-container text-on-error-container",
 };
 
 const STATUS_FILTERS = [
@@ -100,9 +101,10 @@ export default function OnurBelgeleriPanel() {
   return (
     <div className="space-y-5">
       <p className="max-w-3xl text-body-medium text-on-surface-variant">
-        Bu alan onur belgesi düzenlemez. Dönemlik teklifleri kaydeder; Onur Kurulunca uygun
-        görülenler teklif çizelgesiyle Okul Öğrenci Ödül ve Disiplin Kuruluna gönderilir (md. 161 ve
-        183/b).
+        Bu alan onur belgesi düzenlemez. Öğrenci, öğretmen veya okul yönetiminin dönemlik
+        tekliflerini kaydeder ve her teklifin hangi aşamada olduğunu gösterir. Teklifler Onur Kurulu
+        toplantısında görüşülür (Gündem); uygun görülenler Ödül ve Disiplin Kuruluna önerilir (md.
+        161/1, 183/b).
       </p>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -176,11 +178,13 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 // M8 (kullanıcı kararı 26.09.2026): müdür onayından önceki son adım gerekçeyle geri alınır.
+// Kurul kararı geri alınınca gündem maddesi aynı toplantıda yeniden karar bekler.
 const UNDOABLE_STATUSES = new Set<HonorCertificate["status"]>([
   "HONOR_BOARD_RECOMMENDED",
+  "HONOR_BOARD_DECLINED",
   "AWARDED",
+  "COMMITTEE_REJECTED",
   "PRINCIPAL_REJECTED",
-  "REJECTED",
 ]);
 
 function ProposalRow({

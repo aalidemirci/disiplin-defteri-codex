@@ -5,12 +5,16 @@
 // kurulunda tutanak türü seçilir: "Disiplin dosyası görüşme" türünde kurula sevkli +
 // kararlı bir dosya bağlanır; öğrenci-bazlı resmî kararlar tutanağa otomatik derlenir.
 //
+// Kurul işleyişi (04.10.2026): Gündem sekmesinden seçilen onur belgesi teklifleri
+// (`agendaCertificates`) toplantı açılırken gündeme alınır; kararlar toplantı
+// ekranında madde madde verilir. Gündemli toplantı Onur Kurulunda "Onur Kurulu",
+// Ödül ve Disiplin Kurulunda "Diğer" türündedir (dosya görüşme tutanağına teklif girmez).
+//
 // OYS `modules/kurul/ToplantiForm.tsx`'ten UYARLANDI (F4-D3); sapmalar:
 // listSchoolYears `./api`'den (sistem modülü yok); dosya seçeneği `students`
 // (student_names/decision_count yok); katılımcıda `member_parent_id` yok.
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { TextareaHTMLAttributes } from "react";
 
 import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
@@ -19,16 +23,9 @@ import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
-import {
-  ATTENDEE_ROLE_TR,
-  DECISION_BASIS_TR,
-  MINUTES_TYPE_TR,
-  kurulApi,
-  listSchoolYears,
-} from "./api";
+import type { HonorCertificate } from "../odul/api";
+import { DECISION_BASIS_TR, MINUTES_TYPE_TR, kurulApi, listSchoolYears } from "./api";
 import type {
-  AttendeeInput,
-  AttendeeRole,
   CaseOption,
   CouncilMeeting,
   CouncilType,
@@ -36,61 +33,28 @@ import type {
   HonorMeetingKind,
   MinutesType,
 } from "./api";
-
-// M3 outlined çok-satırlı alan (ui/TextField deseni — token tüketir, ham renk yok).
-function Textarea({
-  label,
-  id,
-  className = "",
-  ...rest
-}: { label: string; id: string } & TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <div className={className}>
-      <label htmlFor={id} className="mb-1 block text-label-large text-on-surface-variant">
-        {label}
-      </label>
-      <div className="rounded-shape-xs border border-outline px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary">
-        <textarea
-          id={id}
-          className="min-h-24 w-full resize-y bg-transparent text-body-large text-on-surface outline-none placeholder:text-on-surface-variant/60"
-          {...rest}
-        />
-      </div>
-    </div>
-  );
-}
-
-// Form içi geçici katılımcı satırı (id yerel anahtar).
-interface Row extends AttendeeInput {
-  key: string;
-}
-
-let rowSeq = 0;
-function toRow(a: AttendeeInput): Row {
-  rowSeq += 1;
-  return { key: `r${rowSeq}`, ...a, title: a.title ?? "", dissent_note: a.dissent_note ?? "" };
-}
-
-function emptyRow(role: AttendeeRole = "VOTING_MEMBER"): Row {
-  return toRow({
-    attendee_role: role,
-    person_name: "",
-    title: "",
-    is_chair: false,
-    dissent_note: "",
-  });
-}
+import KatilimciEditor, { emptyRow, rowsToAttendees, toRow, validateRows } from "./KatilimciEditor";
+import type { AttendeeRow } from "./KatilimciEditor";
+import Textarea from "./Textarea";
 
 interface Props {
   councilType: CouncilType;
   onCreated: (meeting: CouncilMeeting) => void;
   onCancel: () => void;
+  /** Toplantı açılırken gündeme alınacak teklifler (Gündem sekmesinden). */
+  agendaCertificates?: HonorCertificate[];
 }
 
-export default function ToplantiForm({ councilType, onCreated, onCancel }: Props) {
+export default function ToplantiForm({
+  councilType,
+  onCreated,
+  onCancel,
+  agendaCertificates = [],
+}: Props) {
   const snackbar = useSnackbar();
   const idBase = useId();
   const isDiscipline = councilType === "DISCIPLINE";
+  const hasAgenda = agendaCertificates.length > 0;
   const [meetingDate, setMeetingDate] = useState("");
   const [honorMeetingKind, setHonorMeetingKind] = useState<HonorMeetingKind>("BOARD");
   const [decisionBasis, setDecisionBasis] = useState<DecisionBasis>("UNANIMITY");
@@ -100,7 +64,7 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
   const [minutesType, setMinutesType] = useState<MinutesType>("GENERAL");
   const [caseOptions, setCaseOptions] = useState<CaseOption[] | null>(null);
   const [caseId, setCaseId] = useState("");
-  const [rows, setRows] = useState<Row[]>([emptyRow()]);
+  const [rows, setRows] = useState<AttendeeRow[]>([emptyRow()]);
   const [busy, setBusy] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,18 +115,6 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
     }
   };
 
-  const updateRow = (key: string, patch: Partial<Row>) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  };
-
-  // Başkan tekildir: bir satır başkan işaretlenince diğerleri temizlenir (md. 188).
-  const setChair = (key: string) => {
-    setRows((prev) => prev.map((r) => ({ ...r, is_chair: r.key === key })));
-  };
-
-  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
-  const removeRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
-
   const onSubmit = async () => {
     setError(null);
     if (!meetingDate) {
@@ -173,13 +125,9 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
       setError("Dosya görüşme tutanağı için bir disiplin dosyası seçilmelidir.");
       return;
     }
-    const filled = rows.filter((r) => r.person_name.trim());
-    if (filled.filter((r) => r.attendee_role === "VOTING_MEMBER").length === 0) {
-      setError("En az bir oy hakkı olan üye eklenmelidir (md. 191).");
-      return;
-    }
-    if (filled.filter((r) => r.is_chair).length !== 1) {
-      setError("Tam olarak bir başkan işaretlenmelidir (md. 188).");
+    const rowError = validateRows(rows);
+    if (rowError) {
+      setError(rowError);
       return;
     }
     setBusy(true);
@@ -200,16 +148,8 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
         notes: notes.trim(),
         minutes_type: isDiscipline ? minutesType : "GENERAL",
         discipline_case_id: minutesType === "CASE_REVIEW" && caseId ? Number(caseId) : null,
-        attendees: filled.map((r, i) => ({
-          attendee_role: r.attendee_role,
-          person_name: r.person_name.trim(),
-          title: (r.title ?? "").trim(),
-          is_chair: !!r.is_chair,
-          dissent_note: (r.dissent_note ?? "").trim(),
-          order: i,
-          member_user_id: r.member_user_id ?? null,
-          member_student_id: r.member_student_id ?? null,
-        })),
+        attendees: rowsToAttendees(rows),
+        ...(hasAgenda ? { honor_certificate_ids: agendaCertificates.map((c) => c.id) } : {}),
       });
       snackbar.success(`Tutanak kaydedildi (Toplantı No: ${created.meeting_no_display}).`);
       onCreated(created);
@@ -222,7 +162,26 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
 
   return (
     <Card elevation={2} className="space-y-5 p-6">
-      <h2 className="text-title-large text-on-surface">Yeni Kurul Toplantı Tutanağı</h2>
+      <h2 className="text-title-large text-on-surface">
+        {hasAgenda ? "Toplantı aç" : "Yeni Kurul Toplantı Tutanağı"}
+      </h2>
+
+      {hasAgenda && (
+        <Card elevation={0} className="space-y-2 bg-surface-container-low p-4">
+          <p className="text-title-small text-on-surface">
+            Gündeme alınacak teklifler ({agendaCertificates.length})
+          </p>
+          <ul className="list-inside list-disc text-body-medium text-on-surface-variant">
+            {agendaCertificates.map((c) => (
+              <li key={c.id}>{c.student_name}</li>
+            ))}
+          </ul>
+          <p className="text-body-small text-on-surface-variant">
+            Kararlar toplantı kaydedildikten sonra toplantı ekranında madde madde verilir; karar
+            tarihi toplantı tarihidir.
+          </p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <TextField
@@ -240,7 +199,7 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
             label: DECISION_BASIS_TR[v],
           }))}
         />
-        {isDiscipline && (
+        {isDiscipline && !hasAgenda && (
           <Select
             label="Tutanak Türü"
             value={minutesType}
@@ -251,7 +210,7 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
             }))}
           />
         )}
-        {!isDiscipline && (
+        {!isDiscipline && !hasAgenda && (
           <Select
             label="Toplantı türü"
             value={honorMeetingKind}
@@ -304,14 +263,14 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
 
       <Textarea
         id={`${idBase}-agenda`}
-        label="Gündem"
+        label={hasAgenda ? "Diğer gündem konuları (opsiyonel)" : "Gündem"}
         value={agenda}
         onChange={(e) => setAgenda(e.target.value)}
         placeholder="Toplantıda görüşülen konular…"
       />
       <Textarea
         id={`${idBase}-decision`}
-        label="Karar (Gerekçeli — md. 206)"
+        label={hasAgenda ? "Diğer kararlar (opsiyonel — md. 206)" : "Karar (Gerekçeli — md. 206)"}
         value={decisionText}
         onChange={(e) => setDecisionText(e.target.value)}
         placeholder="Gerekçeli karar metni…"
@@ -329,72 +288,7 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
             Aktif kuruldan yükle
           </Button>
         </div>
-
-        {rows.map((r) => (
-          <Card key={r.key} elevation={0} className="space-y-3 bg-surface-container-low p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <TextField
-                label="Ad Soyad"
-                value={r.person_name}
-                onChange={(e) => updateRow(r.key, { person_name: e.target.value })}
-              />
-              <TextField
-                label="Görev / Ünvan"
-                value={r.title ?? ""}
-                onChange={(e) => updateRow(r.key, { title: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Select
-                label="Rol"
-                value={r.attendee_role}
-                onChange={(e) =>
-                  updateRow(r.key, {
-                    attendee_role: e.target.value as AttendeeRole,
-                    // Davetli başkan olamaz (md. 185/6).
-                    is_chair: e.target.value === "VOTING_MEMBER" ? r.is_chair : false,
-                  })
-                }
-                options={(Object.keys(ATTENDEE_ROLE_TR) as AttendeeRole[]).map((v) => ({
-                  value: v,
-                  label: ATTENDEE_ROLE_TR[v],
-                }))}
-              />
-              <label className="flex min-h-12 items-center gap-2 text-body-medium text-on-surface">
-                <input
-                  type="radio"
-                  name={`${idBase}-chair`}
-                  checked={!!r.is_chair}
-                  disabled={r.attendee_role !== "VOTING_MEMBER"}
-                  onChange={() => setChair(r.key)}
-                  className="size-5 accent-primary"
-                />
-                Başkan (md. 188)
-              </label>
-            </div>
-            {r.attendee_role === "VOTING_MEMBER" && (
-              <TextField
-                label="Karşı görüş gerekçesi (md. 206 — varsa)"
-                value={r.dissent_note ?? ""}
-                onChange={(e) => updateRow(r.key, { dissent_note: e.target.value })}
-              />
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="text"
-                icon="delete"
-                onClick={() => removeRow(r.key)}
-                aria-label="Katılımcıyı kaldır"
-              >
-                Kaldır
-              </Button>
-            </div>
-          </Card>
-        ))}
-
-        <Button variant="outlined" icon="add" onClick={addRow}>
-          Katılımcı ekle
-        </Button>
+        <KatilimciEditor rows={rows} onChange={setRows} idBase={idBase} />
       </div>
 
       <Textarea
@@ -416,7 +310,7 @@ export default function ToplantiForm({ councilType, onCreated, onCancel }: Props
           Vazgeç
         </Button>
         <Button icon="save" onClick={() => void onSubmit()} disabled={busy}>
-          {busy ? "Kaydediliyor…" : "Tutanağı Kaydet"}
+          {busy ? "Kaydediliyor…" : hasAgenda ? "Toplantıyı aç" : "Tutanağı Kaydet"}
         </Button>
       </div>
     </Card>

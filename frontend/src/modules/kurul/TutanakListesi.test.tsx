@@ -6,6 +6,7 @@
 // listSchoolYears mock'u `../sistem/api` yerine `./api` üzerinden.
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +19,7 @@ const kapi = vi.hoisted(() => ({
   listMeetings: vi.fn(),
   minutes: vi.fn(),
   deleteMeeting: vi.fn(),
+  getMeeting: vi.fn(),
   prefill: vi.fn(() => Promise.resolve({ attendees: [] })),
   caseOptions: vi.fn(() => Promise.resolve({ cases: [] })),
 }));
@@ -50,6 +52,8 @@ function meeting(overrides: Partial<CouncilMeeting>): CouncilMeeting {
     discipline_case: null,
     discipline_case_no: null,
     attendees: [],
+    agenda_items: [],
+    quorum: null,
     ...overrides,
   };
 }
@@ -115,5 +119,41 @@ describe("TutanakListesi", () => {
     kapi.listMeetings.mockResolvedValue([]);
     renderListe("DISCIPLINE");
     expect(await screen.findByText(/henüz tutanak bulunmuyor/i)).toBeInTheDocument();
+  });
+
+  it("gündemli toplantı: madde sayısı ve bekleyen karar; Aç toplantı ekranını açar", async () => {
+    const gundemli = meeting({
+      id: 5,
+      meeting_no_display: "T005",
+      agenda_items: [
+        {
+          id: 9,
+          order: 1,
+          item_type: "HONOR_PROPOSAL",
+          honor_certificate: 3,
+          student: 4,
+          student_name: "Ali Veli",
+          class_label: "10/A",
+          criteria: ["MANNERS"],
+          justification: "",
+          proposer_role_display: "Öğretmen",
+          certificate_status: "HONOR_BOARD_RECOMMENDED",
+          outcome: "PENDING",
+          outcome_display: "Karar bekliyor",
+          decision_text: "",
+          decision_basis: "UNANIMITY",
+          dissent_note: "",
+        },
+      ],
+    });
+    kapi.listMeetings.mockResolvedValue([gundemli]);
+    kapi.getMeeting.mockResolvedValue(gundemli);
+    const user = userEvent.setup();
+    renderListe("DISCIPLINE");
+    expect(await screen.findByText(/1 madde/)).toBeInTheDocument();
+    expect(screen.getByText(/karar bekliyor/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Aç" }));
+    expect(await screen.findByText(/Toplantı T005/)).toBeInTheDocument();
+    expect(kapi.getMeeting).toHaveBeenCalledWith(5);
   });
 });
