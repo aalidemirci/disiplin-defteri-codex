@@ -30,7 +30,7 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import excel_personel, excel_veli, normalize, selectors
+from apps.okul import excel_personel, excel_veli, selectors
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.excel_veli import ColumnMapping, ParsedParent, ParsedRow, ParserError
 from apps.okul.models import (
@@ -172,38 +172,62 @@ _MISSING_COLUMN_LABELS: dict[str, str] = {
     "class": "Sınıf",
     "number veya tckn": "Okul Numarası (ya da TCKN)",
     "student_name veya student_first+student_last": (
-        "Öğrenci Adı ve Öğrenci Soyadı (ya da Adı Soyadı)"
+        "Öğrenci Adı ve Öğrenci Soyadı (ya da tek sütunda Adı Soyadı)"
     ),
-    "full_name veya first_name+last_name": "Adı ve Soyadı (ya da Ad Soyad)",
+    "full_name veya first_name+last_name": "Adı ve Soyadı (ya da tek sütunda Ad Soyad)",
 }
 
 
-def _missing_columns_error(missing: list[str], expected: tuple[str, ...]) -> ParserError:
+def _missing_columns_error(
+    missing: list[str], expected: tuple[str, ...], *, headerless_hint: bool = False
+) -> ParserError:
     labels = ", ".join(_MISSING_COLUMN_LABELS.get(name, name) for name in missing)
-    return ParserError(
-        f"Zorunlu sütun(lar) bulunamadı: {labels}. İlk satırda şablonun sütun başlıkları "
-        f"({', '.join(expected)}) bulunmalı; listeyi başlık satırıyla birlikte yapıştırın "
-        "ya da Şablon indir ile alınan dosyayı doldurun."
+    message = (
+        f"Zorunlu sütun(lar) bulunamadı: {labels}. Listeyi başlık satırıyla birlikte "
+        f"yapıştırın (şablon başlıkları: {', '.join(expected)}) ya da Şablon indir ile "
+        "alınan dosyayı doldurun."
+    )
+    if headerless_hint:
+        message += " Başlıksız yapıştırırken sütunlar şablon sırasında olmalıdır."
+    return ParserError(message)
+
+
+# Başlıksız girişte satır şekli: e-Okul okul numarası kısadır — 11 haneli TCKN
+# bu kalıba UYMAZ (Veli İletişim düzeni başlıksız yapıştırılırsa TCKN okul
+# numarasına yazılmasın). Ad/soyad en az bir harf içerir, rakam içermez.
+_SCHOOL_NUMBER_RE = re.compile(r"\d{1,6}(\.0)?")
+_NAME_RE = re.compile(r"[^\d]*[^\W\d_][^\d]*")
+_HEADERLESS_SAMPLE_ROWS = 10
+
+
+def _is_template_data_row(row: list[Any]) -> bool:
+    """Satır şablon sırasında mı: Sınıf | Okul Numarası | Ad | Soyad | [Doğum Tarihi]."""
+    cells = [str(c).strip() if c is not None else "" for c in row]
+    cells += [""] * (len(STUDENT_TEMPLATE_HEADERS) - len(cells))
+    if any(cells[len(STUDENT_TEMPLATE_HEADERS) :]):  # fazladan dolu sütun: başka düzen
+        return False
+    # Sınıf hücresinde yalnız ŞEKİL aranır (rakam + harf): "8/A" gibi tek hatalı
+    # sınıf bütün listeyi reddettirmesin, satır düzeyinde "Sınıf/şube çözülemedi" olsun.
+    has_class_shape = any(ch.isdigit() for ch in cells[0]) and any(ch.isalpha() for ch in cells[0])
+    return (
+        has_class_shape
+        and _SCHOOL_NUMBER_RE.fullmatch(cells[1]) is not None
+        and all(_NAME_RE.fullmatch(name) for name in cells[2:4])
     )
 
 
-_SCHOOL_NUMBER_RE = re.compile(r"\d+(\.0)?")
-
-
 def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
-    """Başlıksız giriş: ilk dolu satır şablon sırasında bir VERİ satırıysa
-    (1. hücre sınıf/şube, 2. hücre okul numarası) sütunlar şablon sırasıyla okunur.
+    """Başlıksız giriş: ilk dolu satırlar şablon sırasında VERİ satırlarıysa sütunlar
+    şablon sırasıyla okunur; tek bir satır bile uymazsa None (başlık istenir).
 
     Kullanıcı Excel'den çoğu kez yalnız veri satırlarını kopyalar (14.10.2026 saha
-    bildirimi). `header_row=-1`: veri ilk satırdan başlar, satır numaraları
-    yapıştırılan satırlarla aynı kalır.
+    bildirimi). Şekil denetimi sıkı tutulur: başka düzendeki başlıksız veri (ör.
+    e-Okul Veli İletişim) yanlış alanlara yazılacağına reddedilir. `header_row=-1`:
+    veri ilk satırdan başlar, satır numaraları yapıştırılan satırlarla aynı kalır.
     """
-    first = next((row for row in grid if any(str(c or "").strip() for c in row)), None)
-    if first is None or len(first) < len(STUDENT_TEMPLATE_HEADERS) - 1:
-        return None
-    if normalize.normalize_class_section(first[0]) is None:
-        return None
-    if not _SCHOOL_NUMBER_RE.fullmatch(str(first[1] or "").strip()):
+    sample = [row for row in grid if any(str(c or "").strip() for c in row)]
+    sample = sample[:_HEADERLESS_SAMPLE_ROWS]
+    if not sample or not all(_is_template_data_row(row) for row in sample):
         return None
     mapping = excel_veli.detect_columns([list(STUDENT_TEMPLATE_HEADERS)])
     mapping.header_row = -1
@@ -220,7 +244,9 @@ def _parse_student_grid(grid: list[list[Any]]) -> tuple[ColumnMapping, list[Pars
     if not mapping.is_usable:
         headerless = _headerless_student_mapping(grid)
         if headerless is None:
-            raise _missing_columns_error(mapping.missing_critical, STUDENT_TEMPLATE_HEADERS)
+            raise _missing_columns_error(
+                mapping.missing_critical, STUDENT_TEMPLATE_HEADERS, headerless_hint=True
+            )
         mapping = headerless
     return mapping, excel_veli.parse_rows(grid, mapping)
 
@@ -291,16 +317,35 @@ def _ingest_students(
         # Başlıksız girişte header_row=-1; uyarı ilk satıra bağlanır.
         report.add_warning(max(mapping.header_row + 1, 1), "header", header_warning)
 
+    has_guardian_columns = bool(_GUARDIAN_FIELDS & mapping.fields.keys())
+    seen: dict[tuple[str, str], int] = {}
     for row in rows:
-        _process_student_row(row, report=report)
+        _process_student_row(
+            row, report=report, seen=seen, has_guardian_columns=has_guardian_columns
+        )
 
     _ensure_student_classes()
     _close_run(run, report.to_dict())
     return report
 
 
-def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None:
-    """Tek satır: doğrula → veli düzleştir → TCKN ile bul/oluştur/güncelle."""
+_GUARDIAN_FIELDS = frozenset(
+    {"guardian", "mother_name", "mother_phone", "father_name", "father_phone"}
+)
+
+
+def _process_student_row(
+    row: ParsedRow,
+    *,
+    report: StudentImportReport,
+    seen: dict[tuple[str, str], int],
+    has_guardian_columns: bool,
+) -> None:
+    """Tek satır: doğrula → veli düzleştir → TCKN ile bul/oluştur/güncelle.
+
+    `seen`: bu koşuda işlenen TCKN/okul no → satır no. Aynı dosyada ikinci kez
+    geçen öğrenci atlanır; yoksa ilk satırda oluşturulan kayıt sessizce ezilirdi.
+    """
     if (row.student_first, row.student_last) == STUDENT_TEMPLATE_EXAMPLE[2:4]:
         report.add_skip(row.row_number, "row", "Şablondaki örnek satır; aktarılmadı.")
         return
@@ -318,8 +363,26 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
     if row.class_level is None:
         report.add_skip(row.row_number, "class", "Sınıf/şube çözülemedi", row.raw_class)
         return
+    keys = [("tckn", row.tckn)] if row.tckn is not None else []
+    if row.student_number:
+        keys.append(("number", row.student_number))
+    for kind, value in keys:
+        if (kind, value) in seen:
+            label = "TCKN" if kind == "tckn" else "okul numarası"
+            # raw_value MASKELİ: TCKN kişisel veridir, rapor JSON'ına ham düşmez.
+            report.add_skip(
+                row.row_number,
+                kind,
+                f"Bu {label} dosyada {seen[kind, value]}. satırda da var; satır atlandı.",
+                mask_tckn(value) if kind == "tckn" else value,
+            )
+            return
+    for key in keys:
+        seen[key] = row.row_number
 
-    kinship, primary, other = _resolve_guardian(row, report)
+    kinship, primary, other = _resolve_guardian(
+        row, report, has_guardian_columns=has_guardian_columns
+    )
     if primary.has_any_data and primary.raw_phone and primary.phone is None:
         # raw bilinçli BOŞ: telefon kişisel veridir, rapora ham yazılmaz.
         report.add_warning(
@@ -413,7 +476,7 @@ def _ensure_student_classes() -> None:
 
 
 def _resolve_guardian(
-    row: ParsedRow, report: StudentImportReport
+    row: ParsedRow, report: StudentImportReport, *, has_guardian_columns: bool = True
 ) -> tuple[str, ParsedParent, ParsedParent]:
     """Veli Kim → (yakınlık, sorumlu veli, diğer veli). OYS `_resolve_parent_roles` paritesi.
 
@@ -423,9 +486,9 @@ def _resolve_guardian(
     mother, father = row.mother, row.father
     g = row.guardian
 
-    if not g and not mother.has_any_data and not father.has_any_data:
-        # Veli bilgisi hiç yok (standart şablonda veli sütunu bulunmaz): uyarı
-        # gürültüdür; her satıra düşüp başarılı önizlemeyi hata gibi gösteriyordu.
+    if not has_guardian_columns:
+        # Dosyada veli sütunu yok (standart şablon): uyarı gürültüdür; her satıra
+        # düşüp başarılı önizlemeyi hata gibi gösteriyordu (14.10.2026 saha bildirimi).
         return GuardianKinship.FATHER, father, mother
 
     if g == "ANNE":
@@ -450,15 +513,23 @@ def _resolve_guardian(
         )
         return GuardianKinship.MOTHER, mother, father
 
+    if not mother.has_any_data and not father.has_any_data:
+        report.add_warning(
+            row.row_number, "guardian", "Dosyada bu öğrencinin veli bilgisi yok.", row.guardian
+        )
+        return GuardianKinship.FATHER, father, mother
+    # Uyarı fiilî sonucu söyler: baba verisi yoksa kayda ANNE yazılır.
+    if father.has_any_data:
+        kinship, primary, other = GuardianKinship.FATHER, father, mother
+    else:
+        kinship, primary, other = GuardianKinship.MOTHER, mother, father
     report.add_warning(
         row.row_number,
         "guardian",
-        f"Veli Kim '{row.guardian or 'boş'}' belirsiz; BABA varsayıldı.",
+        f"Veli Kim '{row.guardian or 'boş'}' belirsiz; {kinship.value} varsayıldı.",
         row.guardian,
     )
-    if father.has_any_data:
-        return GuardianKinship.FATHER, father, mother
-    return GuardianKinship.MOTHER, mother, father
+    return kinship, primary, other
 
 
 # ---------------------------------------------------------------------------

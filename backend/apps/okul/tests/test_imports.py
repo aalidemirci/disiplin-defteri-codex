@@ -432,3 +432,79 @@ class TestSablonSahaBildirimi:
         report = import_service.commit_personnel_file(file_bytes=personnel_template_xlsx())
         assert Personnel.objects.count() == 0
         assert [(i.row_number, i.field) for i in report.skipped] == [(2, "row")]
+
+
+@pytest.mark.django_db
+class TestBasliksizSekilDenetimi:
+    """Başlıksız okuma yalnız şablon sırasındaki veriye uygulanır; başka düzen
+    yanlış alanlara yazılacağına reddedilir (TCKN okul numarasına düşmesin)."""
+
+    def _reddedilir(self, rows: list[list[object]]) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        with pytest.raises(ParserError, match="şablon sırasında"):
+            import_service.commit_students_text(text=_basliksiz_metin(rows))
+        assert Student.objects.count() == 0
+
+    def test_eokul_veli_iletisim_duzeni_reddedilir(self) -> None:
+        self._reddedilir([_yilmaz_row()])
+
+    def test_tckn_okul_numarasi_yerinde_reddedilir(self) -> None:
+        self._reddedilir([["10/A", TCKN_OGRENCI_1, "TUĞBANUR", "POLAT", "21.02.2012"]])
+
+    def test_ad_soyad_tek_sutunda_reddedilir(self) -> None:
+        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "21.02.2012", "K"]])
+
+    def test_ad_yerinde_tckn_reddedilir(self) -> None:
+        self._reddedilir([["10/A", 220, TCKN_OGRENCI_1, "TUĞBANUR", "POLAT"]])
+
+    def test_fazladan_sutun_reddedilir(self) -> None:
+        self._reddedilir([[*_SABLON_SATIRLARI[0], "K"]])
+
+    def test_ilk_on_satirdan_biri_uymazsa_reddedilir(self) -> None:
+        self._reddedilir([*_SABLON_SATIRLARI, ["10/A", TCKN_OGRENCI_2, "ALİ", "VELİ", ""]])
+
+    def test_dogum_tarihsiz_dort_sutun_kabul(self) -> None:
+        rows = [r[:4] for r in _SABLON_SATIRLARI]
+        report = import_service.preview_students_text(text=_basliksiz_metin(rows))
+        assert report.created_students == 3
+
+
+@pytest.mark.django_db
+class TestDosyaIciYinelenenOgrenci:
+    def test_yinelenen_okul_numarasi_ilk_kaydi_ezmez(self) -> None:
+        rows = [*_SABLON_SATIRLARI, _sablon_satiri("11/B", 220, "ZEYNEP", "KAYA", "")]
+        report = import_service.commit_students_text(text=_basliksiz_metin(rows))
+        assert report.created_students == 3 and report.updated_students == 0
+        assert Student.objects.get(student_number="220").first_name == "TUĞBANUR"
+        [skip] = report.skipped
+        assert (skip.row_number, skip.field, skip.raw_value) == (4, "number", "220")
+        assert "1. satırda" in skip.issue
+
+    def test_yinelenen_tckn_maskeli_raporlanir(self) -> None:
+        first = _yilmaz_row(numara=2612)
+        second = _yilmaz_row(sinif="11/B", numara=2613)
+        report = import_service.commit_students_file(file_bytes=make_xlsx([first, second]))
+        assert Student.objects.count() == 1
+        [skip] = report.skipped
+        assert skip.field == "tckn" and skip.raw_value != str(TCKN_OGRENCI_1)
+        assert Student.objects.get().student_number == "2612"
+
+
+@pytest.mark.django_db
+class TestVeliUyarisiSutunDuzeyinde:
+    def test_veli_sutunlu_dosyada_velisiz_satir_uyarilir(self) -> None:
+        row = _yilmaz_row()
+        row[4:9] = ["", "", "", "", ""]
+        report = import_service.preview_students_file(file_bytes=make_xlsx([row]))
+        assert [(w.field, w.issue) for w in report.warnings] == [
+            ("guardian", "Dosyada bu öğrencinin veli bilgisi yok.")
+        ]
+
+    def test_yalniz_anne_bilgisi_varsa_uyari_anne_der(self) -> None:
+        row = _yilmaz_row()
+        row[4] = ""
+        row[7:9] = ["", ""]
+        report = import_service.commit_students_file(file_bytes=make_xlsx([row]))
+        assert Student.objects.get().guardian_kinship == "ANNE"
+        assert [w.issue for w in report.warnings] == ["Veli Kim 'boş' belirsiz; ANNE varsayıldı."]

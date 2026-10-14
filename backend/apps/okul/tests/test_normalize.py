@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from apps.okul import normalize
 
 
@@ -223,3 +225,28 @@ def test_excel_date_gelecek_ise_baslama_kabul() -> None:
     # Ama +2 yıldan ilerisi yazım hatası sayılır.
     far = date.today() + timedelta(days=800)
     assert normalize.normalize_excel_date(far.strftime("%d.%m.%Y"), allow_future=True) is None
+
+
+# --- e-Okul uzun sınıf etiketi / MTAL program öneki (14.10.2026 saha denetimi) ---
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("9. Sınıf / A Şubesi", (9, "A")),
+        ("9. SINIF / A ŞUBESİ", (9, "A")),
+        ("10. Sınıf / B Şubesi (Bilişim Teknolojileri Alanı)", (10, "B")),
+        ("11-B SINIFI", (11, "B")),
+        ("9/A Şubesi", (9, "A")),
+        ("10/A (AMP)", (10, "A")),
+        ("12/A Çocuk Gelişimi", (12, "A")),
+        ("10. Sınıf / Ç Şubesi", (10, "Ç")),
+    ],
+)
+def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[int, str]) -> None:
+    """'9. Sınıf / A Şubesi' şube 'SINIF' olarak kaydedilip evraka '9/SINIF' basılıyordu."""
+    assert normalize.normalize_class_section(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["AMP 10/A", "ATP-10/B", "MEM 11/A", "AMP – 9. SINIF / A Şubesi"])
+def test_class_program_oneki_tahmin_edilmez(raw: str) -> None:
+    """Program kodu önce gelirse şube tahmin edilmez: satır görünür biçimde atlanır."""
+    assert normalize.normalize_class_section(raw) is None
