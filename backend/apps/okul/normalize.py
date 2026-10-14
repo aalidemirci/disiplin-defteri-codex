@@ -15,6 +15,7 @@ Gözlemlenen veri sorunları (görev brief'i §1):
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date, datetime, timedelta
 
 # Türkçe karakter → ASCII (cinsiyet/eşleme karşılaştırmaları için).
@@ -140,29 +141,52 @@ def normalize_phone(value: object) -> str | None:
 #   - kodsuz bileşik ad ("10/ÇG-A", "10/BT-A") ya da ardından sözcük gelen çok
 #     harfli ad ("11 ÇOCUK GELİŞİMİ A"; "12/A Çocuk Gelişimi" ise A);
 #   - şube alanına sığmayan ad (> 8 karakter, Student.class_section).
+#   - rakamlı bileşik ad ya da ikinci seviye ("11/A-1", "12 10/A"), bitişik
+#     Sınıf/Şube sözcüğü ("9.SınıfA"), ikinci şube adayı ("10/A, 10/B").
 # Seviyeden sonra gelen tek ad şubedir ("10/MEM" → MEM, "11/A1" → A1); program
-# kodu sonda gelirse ek sayılır ("10/A-ATP", "10/A (AMP)" → A). Karşılaştırma
-# ASCII-katlanmış hâlle yapılır (yalnız eşleme için, §7.2).
-_CLASS_LABEL_WORDS = frozenset({"SINIF", "SINIFI", "SUBE", "SUBESI"})
+# kodu sonda gelirse ek sayılır ("10/A-ATP", "10/A (AMP)" → A); yıl atılır
+# ("10/A-2026" → A). Karşılaştırma ASCII-katlanmış hâlle yapılır (yalnız eşleme
+# için, §7.2). Altıncı doğrulama turunda 2.478 gerçekçi etiketle sınandı.
+_CLASS_LABEL_WORDS = frozenset({"SINIF", "SINIFI", "SUBE", "SUBESI", "SNF", "SINF"})
 _PROGRAM_CODES = frozenset({"AMP", "ATP", "MEM", "MESEM"})
-_SECTION_TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+(?:[-/][0-9A-Za-zÇĞİÖŞÜçğıöşü]+)*")
+_SECTION_TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+(?:[-/.][0-9A-Za-zÇĞİÖŞÜçğıöşü]+)*")
 _SECTION_MAX_LENGTH = 8
-# Ardından başka sözcük gelen şube yalnız tek harf (+ rakam) olabilir: "A", "A1".
 _SINGLE_SECTION_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]\d*")
+# Şube parçası harfle başlar, en çok 2 rakamla biter ("A", "A1", "MEM"); "A2025", "1A" değil.
+_SECTION_PART_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]+\d{0,2}")
+_LEVEL_RE = re.compile(r"(?<!\d)\d{1,2}(?!\d)")
+# Şube harfi olmayan etikette betimleyici sözcük şube sayılmaz ("10. Sınıf (Kız)",
+# "9 Hazırlık", "10. Sınıf Listesi"): çok harfli şube en çok 3 harf (FEN, SAY, TM,
+# MEM) ya da program kodu (MESEM) olabilir.
+_SECTION_MAX_LETTERS = 3
+_NOT_SECTION_WORDS = frozenset({"KIZ", "ERKEK"})
+
+
+class _Ambiguous(Exception):
+    """Etiket belirsiz: şube tahmin edilmez (normalize_class_section → None)."""
 
 
 def _section_tokens(text: str) -> list[list[str]]:
-    """Harf içeren öbekler, parçalarına ayrılmış ("ÇG-A" → ["ÇG", "A"]); Sınıf/Şube
-    sözcükleri parça düzeyinde atılır ("9.Sınıf/A" → ["A"]), salt sayılar atılır."""
+    """Harf içeren öbekler, parçalarına ayrılmış. Öbekte harfli parçayla birlikte 1-2
+    haneli sayı varsa ("A-1", "10/A" ikinci seviye) öbek "#" ile işaretlenir."""
     tokens: list[list[str]] = []
     for token in _SECTION_TOKEN_RE.findall(text):
-        parts = [
-            part
-            for part in re.split(r"[-/]", token)
-            if any(ch.isalpha() for ch in part) and _ascii_upper(part) not in _CLASS_LABEL_WORDS
-        ]
+        parts: list[str] = []
+        short_num = False
+        for part in re.split(r"[-/.]", token):
+            if not part:
+                continue
+            if part.isdigit():
+                short_num = short_num or len(part) <= 2
+                continue  # yıl vb. ("A-2026") atılır
+            folded = _ascii_upper(part)
+            if folded in _CLASS_LABEL_WORDS:
+                continue
+            if "SINIF" in folded or "SUBE" in folded:
+                raise _Ambiguous  # "SınıfA", "AŞubesi": bitişik yazım
+            parts.append(part)
         if parts:
-            tokens.append(parts)
+            tokens.append(parts + (["#"] if short_num else []))
     return tokens
 
 
@@ -171,41 +195,59 @@ def _is_program_code(token: str) -> bool:
 
 
 def _section_from_tokens(before: list[list[str]], after: list[list[str]]) -> str | None:
+    if any("#" in token for token in before) or (after and "#" in after[0]):
+        return None  # "A-1/10", "11/A-1", "12 10/A": rakam şubenin ya da ikinci seviyenin parçası
+    after = [[p for p in t if p != "#"] for t in after]
     before_parts = [part for token in before for part in token]
     if len(before_parts) > 1 or any(_is_program_code(part) for part in before_parts):
-        return None  # "AMP 10/A", "MTAL-AMP 10/A", "Anadolu Meslek Programı 10..."
+        return None
     if not after:
-        section = before_parts[0] if before_parts else None  # "A/10" şube-önde yazım
+        if not before_parts or not _SINGLE_SECTION_RE.fullmatch(before_parts[0]):
+            return None  # "Lise 10", "Hazırlık 9": şube değil
+        section = before_parts[0]
     else:
         parts = after[0]
         if len(after) > 1 and (
             _is_program_code(parts[0]) or not _SINGLE_SECTION_RE.fullmatch(parts[0])
         ):
-            return None  # "10 AMP A", "11 ÇOCUK GELİŞİMİ A": sözcüklü ad tahmin edilmez
+            return None
+        if any(_SINGLE_SECTION_RE.fullmatch(p) for t in after[1:] for p in t):
+            return None  # "10/A B", "10/A, 10/B", "10 Ş.A": ikinci şube adayı
         if _is_program_code(parts[0]) and len(parts) > 1:
-            return None  # "10/AMP-A"
+            return None
         if any(not _is_program_code(part) for part in parts[1:]):
-            return None  # "10/ÇG-A": kodsuz bileşik ad
-        section = parts[0]  # sonda gelen kod ek sayılır: "10/A-ATP" → A
-    if section is None or len(section) > _SECTION_MAX_LENGTH:
+            return None
+        section = parts[0]
+    if (
+        section is None
+        or len(section) > _SECTION_MAX_LENGTH
+        or not _SECTION_PART_RE.fullmatch(section)
+        or _ascii_upper(section) in _NOT_SECTION_WORDS
+    ):
+        return None
+    letters = sum(ch.isalpha() for ch in section)
+    if letters > _SECTION_MAX_LETTERS and not _is_program_code(section):
         return None
     return section
 
 
 def normalize_class_section(value: object) -> tuple[int, str] | None:
     """'10/A', '10-A', '10 ç', '9. Sınıf / A Şubesi' → (10, 'A') / (10, 'Ç') / (9, 'A');
-    9-12 dışı, belirsiz (program önekli, bileşik) veya ayrıştırılamazsa None."""
+    9-12 dışı, belirsiz (program önekli, bileşik, rakamlı) veya ayrıştırılamazsa None."""
     if value is None:
         return None
-    s = str(value).strip()
+    s = unicodedata.normalize("NFC", str(value)).strip()
     if not s:
         return None
-    level_m = re.search(r"\d{1,2}", s)
+    level_m = _LEVEL_RE.search(s)
     if level_m is None:
         return None
-    section = _section_from_tokens(
-        _section_tokens(s[: level_m.start()]), _section_tokens(s[level_m.end() :])
-    )
+    try:
+        section = _section_from_tokens(
+            _section_tokens(s[: level_m.start()]), _section_tokens(s[level_m.end() :])
+        )
+    except _Ambiguous:
+        return None
     if section is None:
         return None
     level = int(level_m.group())

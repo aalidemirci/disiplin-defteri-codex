@@ -557,9 +557,21 @@ class TestBasliksizSekilDenetimi:
             ]
         )
 
+    def test_yaziyla_tarih_ve_cinsiyet_besinci_sutunda_kabul(self) -> None:
+        """Yazıyla doğum tarihi ya da cinsiyet sütunu başka düzenin kanıtı değildir."""
+        for besinci in ("12 Mart 2010", "Kız", "yok"):
+            rows: list[list[object]] = [[*r[:4], besinci] for r in _SABLON_SATIRLARI]
+            report = import_service.preview_students_text(text=_basliksiz_metin(rows))
+            assert report.created_students == 3, besinci
+
     def test_dogum_tarihi_yerinde_metin_reddedilir(self) -> None:
-        """ "Ad Soyad | Baba | Anne" düzeni: anne adı doğum tarihi sütununa düşer."""
-        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "MEHMET", "AYŞE"]])
+        """Ad Soyad | Baba | Anne düzeni: anne adı doğum tarihi sütununa düşer (≥2 satır)."""
+        self._reddedilir(
+            [
+                ["10/A", 220, "TUĞBANUR POLAT", "MEHMET", "AYŞE"],
+                ["10/A", 221, "ELİF KAYA", "ALİ", "FATMA"],
+            ]
+        )
 
     def test_veli_adi_soyadi_tasiyan_duzen_iki_satirda_reddedilir(self) -> None:
         self._reddedilir(
@@ -581,7 +593,10 @@ class TestBasliksizSekilDenetimi:
         from apps.okul.excel_veli import ParserError
 
         rows = [["10/A", 220 + i, "TUĞBANUR POLAT", "MEHMET", "AYŞE"] for i in range(3)]
-        with pytest.raises(ParserError, match="1. satır şablon sırasına uymuyor: Doğum Tarihi"):
+        with pytest.raises(ParserError, match="1. ve 2. satırlar ad-soyad ile veli adı"):
+            import_service.preview_students_text(text=_basliksiz_metin(rows))
+        rows = [["10/A", 220 + i, "TUĞBANUR", "POLAT 1"] for i in range(3)]
+        with pytest.raises(ParserError, match="1. satır şablon sırasına uymuyor: Öğrenci Soyadı"):
             import_service.preview_students_text(text=_basliksiz_metin(rows))
 
     def test_soyad_yerinde_anne_reddedilir(self) -> None:
@@ -638,6 +653,22 @@ class TestBasliksizSekilDenetimi:
             (2, "number"),
             (3, "full_name"),
         ]
+
+    def test_tcknli_satirda_yer_tutucu_okul_no_ogrenciyi_atlatmaz(self) -> None:
+        row = _yilmaz_row()
+        row[2] = "Nakil"
+        report = import_service.commit_students_file(file_bytes=make_xlsx([row]))
+        assert report.created_students == 1 and report.skipped == []
+        assert Student.objects.get().student_number == ""
+        assert any(w.field == "number" for w in report.warnings)
+
+    def test_on_bir_haneli_okul_no_maskeli_atlanir(self) -> None:
+        rows = [_sablon_satiri("10/A", 300 + i, "AYŞE", "KAYA", "") for i in range(11)]
+        rows.append(["10/A", "12345678901", "ELİF", "DEMİR", ""])  # checksum tutmaz
+        report = import_service.commit_students_text(text=_basliksiz_metin(rows))
+        [skip] = report.skipped
+        assert (skip.row_number, skip.field) == (12, "number")
+        assert skip.raw_value != "12345678901"
 
     def test_okul_numarasi_yerine_tckn_kaydedilmez(self) -> None:
         """Örneklem sonrası (11. satırdan sonra) okul no yerine TCKN: satır atlanır, maskeli."""

@@ -239,12 +239,6 @@ def _headerless_shape_problem(cells: list[str]) -> str | None:
         return "Öğrenci Adı sütununda ad olmayan bir değer var"
     if cells[3] and not _looks_like_name(cells[3]):
         return "Öğrenci Soyadı sütununda soyad olmayan bir değer var"
-    if (
-        cells[4]
-        and any(ch.isalpha() for ch in cells[4])
-        and normalize.normalize_excel_date(cells[4]) is None
-    ):
-        return "Doğum Tarihi sütununda tarih yerine metin var"
     return None
 
 
@@ -260,7 +254,22 @@ def _guardian_layout_hint(cells: list[str]) -> bool:
     if len(name_words) < 2:
         return False
     shared_last = len(surname_words) >= 2 and name_words[-1] == surname_words[-1]
-    return shared_last or surname_words in (["veli"], ["baba"])
+    return shared_last or surname_words in (["veli"], ["baba"]) or _parent_name_in_date(cells)
+
+
+# Doğum tarihi hücresindeki yer tutucular ad sayılmaz.
+_DATE_PLACEHOLDERS = frozenset({"yok", "yoktur", "bilinmiyor", "belirtilmemis", "girilmemis"})
+
+
+def _parent_name_in_date(cells: list[str]) -> bool:
+    """ "Ad Soyad | Baba | Anne": anne adı doğum tarihi sütununa düşer. Yazıyla tarih
+    ("12 Mart 2010"), cinsiyet ("Kız") ya da yer tutucu ("yok") kanıt değildir."""
+    return (
+        bool(cells[4])
+        and not any(ch.isdigit() for ch in cells[4])
+        and excel_veli.normalize_header(cells[4]) not in _DATE_PLACEHOLDERS
+        and _looks_like_name(cells[4])
+    )
 
 
 def _is_complete_template_row(cells: list[str]) -> bool:
@@ -648,15 +657,32 @@ def _process_student_row(
     if not row.student_first or not row.student_last:
         report.add_skip(row.row_number, "full_name", "Öğrenci adı ya da soyadı boş; satır atlandı.")
         return
+    if (
+        row.tckn is not None
+        and row.student_number
+        and not any(ch.isdigit() for ch in row.student_number)
+    ):
+        # TCKN'li satırda yer tutucu okul no ("-", "yok", "Nakil"): öğrenci TCKN ile
+        # aktarılır, numara alınmaz (boş hücre gibi: mevcut numara silinmez).
+        report.add_warning(
+            row.row_number,
+            "number",
+            "Okul numarası geçersiz; numara alınmadı, öğrenci TCKN ile eşleştirildi.",
+            row.student_number,
+        )
+        row.student_number = ""
     if row.student_number and (
         not any(ch.isdigit() for ch in row.student_number)
         or len(row.student_number) > _STUDENT_NUMBER_MAX_LENGTH
+        or (row.student_number.isdigit() and len(row.student_number) == 11)
     ):
+        # 11 haneli değer (checksum'ı tutmayan TCKN de olabilir) rapora maskeli düşer.
+        tckn_like = row.student_number.isdigit() and len(row.student_number) == 11
         report.add_skip(
             row.row_number,
             "number",
             "Okul numarası geçersiz (sütunlar kaymış olabilir); satır atlandı.",
-            row.student_number,
+            mask_tckn(row.student_number) if tckn_like else row.student_number,
         )
         return
     if any(ch.isdigit() for ch in row.student_first + row.student_last):
