@@ -20,6 +20,8 @@ burada. OYS'den farklar:
 from __future__ import annotations
 
 import hashlib
+import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -29,7 +31,7 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import excel_personel, excel_veli, selectors
+from apps.okul import excel_personel, excel_veli, normalize, selectors
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.excel_veli import ColumnMapping, ParsedParent, ParsedRow, ParserError
 from apps.okul.models import (
@@ -42,6 +44,12 @@ from apps.okul.models import (
     SchoolYear,
     Student,
     StudentStatus,
+)
+from apps.okul.services.templates import (
+    PERSONNEL_TEMPLATE_EXAMPLE,
+    PERSONNEL_TEMPLATE_HEADERS,
+    STUDENT_TEMPLATE_EXAMPLE,
+    STUDENT_TEMPLATE_HEADERS,
 )
 from shared.text import mask_tckn
 
@@ -160,12 +168,222 @@ def _grid_from_file(file_bytes: bytes) -> list[list[Any]]:
         ) from exc
 
 
+# Parser'ın iç alan adları ("class", "number veya tckn") kullanıcıya gösterilmez.
+_MISSING_COLUMN_LABELS: dict[str, str] = {
+    "class": "Sınıf",
+    "number veya tckn": "Okul Numarası (ya da TCKN)",
+    "student_name veya student_first+student_last": (
+        "Öğrenci Adı ve Öğrenci Soyadı (ya da tek sütunda Adı Soyadı)"
+    ),
+    "full_name veya first_name+last_name": "Adı ve Soyadı (ya da tek sütunda Ad Soyad)",
+}
+
+
+def _missing_columns_error(
+    missing: list[str], expected: tuple[str, ...], *, headerless_hint: bool = False
+) -> ParserError:
+    labels = ", ".join(_MISSING_COLUMN_LABELS.get(name, name) for name in missing)
+    message = (
+        f"Zorunlu sütun(lar) bulunamadı: {labels}. Listeyi başlık satırıyla birlikte "
+        f"yapıştırın (şablon başlıkları: {', '.join(expected)}) ya da Şablon indir ile "
+        "alınan dosyayı doldurun."
+    )
+    if headerless_hint:
+        message += " Başlık satırı olmadan yapıştırıyorsanız sütunlar şablon sırasında olmalıdır."
+    return ParserError(message)
+
+
+# Başlıksız girişte satır şekli: e-Okul okul numarası kısadır — 11 haneli TCKN
+# bu kalıba UYMAZ (Veli İletişim düzeni başlıksız yapıştırılırsa TCKN okul
+# numarasına yazılmasın). Ad/soyad en az bir harf içerir, rakam içermez.
+_SCHOOL_NUMBER_RE = re.compile(r"\d{1,6}(\.0)?")
+_NAME_RE = re.compile(r"[^\d]*[^\W\d_][^\d]*")
+_HEADERLESS_SAMPLE_ROWS = 10
+# Ad/soyad yerinde cinsiyet kodu ya da ANNE/DİĞER tek hücrede bile başka düzenin
+# kanıtıdır. VELİ/BABA gerçek ad/soyad da olabilir: ancak ≥2 satırda kanıt sayılır.
+_NOT_NAME_WORDS = frozenset({"e", "k", "kiz", "erkek", "anne", "diger"})
+_GUARDIAN_WORDS = frozenset({"veli", "baba"})
+# "Ad" sütunu her satırda iki sözcükse birleşik ad-soyad sütunudur; iki isimli
+# öğrenciler (Kız MTAL'de sık) yanlış reddedilmesin diye en az bu kadar dolu satır
+# aranır. Daha kısa yapıştırmada önizlemedeki okunuş uyarısı güvenlik ağıdır.
+_FULL_NAME_MIN_ROWS = 6
+
+
+def _template_cells(row: list[Any]) -> list[str]:
+    cells = [str(c).strip() if c is not None else "" for c in row]
+    return cells + [""] * (len(STUDENT_TEMPLATE_HEADERS) - len(cells))
+
+
+def _looks_like_name(cell: str) -> bool:
+    return (
+        len(cell) >= 2
+        and _NAME_RE.fullmatch(cell) is not None
+        and excel_veli.normalize_header(cell) not in _NOT_NAME_WORDS
+    )
+
+
+def _headerless_shape_problem(cells: list[str]) -> str | None:
+    """Satırda BAŞKA bir sütun düzeninin kanıtı varsa nedeni; yoksa None.
+
+    Boş hücre kanıt sayılmaz: o satır içe aktarmada satır düzeyinde atlanır
+    (tek eksik hücre bütün listeyi reddettirmesin). Neden metni hücre değeri
+    içermez (TCKN kişisel veridir; ileti FAILED izine yazılır).
+    """
+    if any(cells[len(STUDENT_TEMPLATE_HEADERS) :]):
+        return "şablonda olmayan fazladan bir sütun dolu"
+    if cells[0] and not any(ch.isalpha() for ch in cells[0]):
+        return "Sınıf sütununda şube harfi yok"
+    if cells[1] and _SCHOOL_NUMBER_RE.fullmatch(cells[1]) is None:
+        return "Okul Numarası sütununda en çok 6 haneli bir sayı olmalı"
+    if cells[2] and not _looks_like_name(cells[2]):
+        return "Öğrenci Adı sütununda ad olmayan bir değer var"
+    if cells[3] and not _looks_like_name(cells[3]):
+        return "Öğrenci Soyadı sütununda soyad olmayan bir değer var"
+    return None
+
+
+def _guardian_layout_hint(cells: list[str]) -> bool:
+    """Satır "Ad Soyad | Veli adı" düzenine benziyor mu (YUMUŞAK kanıt: ≥2 satırda).
+
+    "TUĞBANUR POLAT | AYŞE POLAT" (veli adı öğrencinin soyadını taşır) ya da
+    "TUĞBANUR POLAT | BABA". Tek satırda kanıt sayılmaz: "MUHAMMED ALİ | EL ALİ",
+    "AYŞE NUR | VELİ" gerçek öğrenci adlarıdır.
+    """
+    name_words = excel_veli.normalize_header(cells[2]).split()
+    surname_words = excel_veli.normalize_header(cells[3]).split()
+    if len(name_words) < 2:
+        return False
+    shared_last = len(surname_words) >= 2 and name_words[-1] == surname_words[-1]
+    return shared_last or surname_words in (["veli"], ["baba"]) or _parent_name_in_date(cells)
+
+
+# Doğum tarihi hücresindeki yer tutucular ad sayılmaz.
+_DATE_PLACEHOLDERS = frozenset({"yok", "yoktur", "bilinmiyor", "belirtilmemis", "girilmemis"})
+
+
+def _parent_name_in_date(cells: list[str]) -> bool:
+    """ "Ad Soyad | Baba | Anne": anne adı doğum tarihi sütununa düşer. Yazıyla tarih
+    ("12 Mart 2010"), cinsiyet ("Kız") ya da yer tutucu ("yok") kanıt değildir."""
+    return (
+        bool(cells[4])
+        and not any(ch.isdigit() for ch in cells[4])
+        and excel_veli.normalize_header(cells[4]) not in _DATE_PLACEHOLDERS
+        and _looks_like_name(cells[4])
+    )
+
+
+def _is_complete_template_row(cells: list[str]) -> bool:
+    return (
+        _headerless_shape_problem(cells) is None
+        and all(cells[:4])
+        and any(ch.isdigit() for ch in cells[0])
+    )
+
+
+def _headerless_error(detail: str) -> ParserError:
+    return ParserError(
+        f"Başlıksız yapıştırmada {detail}. Sütunlar şablon sırasında olmalı "
+        f"({', '.join(STUDENT_TEMPLATE_HEADERS)}) ya da listeyi başlık satırıyla "
+        "birlikte yapıştırın."
+    )
+
+
+def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
+    """Başlıksız giriş: ilk 10 dolu satırdan biri eksiksiz bir şablon satırıysa
+    sütunlar şablon sırasıyla okunur; hiçbiri değilse None (genel "başlık gerekli").
+
+    Kullanıcı Excel'den çoğu kez yalnız veri satırlarını kopyalar (14.10.2026 saha
+    bildirimi). Örneklemde başka düzenin KANITI (TCKN biçimli no, ad yerinde
+    rakam/cinsiyet, ≥2 satırda Veli Kim değeri, fazladan sütun, her satırda iki
+    sözcüklü "ad" = birleşik ad-soyad) varsa satır numarasıyla ParserError:
+    yanlış alanlara yazmaktansa reddedilir. Boş hücre kanıt değildir. Önizlemede
+    ilk satırın okunuşu gösterilir (1-3 satırlık yapıştırmada şekil yetmez).
+    `header_row=-1`: satır numaraları yapıştırılan satırlarla aynı kalır.
+    """
+    sample = [
+        (index + 1, _template_cells(row))
+        for index, row in enumerate(grid)
+        if any(str(c or "").strip() for c in row)
+    ][:_HEADERLESS_SAMPLE_ROWS]
+    reference = next(((n, c) for n, c in sample if _is_complete_template_row(c)), None)
+    if reference is None:
+        # Satırlar şablona benziyor (sınıf + okul no) ama hepsi kanıtla düşüyorsa
+        # genel "sütun bulunamadı" yerine özgül neden söylenir.
+        for row_number, cells in sample:
+            if (
+                any(ch.isdigit() for ch in cells[0])
+                and any(ch.isalpha() for ch in cells[0])
+                and _SCHOOL_NUMBER_RE.fullmatch(cells[1])
+            ):
+                problem = _headerless_shape_problem(cells)
+                if problem is not None:
+                    raise _headerless_error(
+                        f"{row_number}. satır şablon sırasına uymuyor: {problem}"
+                    )
+        return None
+    for row_number, cells in sample:
+        if row_number >= reference[0]:
+            break
+        # Başlık gibi satır: rakamsız ve Okul Numarası yerinde metin ("No", "Okul No").
+        if cells[1] and not any(ch.isdigit() for ch in "".join(cells)):
+            raise ParserError(
+                f"{row_number}. satır başlık satırı gibi görünüyor ama tanınmadı. Şablon "
+                f"başlıklarını kullanın ({', '.join(STUDENT_TEMPLATE_HEADERS)}) ya da bu "
+                "satırı silip yalnız öğrenci satırlarını yapıştırın."
+            )
+    for row_number, cells in sample:
+        problem = _headerless_shape_problem(cells)
+        if problem is not None:
+            raise _headerless_error(f"{row_number}. satır şablon sırasına uymuyor: {problem}")
+    for column, label in ((2, "Öğrenci Adı"), (3, "Öğrenci Soyadı")):
+        hits = [n for n, c in sample if excel_veli.normalize_header(c[column]) in _GUARDIAN_WORDS]
+        if len(hits) >= 2:
+            raise _headerless_error(
+                f"{label} sütununda birden çok satırda VELİ/BABA değeri var "
+                "(Veli Kim sütunu olabilir)"
+            )
+    guardian_rows = [n for n, c in sample if _guardian_layout_hint(c)]
+    if len(guardian_rows) >= 2:
+        raise _headerless_error(
+            f"{guardian_rows[0]}. ve {guardian_rows[1]}. satırlar ad-soyad ile veli adı "
+            "sütunları gibi görünüyor"
+        )
+    both_multi = [c for _, c in sample if c[2] and c[3]]
+    if len(both_multi) >= 2 and all(
+        len(c[2].split()) >= 2 and len(c[3].split()) >= 2 for c in both_multi
+    ):
+        raise _headerless_error(
+            "Öğrenci Adı ve Öğrenci Soyadı sütunları her satırda birden çok sözcük içeriyor "
+            "(ad-soyad ile veli adı ya da alan adı sütunları olabilir)"
+        )
+    named = [c[2] for _, c in sample if c[2]]
+    if len(named) >= _FULL_NAME_MIN_ROWS and all(len(name.split()) >= 2 for name in named):
+        raise _headerless_error(
+            "Öğrenci Adı sütunu her satırda ad ve soyad gibi görünüyor (birleşik "
+            "ad-soyad sütunu olabilir)"
+        )
+    mapping = excel_veli.detect_columns([list(STUDENT_TEMPLATE_HEADERS)])
+    mapping.header_row = -1
+    ref_number, ref = reference
+    mapping.warnings.append(
+        "Başlık satırı bulunamadı; sütunlar şablon sırasıyla okundu: "
+        f"{', '.join(STUDENT_TEMPLATE_HEADERS)}. {ref_number}. satır şöyle okundu: "
+        f"Sınıf {ref[0]} · Okul No {ref[1]} · Ad {ref[2]} · Soyad {ref[3]}. "
+        "Yanlışsa listeyi başlık satırıyla yapıştırın."
+    )
+    return mapping
+
+
 def _parse_student_grid(grid: list[list[Any]]) -> tuple[ColumnMapping, list[ParsedRow]]:
     """Matristen (mapping, satırlar); kritik sütun eksikse ParserError (parse_workbook paritesi)."""
     mapping = excel_veli.detect_columns(grid)
     if not mapping.is_usable:
-        missing = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+        headerless = _headerless_student_mapping(grid)
+        if headerless is None:
+            raise _missing_columns_error(
+                mapping.missing_critical, STUDENT_TEMPLATE_HEADERS, headerless_hint=True
+            )
+        mapping = headerless
     return mapping, excel_veli.parse_rows(grid, mapping)
 
 
@@ -174,8 +392,7 @@ def _parse_personnel_grid(
 ) -> tuple[PersonnelColumnMapping, list[ParsedPersonnelRow]]:
     mapping = excel_personel.detect_columns(grid)
     if not mapping.is_usable:
-        missing = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+        raise _missing_columns_error(mapping.missing_critical, PERSONNEL_TEMPLATE_HEADERS)
     return mapping, excel_personel.parse_rows(grid, mapping)
 
 
@@ -233,18 +450,189 @@ def _ingest_students(
     )
     report.already_imported = already
     for header_warning in mapping.warnings:
-        report.add_warning(mapping.header_row + 1, "header", header_warning)
+        # Başlıksız girişte header_row=-1; uyarı ilk satıra bağlanır.
+        report.add_warning(max(mapping.header_row + 1, 1), "header", header_warning)
 
+    state = _StudentRunState(has_guardian_columns=bool(_GUARDIAN_FIELDS & mapping.fields.keys()))
     for row in rows:
-        _process_student_row(row, report=report)
+        _process_student_row(row, report=report, state=state)
 
     _ensure_student_classes()
     _close_run(run, report.to_dict())
     return report
 
 
-def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None:
-    """Tek satır: doğrula → veli düzleştir → TCKN ile bul/oluştur/güncelle."""
+_STUDENT_NUMBER_MAX_LENGTH = 16  # Student.student_number
+
+_GUARDIAN_FIELDS = frozenset(
+    {"guardian", "mother_name", "mother_phone", "father_name", "father_phone"}
+)
+
+
+@dataclass
+class _StudentRunState:
+    """Bir içe aktarma koşusunun satırlar arası durumu (dosya içi yinelenme).
+
+    - `seen_tckn`: TCKN → ilk satır no; aynı TCKN ikinci kez gelirse satır atlanır.
+    - `seen_number`: okul no → (ilk satır no, o satırın TCKN'si). Aynı numara
+      yalnız iki satırın da farklı TCKN'si varsa geçer (aynı numaralı iki ayrı
+      öğrenci); satırlardan biri TCKN'sizse ikincisi atlanır.
+    - `touched`: bu koşuda yazılan öğrenci → satır no. Bir öğrenci bir koşuda
+      iki kez yazılmaz; ikinci kez eşleşen satır atlanır (sessiz ezme yok).
+    - `replaced_numbers`: bu koşuda numarası değiştirilen öğrencinin ESKİ numarası
+      → satır no; o numarayla gelen TCKN'siz satır aynı kişiyi ikinci kez açmaz.
+    """
+
+    has_guardian_columns: bool
+    seen_tckn: dict[str, int] = field(default_factory=dict)
+    seen_number: dict[str, tuple[int, str | None]] = field(default_factory=dict)
+    touched: dict[Any, int] = field(default_factory=dict)
+    replaced_numbers: dict[str, int] = field(default_factory=dict)
+    # Ad-soyad anahtarı → aktif öğrencilerin okul numaraları (ilk ihtiyaçta bir kez
+    # kurulur, koşuda açılan kayıtlar eklenir; satır başına tüm sicili taramamak için).
+    numbers_by_name: dict[str, list[str]] | None = None
+
+
+def _skip_in_file_duplicate(
+    row: ParsedRow, report: StudentImportReport, state: _StudentRunState
+) -> bool:
+    """Satır dosyada daha önce geçen bir öğrencinin tekrarıysa atlar (True)."""
+    if row.tckn is not None and row.tckn in state.seen_tckn:
+        # raw_value MASKELİ: TCKN kişisel veridir, rapor JSON'ına ham düşmez.
+        report.add_skip(
+            row.row_number,
+            "tckn",
+            f"Bu TCKN dosyada {state.seen_tckn[row.tckn]}. satırda da var; satır atlandı.",
+            mask_tckn(row.tckn),
+        )
+        return True
+    if row.tckn is None and row.student_number in state.replaced_numbers:
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Bu okul numarası, dosyada "
+            f"{state.replaced_numbers[row.student_number]}. satırda numarası değiştirilen "
+            "öğrencinin eski numarası; satır atlandı.",
+            row.student_number,
+        )
+        return True
+    if row.student_number in state.seen_number:
+        first_row, first_tckn = state.seen_number[row.student_number]
+        distinct_people = row.tckn is not None and first_tckn is not None
+        if not distinct_people:
+            report.add_skip(
+                row.row_number,
+                "number",
+                f"Bu okul numarası dosyada {first_row}. satırda da var; satır atlandı.",
+                row.student_number,
+            )
+            return True
+    if row.tckn is not None:
+        state.seen_tckn[row.tckn] = row.row_number
+    if row.student_number:
+        state.seen_number.setdefault(row.student_number, (row.row_number, row.tckn))
+    return False
+
+
+def _find_existing_student(
+    row: ParsedRow, report: StudentImportReport
+) -> tuple[Student | None, bool]:
+    """TCKN ile, yoksa okul numarasıyla mevcut öğrenciyi bulur → (öğrenci, atlandı_mı).
+
+    Numarayla aramada TCKN'si DOLU ve satırınkinden FARKLI aday elenir (başka
+    kişidir). Birden fazla aday kalırsa satır belirsiz sayılıp atlanır.
+    """
+    # DB filtresi DEĞİL: uygulama parolası konulduğunda TCKN şifrelidir ve
+    # `filter(tckn=...)` daima boş döner (kopya öğrenci üretirdi) — F5-D5.
+    if row.tckn is not None:
+        student = selectors.find_student_by_tckn(row.tckn)
+        if student is not None:
+            return student, False
+    if not row.student_number:
+        return None, False
+    candidates = [
+        s
+        for s in Student.objects.filter(
+            student_number=row.student_number, status=StudentStatus.ACTIVE
+        )
+        if not (row.tckn and s.tckn and s.tckn != row.tckn)
+    ]
+    if len(candidates) > 1:
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Aynı okul numarasına sahip birden fazla aktif öğrenci var; satır eşleştirilemedi.",
+            row.student_number,
+        )
+        return None, True
+    if candidates and _name_key(row.student_first, row.student_last) != _name_key(
+        candidates[0].first_name, candidates[0].last_name
+    ):
+        # Yalnız numarayla eşleşen kayıtta ad/soyad farklı: numara başka bir öğrenciye
+        # verilmiş olabilir. Ad, sınıf ya da TCKN üzerine yazılmaz (disiplin dosyası
+        # başka birinin kimliğini göstermesin); kullanıcı Kişiler'den düzeltir.
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Bu okul numarası adı/soyadı farklı bir öğrenciye kayıtlı; satır atlandı. Aynı "
+            "öğrenciyse önce Kişiler'den adını düzeltin; numara başka öğrenciye verildiyse "
+            "eski öğrencinin numarasını ya da durumunu (Ayrıldı/Mezun) güncelleyin.",
+            row.student_number,
+        )
+        return None, True
+    return (candidates[0] if candidates else None), False
+
+
+def _warn_possible_duplicate(
+    row: ParsedRow, report: StudentImportReport, state: _StudentRunState
+) -> None:
+    """Yeni kayıt açılırken aynı ad-soyadlı aktif öğrenci varsa uyarır (veri değişmez).
+
+    Örn. şablonla yanlış numarayla girilmiş öğrenci e-Okul listesinde doğru
+    numarasıyla ya da numarası değişen öğrenci eski numaralı satırla gelince
+    ikinci kez açılır; kullanıcı Kişiler'den birleştirir.
+    """
+    if state.numbers_by_name is None:
+        index: dict[str, list[str]] = {}
+        for s in Student.objects.filter(status=StudentStatus.ACTIVE).only(
+            "first_name", "last_name", "student_number"
+        ):
+            index.setdefault(_name_key(s.first_name, s.last_name), []).append(
+                s.student_number or "—"
+            )
+        state.numbers_by_name = index
+    key = _name_key(row.student_first, row.student_last)
+    numbers = state.numbers_by_name.get(key)
+    if numbers:
+        report.add_warning(
+            row.row_number,
+            "full_name",
+            "Aynı ad-soyadla başka bir öğrenci kayıtlı (okul no "
+            f"{', '.join(numbers)}); aynı kişiyse Kişiler'den kontrol edin.",
+            row.student_number,
+        )
+    state.numbers_by_name.setdefault(key, []).append(row.student_number or "—")
+
+
+def _name_key(first: str, last: str) -> str:
+    """Ad-soyad karşılaştırma anahtarı (yalnız eşleme için; kaydedilen metin değişmez).
+
+    Aksanlar atılır (İ/Ş/Ğ/Ç/Ö/Ü/Â/Î/Û → temel harf), ı → i, büyük/küçük ve boşluk
+    farkı yok sayılır; Latin dışı harfler KORUNUR (anahtar boş kalıp her adı
+    eşleştirmesin).
+    """
+    text = unicodedata.normalize("NFKD", f"{first}{last}".replace("ı", "i"))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
+def _process_student_row(
+    row: ParsedRow, *, report: StudentImportReport, state: _StudentRunState
+) -> None:
+    """Tek satır: doğrula → yinelenme → mevcut öğrenciyi bul → veli düzleştir → yaz."""
+    if (row.student_first, row.student_last) == STUDENT_TEMPLATE_EXAMPLE[2:4]:
+        report.add_skip(row.row_number, "row", "Şablondaki örnek satır; aktarılmadı.")
+        return
     if row.raw_tckn and row.tckn is None:
         # raw_value MASKELİ: TCKN kişisel veridir, rapor JSON'ına ham düşmez.
         report.add_skip(row.row_number, "tckn", "Geçersiz TCKN", mask_tckn(row.raw_tckn))
@@ -256,11 +644,77 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
             "Okul numarası veya TCKN bulunamadı.",
         )
         return
+    if row.student_number and normalize.normalize_tckn(row.student_number) is not None:
+        # Okul numarası sütununa TCKN yazılmış: şifresiz student_number alanına ve
+        # evraka düşmesin (KVKK). raw_value MASKELİ.
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Okul numarası yerine TCKN yazılmış; satır atlandı.",
+            mask_tckn(row.student_number),
+        )
+        return
+    if not row.student_first or not row.student_last:
+        report.add_skip(row.row_number, "full_name", "Öğrenci adı ya da soyadı boş; satır atlandı.")
+        return
+    if (
+        row.tckn is not None
+        and row.student_number
+        and not any(ch.isdigit() for ch in row.student_number)
+    ):
+        # TCKN'li satırda yer tutucu okul no ("-", "yok", "Nakil"): öğrenci TCKN ile
+        # aktarılır, numara alınmaz (boş hücre gibi: mevcut numara silinmez).
+        report.add_warning(
+            row.row_number,
+            "number",
+            "Okul numarası geçersiz; numara alınmadı, öğrenci TCKN ile eşleştirildi.",
+            row.student_number,
+        )
+        row.student_number = ""
+    if row.student_number and (
+        not any(ch.isdigit() for ch in row.student_number)
+        or len(row.student_number) > _STUDENT_NUMBER_MAX_LENGTH
+        or (row.student_number.isdigit() and len(row.student_number) == 11)
+    ):
+        # 11 haneli değer (checksum'ı tutmayan TCKN de olabilir) rapora maskeli düşer.
+        tckn_like = row.student_number.isdigit() and len(row.student_number) == 11
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Okul numarası geçersiz (sütunlar kaymış olabilir); satır atlandı.",
+            mask_tckn(row.student_number) if tckn_like else row.student_number,
+        )
+        return
+    if any(ch.isdigit() for ch in row.student_first + row.student_last):
+        # Değer bilinçli rapora yazılmaz: kaymış satırda TCKN ad hücresine düşmüş olabilir.
+        report.add_skip(
+            row.row_number,
+            "full_name",
+            "Öğrenci adı ya da soyadı rakam içeriyor (sütunlar kaymış olabilir); satır atlandı.",
+        )
+        return
     if row.class_level is None:
-        report.add_skip(row.row_number, "class", "Sınıf/şube çözülemedi", row.raw_class)
+        report.add_skip(
+            row.row_number, "class", "Sınıf/şube çözülemedi (beklenen yazım: 10/A)", row.raw_class
+        )
+        return
+    if _skip_in_file_duplicate(row, report, state):
+        return
+    student, skipped = _find_existing_student(row, report)
+    if skipped:
+        return
+    if student is not None and student.pk in state.touched:
+        report.add_skip(
+            row.row_number,
+            "row",
+            f"Bu öğrenci dosyada {state.touched[student.pk]}. satırda zaten işlendi; "
+            "satır atlandı.",
+        )
         return
 
-    kinship, primary, other = _resolve_guardian(row, report)
+    kinship, primary, other = _resolve_guardian(
+        row, report, has_guardian_columns=state.has_guardian_columns
+    )
     if primary.has_any_data and primary.raw_phone and primary.phone is None:
         # raw bilinçli BOŞ: telefon kişisel veridir, rapora ham yazılmaz.
         report.add_warning(
@@ -298,32 +752,18 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
     if row.gender:
         fields["gender"] = row.gender
 
-    # DB filtresi DEĞİL: uygulama parolası konulduğunda TCKN şifrelidir ve
-    # `filter(tckn=...)` daima boş döner (kopya öğrenci üretirdi) — F5-D5.
-    student: Student | None = (
-        selectors.find_student_by_tckn(row.tckn) if row.tckn is not None else None
-    )
-    if student is None and row.student_number:
-        number_matches = list(
-            Student.objects.filter(
-                student_number=row.student_number,
-                status=StudentStatus.ACTIVE,
-            )[:2]
-        )
-        if len(number_matches) > 1:
-            report.add_skip(
-                row.row_number,
-                "number",
-                "Aynı okul numarasına sahip birden fazla aktif öğrenci var; satır eşleştirilemedi.",
-                row.student_number,
-            )
-            return
-        student = number_matches[0] if number_matches else None
     if student is None:
-        Student.objects.create(tckn=row.tckn or "", **fields)
+        _warn_possible_duplicate(row, report, state)
+        student = Student.objects.create(tckn=row.tckn or "", **fields)
         report.created_students += 1
     else:
+        if row.tckn is not None and not student.tckn:
+            # Numarayla eşleşen TCKN'siz kayda TCKN eklenir (silmez; TCKN'nin başka
+            # canlı kayıtta olmadığı yukarıdaki TCKN aramasıyla bilinir).
+            fields["tckn"] = row.tckn
         changed = [name for name, value in fields.items() if getattr(student, name) != value]
+        if "student_number" in changed and student.student_number:
+            state.replaced_numbers.setdefault(student.student_number, row.row_number)
         if changed:
             for name in changed:
                 setattr(student, name, fields[name])
@@ -331,6 +771,7 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
             report.updated_students += 1
         else:
             report.unchanged_students += 1
+    state.touched[student.pk] = row.row_number
     report.processed += 1
 
 
@@ -354,7 +795,7 @@ def _ensure_student_classes() -> None:
 
 
 def _resolve_guardian(
-    row: ParsedRow, report: StudentImportReport
+    row: ParsedRow, report: StudentImportReport, *, has_guardian_columns: bool = True
 ) -> tuple[str, ParsedParent, ParsedParent]:
     """Veli Kim → (yakınlık, sorumlu veli, diğer veli). OYS `_resolve_parent_roles` paritesi.
 
@@ -363,6 +804,11 @@ def _resolve_guardian(
     """
     mother, father = row.mother, row.father
     g = row.guardian
+
+    if not has_guardian_columns:
+        # Dosyada veli sütunu yok (standart şablon): uyarı gürültüdür; her satıra
+        # düşüp başarılı önizlemeyi hata gibi gösteriyordu (14.10.2026 saha bildirimi).
+        return GuardianKinship.FATHER, father, mother
 
     if g == "ANNE":
         if mother.has_any_data:
@@ -386,15 +832,26 @@ def _resolve_guardian(
         )
         return GuardianKinship.MOTHER, mother, father
 
+    if not mother.has_any_data and not father.has_any_data:
+        report.add_warning(
+            row.row_number,
+            "guardian",
+            "Anne/baba bilgisi okunamadı; veli alanları güncellenmedi.",
+            row.guardian,
+        )
+        return GuardianKinship.FATHER, father, mother
+    # Uyarı fiilî sonucu söyler: baba verisi yoksa kayda ANNE yazılır.
+    if father.has_any_data:
+        kinship, primary, other = GuardianKinship.FATHER, father, mother
+    else:
+        kinship, primary, other = GuardianKinship.MOTHER, mother, father
     report.add_warning(
         row.row_number,
         "guardian",
-        f"Veli Kim '{row.guardian or 'boş'}' belirsiz; BABA varsayıldı.",
+        f"Veli Kim '{row.guardian or 'boş'}' belirsiz; {kinship.value} varsayıldı.",
         row.guardian,
     )
-    if father.has_any_data:
-        return GuardianKinship.FATHER, father, mother
-    return GuardianKinship.MOTHER, mother, father
+    return kinship, primary, other
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +892,9 @@ def _process_personnel_row(
     """Tek personel satırı: ada göre bul/oluştur; boş hücre mevcut veriyi silmez."""
     if not row.first_name and not row.last_name:
         report.add_skip(row.row_number, "full_name", "Ad-soyad boş; satır atlandı.")
+        return
+    if (row.first_name, row.last_name) == PERSONNEL_TEMPLATE_EXAMPLE[:2]:
+        report.add_skip(row.row_number, "row", "Şablondaki örnek satır; aktarılmadı.")
         return
 
     key = excel_veli.normalize_header(row.raw_full_name)

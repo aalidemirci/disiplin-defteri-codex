@@ -96,7 +96,13 @@ Program ilk açıldığında **kurulum sihirbazı** çıkar:
    türüyle ekleyin: böylece yasal süreler değişmez, ama uzaklaştırma cezasının
    günleri (md. 172, "okulun açık olduğu günler") ara tatile denk getirilmez.
 4. Öğrenci ve personel listelerinin içe aktarılması (e-Okul Excel dosyası veya
-   panodan yapıştırma).
+   panodan yapıştırma). En kolay yol **Şablon indir** ile alınan dosyayı
+   doldurmaktır; örnek satır (ÖRNEK ÖĞRENCİ) silinmese de aktarılmaz. Excel'den
+   yapıştırırken başlık satırını da kopyalayın; başlıksız yapıştırırsanız
+   sütunlar şablon sırasında olmalıdır (Sınıf, Okul Numarası, Öğrenci Adı,
+   Öğrenci Soyadı, Doğum Tarihi). Önizlemedeki uyarılar aktarmayı engellemez;
+   aktarılmayacak satırlar "Atlanan satırlar" listesinde gerekçesiyle görünür
+   (ör. dosyada iki kez geçen okul numarası).
 
 Sihirbaz tamamlanmadan disiplin dosyası açılamaz.
 

@@ -192,7 +192,14 @@ Parser'lar `rows` matrisi alır → **xlsx ve pano yapıştırma aynı boru hatt
 (1) e-Okul veli xlsx aynen; hedef düzleşir (student_number→tckn upsert; veli → guardian alanları).
 (2) Genel Excel şablonu: `sablon-ogrenci.xlsx` indirilebilir; sinonimler zaten tanır — ayrı kod yolu YOK.
 (3) Personel xlsx aynen → Personnel upsert. (4) Yapıştırma: textarea → tab-split matris → aynı preview;
-başlıksız yapıştırmada kolon-eşleme dropdown'ları. (5) Idempotency: dosya/matris sha256 —
+başlıksız yapıştırmada kolon-eşleme dropdown'ları. *(14.10.2026, saha bildirimi: dropdown yapılmadı.
+Başlıksız öğrenci girişi, ilk 10 dolu satırdan biri eksiksiz şablon satırıysa — sınıf | ≤6 haneli
+okul no | ad | soyad | [doğum tarihi] — şablon sırasıyla okunur; önizlemedeki başlık uyarısı bir
+satırın okunuşunu gösterir (kısa yapıştırmada şekil yetmez). Örneklemde başka düzenin kanıtı (TCKN
+biçimli no, ad yerinde rakam/cinsiyet/ANNE, ≥2 satırda VELİ/BABA, fazladan sütun, ≥4 satırda iki
+sözcüklü "ad") varsa satır numarasıyla reddedilir; TCKN okul numarasına yazılmaz. Boş hücre kanıt
+sayılmaz, o satır satır düzeyinde atlanır. Personelde başlık zorunlu.)*
+(5) Idempotency: dosya/matris sha256 —
 `already_imported` UYARI olarak (engel değil; güncelleme meşru). (6) Elle ekleme formları.
 
 ### 4.8 Test stratejisi

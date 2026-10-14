@@ -81,9 +81,7 @@ const PREVIEW_REPORT: StudentImportReport = {
   unchanged_students: 0,
   already_imported: false,
   dry_run: true,
-  warnings: [
-    { row_number: 3, field: "guardian_phone", issue: "Telefon geçersiz", raw_value: "555" },
-  ],
+  warnings: [{ row_number: 3, field: "phone", issue: "Telefon geçersiz", raw_value: "555" }],
   skipped: [],
 };
 
@@ -351,6 +349,9 @@ describe("KisilerPage — içe aktarma paneli", () => {
     expect(await screen.findByText("Önizleme — hiçbir kayıt yazılmadı")).toBeInTheDocument();
     expect(screen.getByText("Uyarılar (1)")).toBeInTheDocument();
     expect(screen.getByText("Telefon geçersiz")).toBeInTheDocument();
+    // Alan sütunu iç kodu ("phone") değil Türkçe karşılığını gösterir.
+    expect(screen.getByRole("cell", { name: "Veli telefonu" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "phone" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aktar" })).toBeEnabled();
   });
 

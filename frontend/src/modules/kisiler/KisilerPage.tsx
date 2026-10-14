@@ -1041,6 +1041,20 @@ function ImportReportView({ report }: { report: ImportReport }) {
   );
 }
 
+// Backend `ImportIssue.field` iç kodlarının Türkçe karşılığı ("guardian" görünmesin).
+const ISSUE_FIELD_LABEL: Partial<Record<string, string>> = {
+  row: "Tüm satır",
+  header: "Başlık",
+  class: "Sınıf",
+  number: "Okul no",
+  tckn: "TCKN",
+  guardian: "Veli",
+  phone: "Veli telefonu",
+  birth_date: "Doğum tarihi",
+  gender: "Cinsiyet",
+  full_name: "Ad soyad",
+};
+
 function IssueTable({
   title,
   issues,
@@ -1073,7 +1087,9 @@ function IssueTable({
                   className="border-t border-outline-variant/50"
                 >
                   <td className="p-2 text-on-surface-variant">{issue.row_number}</td>
-                  <td className="p-2 text-on-surface-variant">{issue.field || "—"}</td>
+                  <td className="p-2 text-on-surface-variant">
+                    {ISSUE_FIELD_LABEL[issue.field] ?? (issue.field || "—")}
+                  </td>
                   <td className="p-2 text-on-surface">{issue.issue}</td>
                   <td className="p-2 text-on-surface-variant">{issue.raw_value || "—"}</td>
                 </tr>

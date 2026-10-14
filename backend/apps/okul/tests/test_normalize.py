@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from apps.okul import normalize
 
 
@@ -223,3 +225,70 @@ def test_excel_date_gelecek_ise_baslama_kabul() -> None:
     # Ama +2 yıldan ilerisi yazım hatası sayılır.
     far = date.today() + timedelta(days=800)
     assert normalize.normalize_excel_date(far.strftime("%d.%m.%Y"), allow_future=True) is None
+
+
+# --- e-Okul uzun sınıf etiketi / MTAL program öneki (14.10.2026 saha denetimi) ---
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("9. Sınıf / A Şubesi", (9, "A")),
+        ("9. SINIF / A ŞUBESİ", (9, "A")),
+        ("10. Sınıf / B Şubesi (Bilişim Teknolojileri Alanı)", (10, "B")),
+        ("11-B SINIFI", (11, "B")),
+        ("9/A Şubesi", (9, "A")),
+        ("10/A (AMP)", (10, "A")),
+        ("12/A Çocuk Gelişimi", (12, "A")),
+        ("10. Sınıf / Ç Şubesi", (10, "Ç")),
+        ("Sınıf 10 A", (10, "A")),
+        ("10/MEM", (10, "MEM")),  # seviyeden SONRA gelen ad şubedir
+        ("A/10", (10, "A")),  # şube-önde yazım
+        ("9.Sınıf/A Şubesi", (9, "A")),  # Sınıf sözcüğüne bitişik şube
+        ("10.Sınıf-A", (10, "A")),
+        ("10-SINIF-A", (10, "A")),
+        ("10/A-2026", (10, "A")),  # yıl atılır
+        ("2026-2027 10/A SINIF LİSTESİ", (10, "A")),
+        ("10. Sınıf / C\u0327 Şubesi", (10, "Ç")),  # ayrışık (NFD) Ç
+        ("10/A-ATP", (10, "A")),  # sonda gelen program kodu ek sayılır
+        ("Lise 10/A", (10, "A")),
+        ("9/A1", (9, "A1")),  # rakamlı şube kırpılmaz (A1 ≠ A2)
+        ("11/A2", (11, "A2")),
+    ],
+)
+def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[int, str]) -> None:
+    """'9. Sınıf / A Şubesi' şube 'SINIF' olarak kaydedilip evraka '9/SINIF' basılıyordu."""
+    assert normalize.normalize_class_section(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "AMP 10/A",
+        "ATP-10/B",
+        "MEM 11/A",
+        "AMP – 9. SINIF / A Şubesi",
+        "Anadolu Meslek Programı 10. Sınıf / A Şubesi",
+        "10/MEM-A",
+        "MTAL-AMP 10/A",  # tireli program öneki
+        "ÇOCUKGELİŞİMİ-A 11",
+        "11/A-1",  # rakamlı bileşik: A-1 ile A-2 tek A'da birleşmesin
+        "11 SAY-1",
+        "12 10/A",  # ikinci seviye
+        "9.SınıfA",  # bitişik Sınıf sözcüğü
+        "10/A2025",
+        "10/A, 10/B",  # ikinci şube adayı
+        "Lise 10",
+        "10. Snf",
+        "10. Sınıf (Kız)",  # şube harfi yok: betimleyici sözcük şube değil
+        "9 Hazırlık",
+        "10. Sınıf Listesi",
+        "10/AMP-B",
+        "10 AMP A",
+        "10/ÇG-A",  # kodsuz bileşik ad: ilk parçaya kırpılıp şubeler birleşmesin
+        "10/BT-A",
+        "11 ÇOCUK GELİŞİMİ A",
+        "12/BİLİŞİMTEKNOLOJİLERİ",  # şube alanına (8) sığmaz
+    ],
+)
+def test_class_belirsiz_etiket_tahmin_edilmez(raw: str) -> None:
+    """Belirsiz etiket tahmin edilmez (sessiz kırpma şubeleri birleştirir): satır atlanır."""
+    assert normalize.normalize_class_section(raw) is None
