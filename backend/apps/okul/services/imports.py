@@ -20,6 +20,7 @@ burada. OYS'den farklar:
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -29,7 +30,7 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import excel_personel, excel_veli, selectors
+from apps.okul import excel_personel, excel_veli, normalize, selectors
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.excel_veli import ColumnMapping, ParsedParent, ParsedRow, ParserError
 from apps.okul.models import (
@@ -42,6 +43,12 @@ from apps.okul.models import (
     SchoolYear,
     Student,
     StudentStatus,
+)
+from apps.okul.services.templates import (
+    PERSONNEL_TEMPLATE_EXAMPLE,
+    PERSONNEL_TEMPLATE_HEADERS,
+    STUDENT_TEMPLATE_EXAMPLE,
+    STUDENT_TEMPLATE_HEADERS,
 )
 from shared.text import mask_tckn
 
@@ -160,12 +167,61 @@ def _grid_from_file(file_bytes: bytes) -> list[list[Any]]:
         ) from exc
 
 
+# Parser'ın iç alan adları ("class", "number veya tckn") kullanıcıya gösterilmez.
+_MISSING_COLUMN_LABELS: dict[str, str] = {
+    "class": "Sınıf",
+    "number veya tckn": "Okul Numarası (ya da TCKN)",
+    "student_name veya student_first+student_last": (
+        "Öğrenci Adı ve Öğrenci Soyadı (ya da Adı Soyadı)"
+    ),
+    "full_name veya first_name+last_name": "Adı ve Soyadı (ya da Ad Soyad)",
+}
+
+
+def _missing_columns_error(missing: list[str], expected: tuple[str, ...]) -> ParserError:
+    labels = ", ".join(_MISSING_COLUMN_LABELS.get(name, name) for name in missing)
+    return ParserError(
+        f"Zorunlu sütun(lar) bulunamadı: {labels}. İlk satırda şablonun sütun başlıkları "
+        f"({', '.join(expected)}) bulunmalı; listeyi başlık satırıyla birlikte yapıştırın "
+        "ya da Şablon indir ile alınan dosyayı doldurun."
+    )
+
+
+_SCHOOL_NUMBER_RE = re.compile(r"\d+(\.0)?")
+
+
+def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
+    """Başlıksız giriş: ilk dolu satır şablon sırasında bir VERİ satırıysa
+    (1. hücre sınıf/şube, 2. hücre okul numarası) sütunlar şablon sırasıyla okunur.
+
+    Kullanıcı Excel'den çoğu kez yalnız veri satırlarını kopyalar (14.10.2026 saha
+    bildirimi). `header_row=-1`: veri ilk satırdan başlar, satır numaraları
+    yapıştırılan satırlarla aynı kalır.
+    """
+    first = next((row for row in grid if any(str(c or "").strip() for c in row)), None)
+    if first is None or len(first) < len(STUDENT_TEMPLATE_HEADERS) - 1:
+        return None
+    if normalize.normalize_class_section(first[0]) is None:
+        return None
+    if not _SCHOOL_NUMBER_RE.fullmatch(str(first[1] or "").strip()):
+        return None
+    mapping = excel_veli.detect_columns([list(STUDENT_TEMPLATE_HEADERS)])
+    mapping.header_row = -1
+    mapping.warnings.append(
+        "Başlık satırı bulunamadı; sütunlar şablon sırasıyla okundu: "
+        f"{', '.join(STUDENT_TEMPLATE_HEADERS)}."
+    )
+    return mapping
+
+
 def _parse_student_grid(grid: list[list[Any]]) -> tuple[ColumnMapping, list[ParsedRow]]:
     """Matristen (mapping, satırlar); kritik sütun eksikse ParserError (parse_workbook paritesi)."""
     mapping = excel_veli.detect_columns(grid)
     if not mapping.is_usable:
-        missing = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+        headerless = _headerless_student_mapping(grid)
+        if headerless is None:
+            raise _missing_columns_error(mapping.missing_critical, STUDENT_TEMPLATE_HEADERS)
+        mapping = headerless
     return mapping, excel_veli.parse_rows(grid, mapping)
 
 
@@ -174,8 +230,7 @@ def _parse_personnel_grid(
 ) -> tuple[PersonnelColumnMapping, list[ParsedPersonnelRow]]:
     mapping = excel_personel.detect_columns(grid)
     if not mapping.is_usable:
-        missing = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+        raise _missing_columns_error(mapping.missing_critical, PERSONNEL_TEMPLATE_HEADERS)
     return mapping, excel_personel.parse_rows(grid, mapping)
 
 
@@ -233,7 +288,8 @@ def _ingest_students(
     )
     report.already_imported = already
     for header_warning in mapping.warnings:
-        report.add_warning(mapping.header_row + 1, "header", header_warning)
+        # Başlıksız girişte header_row=-1; uyarı ilk satıra bağlanır.
+        report.add_warning(max(mapping.header_row + 1, 1), "header", header_warning)
 
     for row in rows:
         _process_student_row(row, report=report)
@@ -245,6 +301,9 @@ def _ingest_students(
 
 def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None:
     """Tek satır: doğrula → veli düzleştir → TCKN ile bul/oluştur/güncelle."""
+    if (row.student_first, row.student_last) == STUDENT_TEMPLATE_EXAMPLE[2:4]:
+        report.add_skip(row.row_number, "row", "Şablondaki örnek satır; aktarılmadı.")
+        return
     if row.raw_tckn and row.tckn is None:
         # raw_value MASKELİ: TCKN kişisel veridir, rapor JSON'ına ham düşmez.
         report.add_skip(row.row_number, "tckn", "Geçersiz TCKN", mask_tckn(row.raw_tckn))
@@ -364,6 +423,11 @@ def _resolve_guardian(
     mother, father = row.mother, row.father
     g = row.guardian
 
+    if not g and not mother.has_any_data and not father.has_any_data:
+        # Veli bilgisi hiç yok (standart şablonda veli sütunu bulunmaz): uyarı
+        # gürültüdür; her satıra düşüp başarılı önizlemeyi hata gibi gösteriyordu.
+        return GuardianKinship.FATHER, father, mother
+
     if g == "ANNE":
         if mother.has_any_data:
             return GuardianKinship.MOTHER, mother, father
@@ -435,6 +499,9 @@ def _process_personnel_row(
     """Tek personel satırı: ada göre bul/oluştur; boş hücre mevcut veriyi silmez."""
     if not row.first_name and not row.last_name:
         report.add_skip(row.row_number, "full_name", "Ad-soyad boş; satır atlandı.")
+        return
+    if (row.first_name, row.last_name) == PERSONNEL_TEMPLATE_EXAMPLE[:2]:
+        report.add_skip(row.row_number, "row", "Şablondaki örnek satır; aktarılmadı.")
         return
 
     key = excel_veli.normalize_header(row.raw_full_name)

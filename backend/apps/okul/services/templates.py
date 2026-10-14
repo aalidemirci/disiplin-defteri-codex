@@ -21,6 +21,11 @@ STUDENT_TEMPLATE_HEADERS: tuple[str, ...] = (
 
 PERSONNEL_TEMPLATE_HEADERS: tuple[str, ...] = ("Adı", "Soyadı", "Görevi", "Branşı")
 
+# Örnek satırlar sahtedir; içe aktarma bunları tanıyıp atlar (silinmeden
+# yüklenen şablon sicile "ÖRNEK ÖĞRENCİ" yazmasın — 14.10.2026 saha bildirimi).
+STUDENT_TEMPLATE_EXAMPLE: tuple[str, ...] = ("9/A", "1001", "ÖRNEK", "ÖĞRENCİ", "01.01.2011")
+PERSONNEL_TEMPLATE_EXAMPLE: tuple[str, ...] = ("ÖRNEK", "ÖĞRETMEN", "Öğretmen", "Matematik")
+
 
 def _workbook_bytes(headers: tuple[str, ...], example: tuple[str, ...]) -> bytes:
     wb = Workbook()
@@ -37,21 +42,9 @@ def _workbook_bytes(headers: tuple[str, ...], example: tuple[str, ...]) -> bytes
 
 def student_template_xlsx() -> bytes:
     """Örnek satırlı öğrenci şablonu (örnek veriler sahtedir, silinip doldurulur)."""
-    return _workbook_bytes(
-        STUDENT_TEMPLATE_HEADERS,
-        (
-            "9/A",
-            "1001",
-            "ÖRNEK",
-            "ÖĞRENCİ",
-            "01.01.2011",
-        ),
-    )
+    return _workbook_bytes(STUDENT_TEMPLATE_HEADERS, STUDENT_TEMPLATE_EXAMPLE)
 
 
 def personnel_template_xlsx() -> bytes:
     """Örnek satırlı personel şablonu."""
-    return _workbook_bytes(
-        PERSONNEL_TEMPLATE_HEADERS,
-        ("ÖRNEK", "ÖĞRETMEN", "Öğretmen", "Matematik"),
-    )
+    return _workbook_bytes(PERSONNEL_TEMPLATE_HEADERS, PERSONNEL_TEMPLATE_EXAMPLE)

@@ -333,3 +333,102 @@ class TestImportHataYollari:
         with pytest.raises(ParserError):
             import_service.preview_students_text(text="Numa\tAdı Soyadı\n1\tALİ VELİ\n")
         assert ImportRun.objects.get().status == ImportStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# 14.10.2026 saha bildirimi (Gaziantep, MTAL) — şablonla öğrenci aktarımı
+# ---------------------------------------------------------------------------
+def _sablon_satiri(sinif: str, numara: object, ad: str, soyad: str, dogum: str) -> list[object]:
+    return [sinif, numara, ad, soyad, dogum]
+
+
+_SABLON_SATIRLARI: list[list[object]] = [
+    _sablon_satiri("10/A", 220, "TUĞBANUR", "POLAT", "21.02.2012"),
+    _sablon_satiri("10/A", 226, "ELİFNUR", "DEMİRPENÇE", "08.07.2011"),
+    _sablon_satiri("10/A", 233, "FATMA GÜL", "ONAY", "21.02.2012"),
+]
+
+
+def _basliksiz_metin(rows: list[list[object]]) -> str:
+    return "".join("\t".join(str(c) for c in r) + "\n" for r in rows)
+
+
+@pytest.mark.django_db
+class TestSablonSahaBildirimi:
+    def test_veli_sutunsuz_sablonda_her_satira_veli_uyarisi_dusmez(self) -> None:
+        """Şablonda veli sütunu yok; "Veli Kim boş" uyarısı her satıra düşüp
+        578 satırlık başarılı önizlemeyi hata gibi gösteriyordu."""
+        from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
+
+        report = import_service.preview_students_file(
+            file_bytes=make_xlsx(_SABLON_SATIRLARI, header=list(STUDENT_TEMPLATE_HEADERS))
+        )
+        assert report.created_students == 3
+        assert report.warnings == []
+        assert report.skipped == []
+
+    def test_veli_bilgisi_varken_veli_kim_bos_uyarisi_surer(self) -> None:
+        row = _yilmaz_row()
+        row[4] = ""
+        report = import_service.preview_students_file(file_bytes=make_xlsx([row]))
+        assert [w.field for w in report.warnings] == ["guardian"]
+
+    def test_basliksiz_yapistirma_sablon_sirasiyla_okunur(self) -> None:
+        """Kullanıcı yalnız veri satırlarını kopyalar (başlıksız) — sütunlar şablon
+        sırasıyla okunur; satır numaraları yapıştırılan satırlarla aynı kalır."""
+        report = import_service.commit_students_text(text=_basliksiz_metin(_SABLON_SATIRLARI))
+        assert report.created_students == 3
+        s = Student.objects.get(student_number="226")
+        assert (s.first_name, s.last_name) == ("ELİFNUR", "DEMİRPENÇE")
+        assert (s.class_level, s.class_section) == (10, "A")
+        assert s.birth_date is not None and s.birth_date.isoformat() == "2011-07-08"
+        assert Student.objects.get(student_number="233").first_name == "FATMA GÜL"
+        assert [(w.row_number, w.field) for w in report.warnings] == [(1, "header")]
+        assert "şablon sırasıyla" in report.warnings[0].issue
+
+    def test_basliksiz_yapistirmada_satir_numarasi_kaymaz(self) -> None:
+        rows = [*_SABLON_SATIRLARI, _sablon_satiri("8/A", 240, "AYŞENUR", "ERDOĞAN", "")]
+        report = import_service.preview_students_text(text=_basliksiz_metin(rows))
+        assert [(i.row_number, i.field) for i in report.skipped] == [(4, "class")]
+
+    def test_basliksiz_dosya_da_sablon_sirasiyla_okunur(self) -> None:
+        report = import_service.preview_students_file(
+            file_bytes=make_xlsx(_SABLON_SATIRLARI[1:], header=_SABLON_SATIRLARI[0])
+        )
+        assert report.created_students == 3
+
+    def test_veri_satirina_benzemeyen_basliksiz_metin_reddedilir(self) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        with pytest.raises(ParserError, match="Sınıf"):
+            import_service.preview_students_text(text="TUĞBANUR\tPOLAT\n")
+
+    def test_eksik_sutun_iletisi_ic_alan_adi_degil_turkce(self) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        with pytest.raises(ParserError) as exc:
+            import_service.preview_students_text(text="Numa\tAdı Soyadı\n1\tALİ VELİ\n")
+        message = str(exc.value)
+        assert "Sınıf" in message and "başlık" in message
+        assert "class" not in message and "student_" not in message
+
+    def test_personel_eksik_sutun_iletisi_turkce(self) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        with pytest.raises(ParserError) as exc:
+            import_service.preview_personnel_text(text="Görevi\tBranşı\nÖğretmen\tFizik\n")
+        assert "first_name" not in str(exc.value) and "Adı" in str(exc.value)
+
+    def test_sablonun_ornek_satiri_aktarilmaz(self) -> None:
+        from apps.okul.services.templates import student_template_xlsx
+
+        report = import_service.commit_students_file(file_bytes=student_template_xlsx())
+        assert Student.objects.count() == 0
+        assert [(i.row_number, i.field) for i in report.skipped] == [(2, "row")]
+
+    def test_personel_sablonunun_ornek_satiri_aktarilmaz(self) -> None:
+        from apps.okul.services.templates import personnel_template_xlsx
+
+        report = import_service.commit_personnel_file(file_bytes=personnel_template_xlsx())
+        assert Personnel.objects.count() == 0
+        assert [(i.row_number, i.field) for i in report.skipped] == [(2, "row")]
