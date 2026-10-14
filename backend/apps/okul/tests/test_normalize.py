@@ -266,6 +266,7 @@ def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[in
         "10 AMP A",
         "10/ÇG-A",  # kodsuz bileşik ad: ilk parçaya kırpılıp şubeler birleşmesin
         "10/BT-A",
+        "11 ÇOCUK GELİŞİMİ A",
         "12/BİLİŞİMTEKNOLOJİLERİ",  # şube alanına (8) sığmaz
     ],
 )

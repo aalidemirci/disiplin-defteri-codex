@@ -137,7 +137,8 @@ def normalize_phone(value: object) -> str | None:
 #   - seviyeden ÖNCE program kodu ya da yazılı program adı ("AMP 10/A",
 #     "Anadolu Meslek Programı 10. Sınıf / A Şubesi");
 #   - seviyeden sonra kodla başlayan çok parçalı ad ("10/AMP-A", "10 AMP A");
-#   - kodsuz bileşik ad ("10/ÇG-A", "10/BT-A");
+#   - kodsuz bileşik ad ("10/ÇG-A", "10/BT-A") ya da ardından sözcük gelen çok
+#     harfli ad ("11 ÇOCUK GELİŞİMİ A"; "12/A Çocuk Gelişimi" ise A);
 #   - şube alanına sığmayan ad (> 8 karakter, Student.class_section).
 # Seviyeden sonra gelen tek ad şubedir ("10/MEM" → MEM, "11/A1" → A1); program
 # kodu sonda gelirse ek sayılır ("10/A-ATP", "10/A (AMP)" → A). Karşılaştırma
@@ -146,6 +147,8 @@ _CLASS_LABEL_WORDS = frozenset({"SINIF", "SINIFI", "SUBE", "SUBESI"})
 _PROGRAM_CODES = frozenset({"AMP", "ATP", "MEM", "MESEM"})
 _SECTION_TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+(?:[-/][0-9A-Za-zÇĞİÖŞÜçğıöşü]+)*")
 _SECTION_MAX_LENGTH = 8
+# Ardından başka sözcük gelen şube yalnız tek harf (+ rakam) olabilir: "A", "A1".
+_SINGLE_SECTION_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]\d*")
 
 
 def _section_tokens(text: str) -> list[str]:
@@ -167,8 +170,8 @@ def _section_from_tokens(before: list[str], after: list[str]) -> str | None:
     if not after:
         return before[0] if before else None  # "A/10" gibi şube-önde yazım
     first = after[0]
-    if _is_program_code(first) and len(after) > 1:
-        return None
+    if len(after) > 1 and (_is_program_code(first) or not _SINGLE_SECTION_RE.fullmatch(first)):
+        return None  # "10 AMP A", "11 ÇOCUK GELİŞİMİ A": sözcüklü ad tahmin edilmez
     parts = re.split(r"[-/]", first)
     if len(parts) > 1:
         if _is_program_code(parts[0]):
