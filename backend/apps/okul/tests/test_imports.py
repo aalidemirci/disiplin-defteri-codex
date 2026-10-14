@@ -561,11 +561,28 @@ class TestBasliksizSekilDenetimi:
         """ "Ad Soyad | Baba | Anne" düzeni: anne adı doğum tarihi sütununa düşer."""
         self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "MEHMET", "AYŞE"]])
 
-    def test_veli_adi_ogrencinin_soyadini_tasiyorsa_tek_satirda_reddedilir(self) -> None:
-        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "AYŞE POLAT"]])
+    def test_veli_adi_soyadi_tasiyan_duzen_iki_satirda_reddedilir(self) -> None:
+        self._reddedilir(
+            [
+                ["10/A", 220, "TUĞBANUR POLAT", "AYŞE POLAT"],
+                ["10/A", 221, "ELİF KAYA", "BABA"],
+            ]
+        )
 
-    def test_ad_soyad_yaninda_baba_tek_satirda_reddedilir(self) -> None:
-        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "BABA", "21.02.2012"]])
+    def test_tek_satirda_gercek_suriyeli_ve_veli_adlari_kabul(self) -> None:
+        """ "MUHAMMED ALİ | EL ALİ", "AYŞE NUR | VELİ" gerçek adlardır: tek satır kanıt değil."""
+        for ad, soyad in (("MUHAMMED ALİ", "EL ALİ"), ("AYŞE NUR", "VELİ")):
+            report = import_service.preview_students_text(
+                text=_basliksiz_metin([["10/A", 220, ad, soyad]])
+            )
+            assert report.created_students == 1
+
+    def test_butun_liste_yanlis_duzende_ozgul_neden_soylenir(self) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        rows = [["10/A", 220 + i, "TUĞBANUR POLAT", "MEHMET", "AYŞE"] for i in range(3)]
+        with pytest.raises(ParserError, match="1. satır şablon sırasına uymuyor: Doğum Tarihi"):
+            import_service.preview_students_text(text=_basliksiz_metin(rows))
 
     def test_soyad_yerinde_anne_reddedilir(self) -> None:
         self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "ANNE", "21.02.2012"]])
@@ -726,6 +743,22 @@ class TestDosyaIciYinelenenOgrenci:
             ("full_name", "202")
         ]
         assert "okul no 220" in report.warnings[-1].issue
+
+    def test_numarasi_degisen_ogrenci_yeniden_aktarimda_uyarilir(self) -> None:
+        """Eski numaralı TCKN'siz satır sonraki koşuda yeni kayıt açar: önizleme uyarır."""
+        import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row(numara=305)]))
+        old_number = [*_yilmaz_row(numara=220)]
+        old_number[1] = ""
+        report = import_service.preview_students_file(file_bytes=make_xlsx([old_number]))
+        [warning] = [w for w in report.warnings if w.field == "full_name"]
+        assert "okul no 305" in warning.issue
+
+    def test_ad_anahtari_aksan_ve_latin_disi_harf(self) -> None:
+        key = import_service._name_key
+        assert key("ÂDEM", "YILDIZ") == key("Adem", "Yıldız")
+        assert key("İLKNUR", "ÇAĞLAR") == key("ilknur", "çağlar")
+        assert key("محمد", "علي") != key("أحمد", "حسن")
+        assert key("محمد", "علي") != ""
 
     def test_numarasi_degisen_ogrenci_ikinci_kez_acilmaz(self) -> None:
         import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row(numara=220)]))

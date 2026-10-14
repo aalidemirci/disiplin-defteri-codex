@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -238,13 +239,6 @@ def _headerless_shape_problem(cells: list[str]) -> str | None:
         return "Öğrenci Adı sütununda ad olmayan bir değer var"
     if cells[3] and not _looks_like_name(cells[3]):
         return "Öğrenci Soyadı sütununda soyad olmayan bir değer var"
-    name_words = excel_veli.normalize_header(cells[2]).split()
-    surname_words = excel_veli.normalize_header(cells[3]).split()
-    if len(name_words) >= 2 and len(surname_words) >= 2 and name_words[-1] == surname_words[-1]:
-        # "TUĞBANUR POLAT | AYŞE POLAT": ad-soyad ve veli adı-soyadı sütunları
-        return "Öğrenci Adı ve Öğrenci Soyadı sütunları ad-soyad ile veli adı gibi görünüyor"
-    if len(name_words) >= 2 and surname_words in (["veli"], ["baba"]):
-        return "Öğrenci Soyadı sütununda Veli Kim değeri var"
     if (
         cells[4]
         and any(ch.isalpha() for ch in cells[4])
@@ -252,6 +246,21 @@ def _headerless_shape_problem(cells: list[str]) -> str | None:
     ):
         return "Doğum Tarihi sütununda tarih yerine metin var"
     return None
+
+
+def _guardian_layout_hint(cells: list[str]) -> bool:
+    """Satır "Ad Soyad | Veli adı" düzenine benziyor mu (YUMUŞAK kanıt: ≥2 satırda).
+
+    "TUĞBANUR POLAT | AYŞE POLAT" (veli adı öğrencinin soyadını taşır) ya da
+    "TUĞBANUR POLAT | BABA". Tek satırda kanıt sayılmaz: "MUHAMMED ALİ | EL ALİ",
+    "AYŞE NUR | VELİ" gerçek öğrenci adlarıdır.
+    """
+    name_words = excel_veli.normalize_header(cells[2]).split()
+    surname_words = excel_veli.normalize_header(cells[3]).split()
+    if len(name_words) < 2:
+        return False
+    shared_last = len(surname_words) >= 2 and name_words[-1] == surname_words[-1]
+    return shared_last or surname_words in (["veli"], ["baba"])
 
 
 def _is_complete_template_row(cells: list[str]) -> bool:
@@ -289,6 +298,19 @@ def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
     ][:_HEADERLESS_SAMPLE_ROWS]
     reference = next(((n, c) for n, c in sample if _is_complete_template_row(c)), None)
     if reference is None:
+        # Satırlar şablona benziyor (sınıf + okul no) ama hepsi kanıtla düşüyorsa
+        # genel "sütun bulunamadı" yerine özgül neden söylenir.
+        for row_number, cells in sample:
+            if (
+                any(ch.isdigit() for ch in cells[0])
+                and any(ch.isalpha() for ch in cells[0])
+                and _SCHOOL_NUMBER_RE.fullmatch(cells[1])
+            ):
+                problem = _headerless_shape_problem(cells)
+                if problem is not None:
+                    raise _headerless_error(
+                        f"{row_number}. satır şablon sırasına uymuyor: {problem}"
+                    )
         return None
     for row_number, cells in sample:
         if row_number >= reference[0]:
@@ -311,6 +333,12 @@ def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
                 f"{label} sütununda birden çok satırda VELİ/BABA değeri var "
                 "(Veli Kim sütunu olabilir)"
             )
+    guardian_rows = [n for n, c in sample if _guardian_layout_hint(c)]
+    if len(guardian_rows) >= 2:
+        raise _headerless_error(
+            f"{guardian_rows[0]}. ve {guardian_rows[1]}. satırlar ad-soyad ile veli adı "
+            "sütunları gibi görünüyor"
+        )
     both_multi = [c for _, c in sample if c[2] and c[3]]
     if len(both_multi) >= 2 and all(
         len(c[2].split()) >= 2 and len(c[3].split()) >= 2 for c in both_multi
@@ -451,9 +479,9 @@ class _StudentRunState:
     seen_number: dict[str, tuple[int, str | None]] = field(default_factory=dict)
     touched: dict[Any, int] = field(default_factory=dict)
     replaced_numbers: dict[str, int] = field(default_factory=dict)
-    # Ad-soyad anahtarı → TCKN'siz aktif öğrencilerin okul numaraları (koşu başında,
-    # ilk ihtiyaçta bir kez kurulur; satır başına tüm sicili taramamak için).
-    tckn_less_by_name: dict[str, list[str]] | None = None
+    # Ad-soyad anahtarı → aktif öğrencilerin okul numaraları (ilk ihtiyaçta bir kez
+    # kurulur, koşuda açılan kayıtlar eklenir; satır başına tüm sicili taramamak için).
+    numbers_by_name: dict[str, list[str]] | None = None
 
 
 def _skip_in_file_duplicate(
@@ -538,7 +566,8 @@ def _find_existing_student(
             row.row_number,
             "number",
             "Bu okul numarası adı/soyadı farklı bir öğrenciye kayıtlı; satır atlandı. Aynı "
-            "öğrenciyse önce Kişiler'den adını düzeltin.",
+            "öğrenciyse önce Kişiler'den adını düzeltin; numara başka öğrenciye verildiyse "
+            "eski öğrencinin numarasını ya da durumunu (Ayrıldı/Mezun) güncelleyin.",
             row.student_number,
         )
         return None, True
@@ -548,35 +577,44 @@ def _find_existing_student(
 def _warn_possible_duplicate(
     row: ParsedRow, report: StudentImportReport, state: _StudentRunState
 ) -> None:
-    """TCKN'li yeni kayıt açılırken aynı ad-soyadlı TCKN'siz aktif öğrenci varsa uyarır.
+    """Yeni kayıt açılırken aynı ad-soyadlı aktif öğrenci varsa uyarır (veri değişmez).
 
-    Örn. şablonla yanlış numarayla girilmiş öğrenci, e-Okul listesinde doğru
-    numarasıyla gelince ikinci kez açılır; veriye dokunulmaz, kullanıcı birleştirir.
+    Örn. şablonla yanlış numarayla girilmiş öğrenci e-Okul listesinde doğru
+    numarasıyla ya da numarası değişen öğrenci eski numaralı satırla gelince
+    ikinci kez açılır; kullanıcı Kişiler'den birleştirir.
     """
-    if row.tckn is None:
-        return
-    if state.tckn_less_by_name is None:
+    if state.numbers_by_name is None:
         index: dict[str, list[str]] = {}
         for s in Student.objects.filter(status=StudentStatus.ACTIVE).only(
-            "first_name", "last_name", "student_number", "tckn"
+            "first_name", "last_name", "student_number"
         ):
-            if not s.tckn:
-                index.setdefault(_name_key(s.first_name, s.last_name), []).append(s.student_number)
-        state.tckn_less_by_name = index
-    numbers = state.tckn_less_by_name.get(_name_key(row.student_first, row.student_last))
+            index.setdefault(_name_key(s.first_name, s.last_name), []).append(
+                s.student_number or "—"
+            )
+        state.numbers_by_name = index
+    key = _name_key(row.student_first, row.student_last)
+    numbers = state.numbers_by_name.get(key)
     if numbers:
         report.add_warning(
             row.row_number,
             "full_name",
-            "Aynı ad-soyadla TCKN'siz bir öğrenci kayıtlı (okul no "
+            "Aynı ad-soyadla başka bir öğrenci kayıtlı (okul no "
             f"{', '.join(numbers)}); aynı kişiyse Kişiler'den kontrol edin.",
             row.student_number,
         )
+    state.numbers_by_name.setdefault(key, []).append(row.student_number or "—")
 
 
 def _name_key(first: str, last: str) -> str:
-    """Ad-soyad karşılaştırma anahtarı (yalnız eşleme için: Türkçe→ASCII, boşluksuz)."""
-    return excel_veli.normalize_header(f"{first} {last}").replace(" ", "")
+    """Ad-soyad karşılaştırma anahtarı (yalnız eşleme için; kaydedilen metin değişmez).
+
+    Aksanlar atılır (İ/Ş/Ğ/Ç/Ö/Ü/Â/Î/Û → temel harf), ı → i, büyük/küçük ve boşluk
+    farkı yok sayılır; Latin dışı harfler KORUNUR (anahtar boş kalıp her adı
+    eşleştirmesin).
+    """
+    text = unicodedata.normalize("NFKD", f"{first}{last}".replace("ı", "i"))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
 
 
 def _process_student_row(

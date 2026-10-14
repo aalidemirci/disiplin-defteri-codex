@@ -242,6 +242,9 @@ def test_excel_date_gelecek_ise_baslama_kabul() -> None:
         ("Sınıf 10 A", (10, "A")),
         ("10/MEM", (10, "MEM")),  # seviyeden SONRA gelen ad şubedir
         ("A/10", (10, "A")),  # şube-önde yazım
+        ("9.Sınıf/A Şubesi", (9, "A")),  # Sınıf sözcüğüne bitişik şube
+        ("10.Sınıf-A", (10, "A")),
+        ("10-SINIF-A", (10, "A")),
         ("10/A-ATP", (10, "A")),  # sonda gelen program kodu ek sayılır
         ("Lise 10/A", (10, "A")),
         ("9/A1", (9, "A1")),  # rakamlı şube kırpılmaz (A1 ≠ A2)
@@ -262,6 +265,8 @@ def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[in
         "AMP – 9. SINIF / A Şubesi",
         "Anadolu Meslek Programı 10. Sınıf / A Şubesi",
         "10/MEM-A",
+        "MTAL-AMP 10/A",  # tireli program öneki
+        "ÇOCUKGELİŞİMİ-A 11",
         "10/AMP-B",
         "10 AMP A",
         "10/ÇG-A",  # kodsuz bileşik ad: ilk parçaya kırpılıp şubeler birleşmesin

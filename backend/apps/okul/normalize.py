@@ -151,36 +151,45 @@ _SECTION_MAX_LENGTH = 8
 _SINGLE_SECTION_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]\d*")
 
 
-def _section_tokens(text: str) -> list[str]:
-    """Harf içeren öbekler ("A1", "ÇG-A"); Sınıf/Şube sözcükleri ve salt sayılar atılır."""
-    return [
-        t
-        for t in _SECTION_TOKEN_RE.findall(text)
-        if any(ch.isalpha() for ch in t) and _ascii_upper(t) not in _CLASS_LABEL_WORDS
-    ]
+def _section_tokens(text: str) -> list[list[str]]:
+    """Harf içeren öbekler, parçalarına ayrılmış ("ÇG-A" → ["ÇG", "A"]); Sınıf/Şube
+    sözcükleri parça düzeyinde atılır ("9.Sınıf/A" → ["A"]), salt sayılar atılır."""
+    tokens: list[list[str]] = []
+    for token in _SECTION_TOKEN_RE.findall(text):
+        parts = [
+            part
+            for part in re.split(r"[-/]", token)
+            if any(ch.isalpha() for ch in part) and _ascii_upper(part) not in _CLASS_LABEL_WORDS
+        ]
+        if parts:
+            tokens.append(parts)
+    return tokens
 
 
 def _is_program_code(token: str) -> bool:
     return _ascii_upper(token) in _PROGRAM_CODES
 
 
-def _section_from_tokens(before: list[str], after: list[str]) -> str | None:
-    if len(before) > 1 or any(_is_program_code(t) for t in before):
-        return None
+def _section_from_tokens(before: list[list[str]], after: list[list[str]]) -> str | None:
+    before_parts = [part for token in before for part in token]
+    if len(before_parts) > 1 or any(_is_program_code(part) for part in before_parts):
+        return None  # "AMP 10/A", "MTAL-AMP 10/A", "Anadolu Meslek Programı 10..."
     if not after:
-        return before[0] if before else None  # "A/10" gibi şube-önde yazım
-    first = after[0]
-    if len(after) > 1 and (_is_program_code(first) or not _SINGLE_SECTION_RE.fullmatch(first)):
-        return None  # "10 AMP A", "11 ÇOCUK GELİŞİMİ A": sözcüklü ad tahmin edilmez
-    parts = re.split(r"[-/]", first)
-    if len(parts) > 1:
-        if _is_program_code(parts[0]):
-            return None
-        rest = [part for part in parts[1:] if not _is_program_code(part)]
-        if rest:
-            return None
-        first = parts[0]
-    return first if len(first) <= _SECTION_MAX_LENGTH else None
+        section = before_parts[0] if before_parts else None  # "A/10" şube-önde yazım
+    else:
+        parts = after[0]
+        if len(after) > 1 and (
+            _is_program_code(parts[0]) or not _SINGLE_SECTION_RE.fullmatch(parts[0])
+        ):
+            return None  # "10 AMP A", "11 ÇOCUK GELİŞİMİ A": sözcüklü ad tahmin edilmez
+        if _is_program_code(parts[0]) and len(parts) > 1:
+            return None  # "10/AMP-A"
+        if any(not _is_program_code(part) for part in parts[1:]):
+            return None  # "10/ÇG-A": kodsuz bileşik ad
+        section = parts[0]  # sonda gelen kod ek sayılır: "10/A-ATP" → A
+    if section is None or len(section) > _SECTION_MAX_LENGTH:
+        return None
+    return section
 
 
 def normalize_class_section(value: object) -> tuple[int, str] | None:
