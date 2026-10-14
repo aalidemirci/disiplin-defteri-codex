@@ -137,7 +137,9 @@ describe("ImhaPage — ders yılı sonu", () => {
     renderPage();
     await screen.findByText("2025-2026-0004");
     expect(screen.getByRole("button", { name: /İmhayı uygula/ })).toBeDisabled();
-    expect(screen.getByText(/tutanak üretilmeden uygulanamaz/i)).toBeInTheDocument();
+    // Varsayılan seçim satırlar çizildikten SONRA bir efektle kurulur; yük altındaki
+    // CI'da findByText efekt öncesi çözülebiliyordu — ileti beklenerek aranır.
+    expect(await screen.findByText(/tutanak üretilmeden uygulanamaz/i)).toBeInTheDocument();
   });
 
   it("tutanak → ikinci onay → imha zincirini yürütür", async () => {
