@@ -435,6 +435,9 @@ class _StudentRunState:
     seen_number: dict[str, tuple[int, str | None]] = field(default_factory=dict)
     touched: dict[Any, int] = field(default_factory=dict)
     replaced_numbers: dict[str, int] = field(default_factory=dict)
+    # Ad-soyad anahtarı → TCKN'siz aktif öğrencilerin okul numaraları (koşu başında,
+    # ilk ihtiyaçta bir kez kurulur; satır başına tüm sicili taramamak için).
+    tckn_less_by_name: dict[str, list[str]] | None = None
 
 
 def _skip_in_file_duplicate(
@@ -524,6 +527,35 @@ def _find_existing_student(
         )
         return None, True
     return (candidates[0] if candidates else None), False
+
+
+def _warn_possible_duplicate(
+    row: ParsedRow, report: StudentImportReport, state: _StudentRunState
+) -> None:
+    """TCKN'li yeni kayıt açılırken aynı ad-soyadlı TCKN'siz aktif öğrenci varsa uyarır.
+
+    Örn. şablonla yanlış numarayla girilmiş öğrenci, e-Okul listesinde doğru
+    numarasıyla gelince ikinci kez açılır; veriye dokunulmaz, kullanıcı birleştirir.
+    """
+    if row.tckn is None:
+        return
+    if state.tckn_less_by_name is None:
+        index: dict[str, list[str]] = {}
+        for s in Student.objects.filter(status=StudentStatus.ACTIVE).only(
+            "first_name", "last_name", "student_number", "tckn"
+        ):
+            if not s.tckn:
+                index.setdefault(_name_key(s.first_name, s.last_name), []).append(s.student_number)
+        state.tckn_less_by_name = index
+    numbers = state.tckn_less_by_name.get(_name_key(row.student_first, row.student_last))
+    if numbers:
+        report.add_warning(
+            row.row_number,
+            "full_name",
+            "Aynı ad-soyadla TCKN'siz bir öğrenci kayıtlı (okul no "
+            f"{', '.join(numbers)}); aynı kişiyse Kişiler'den kontrol edin.",
+            row.student_number,
+        )
 
 
 def _name_key(first: str, last: str) -> str:
@@ -622,6 +654,7 @@ def _process_student_row(
         fields["gender"] = row.gender
 
     if student is None:
+        _warn_possible_duplicate(row, report, state)
         student = Student.objects.create(tckn=row.tckn or "", **fields)
         report.created_students += 1
     else:

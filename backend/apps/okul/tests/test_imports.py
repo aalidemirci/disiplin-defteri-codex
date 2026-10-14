@@ -682,6 +682,20 @@ class TestDosyaIciYinelenenOgrenci:
         s = Student.objects.get()
         assert (s.first_name, s.last_name, s.tckn) == ("TUĞBANUR", "POLAT", "")
 
+    def test_ayni_adli_tckn_siz_kayit_varken_yeni_tcknli_kayit_uyarilir(self) -> None:
+        """Şablonda numarası yanlış girilmiş öğrenci e-Okul listesiyle ikinci kez açılırsa
+        önizleme uyarır (veriye dokunulmaz)."""
+        sablon = _sablon_satiri("10/A", 220, "EMRE CAN", "YILMAZ", "")
+        import_service.commit_students_text(text=_basliksiz_metin([sablon]))
+        report = import_service.preview_students_file(
+            file_bytes=make_xlsx([_yilmaz_row(numara=202)])
+        )
+        assert report.created_students == 1
+        assert [(w.field, w.raw_value) for w in report.warnings if w.field == "full_name"] == [
+            ("full_name", "202")
+        ]
+        assert "okul no 220" in report.warnings[-1].issue
+
     def test_numarasi_degisen_ogrenci_ikinci_kez_acilmaz(self) -> None:
         import_service.commit_students_file(file_bytes=make_xlsx([_yilmaz_row(numara=220)]))
         new_number = _yilmaz_row(sinif="10/B", numara=305)
