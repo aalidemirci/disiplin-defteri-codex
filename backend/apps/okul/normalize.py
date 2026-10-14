@@ -131,23 +131,58 @@ def normalize_phone(value: object) -> str | None:
 
 
 # e-Okul uzun etiketindeki ("9. Sınıf / A Şubesi") sözcükler şube DEĞİLDİR; ilk
-# harf öbeği şube sayıldığında evraka "9/SINIF" basılıyordu. Seviyeden ÖNCE gelen
-# MTAL program kodu ("AMP 10/A") ya da yazılı program adı ("Anadolu Meslek Programı
-# 10. Sınıf / A Şubesi") tahmin edilmez: None → satır görünür biçimde atlanır.
-# Seviyeden sonra gelen ad şubedir ("10/MEM" → MEM). Karşılaştırma ASCII-katlanmış
-# hâlle yapılır (yalnız eşleme için, §7.2).
+# harf öbeği şube sayıldığında evraka "9/SINIF" basılıyordu. Belirsiz etiket
+# TAHMİN EDİLMEZ — None → satır görünür biçimde atlanır; sessiz kırpma farklı
+# şubeleri tek şubede birleştirip evraka yanlış sınıf ve rehber öğretmen basar:
+#   - seviyeden ÖNCE program kodu ya da yazılı program adı ("AMP 10/A",
+#     "Anadolu Meslek Programı 10. Sınıf / A Şubesi");
+#   - seviyeden sonra kodla başlayan çok parçalı ad ("10/AMP-A", "10 AMP A");
+#   - kodsuz bileşik ad ("10/ÇG-A", "10/BT-A");
+#   - şube alanına sığmayan ad (> 8 karakter, Student.class_section).
+# Seviyeden sonra gelen tek ad şubedir ("10/MEM" → MEM, "11/A1" → A1); program
+# kodu sonda gelirse ek sayılır ("10/A-ATP", "10/A (AMP)" → A). Karşılaştırma
+# ASCII-katlanmış hâlle yapılır (yalnız eşleme için, §7.2).
 _CLASS_LABEL_WORDS = frozenset({"SINIF", "SINIFI", "SUBE", "SUBESI"})
 _PROGRAM_CODES = frozenset({"AMP", "ATP", "MEM", "MESEM"})
-_SECTION_WORD_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]+")
+_SECTION_TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+(?:[-/][0-9A-Za-zÇĞİÖŞÜçğıöşü]+)*")
+_SECTION_MAX_LENGTH = 8
 
 
-def _section_words(text: str) -> list[str]:
-    return [w for w in _SECTION_WORD_RE.findall(text) if _ascii_upper(w) not in _CLASS_LABEL_WORDS]
+def _section_tokens(text: str) -> list[str]:
+    """Harf içeren öbekler ("A1", "ÇG-A"); Sınıf/Şube sözcükleri ve salt sayılar atılır."""
+    return [
+        t
+        for t in _SECTION_TOKEN_RE.findall(text)
+        if any(ch.isalpha() for ch in t) and _ascii_upper(t) not in _CLASS_LABEL_WORDS
+    ]
+
+
+def _is_program_code(token: str) -> bool:
+    return _ascii_upper(token) in _PROGRAM_CODES
+
+
+def _section_from_tokens(before: list[str], after: list[str]) -> str | None:
+    if len(before) > 1 or any(_is_program_code(t) for t in before):
+        return None
+    if not after:
+        return before[0] if before else None  # "A/10" gibi şube-önde yazım
+    first = after[0]
+    if _is_program_code(first) and len(after) > 1:
+        return None
+    parts = re.split(r"[-/]", first)
+    if len(parts) > 1:
+        if _is_program_code(parts[0]):
+            return None
+        rest = [part for part in parts[1:] if not _is_program_code(part)]
+        if rest:
+            return None
+        first = parts[0]
+    return first if len(first) <= _SECTION_MAX_LENGTH else None
 
 
 def normalize_class_section(value: object) -> tuple[int, str] | None:
     """'10/A', '10-A', '10 ç', '9. Sınıf / A Şubesi' → (10, 'A') / (10, 'Ç') / (9, 'A');
-    9-12 dışı, program önekli veya ayrıştırılamazsa None."""
+    9-12 dışı, belirsiz (program önekli, bileşik) veya ayrıştırılamazsa None."""
     if value is None:
         return None
     s = str(value).strip()
@@ -156,20 +191,15 @@ def normalize_class_section(value: object) -> tuple[int, str] | None:
     level_m = re.search(r"\d{1,2}", s)
     if level_m is None:
         return None
-    before = _section_words(s[: level_m.start()])
-    after = _section_words(s[level_m.end() :])
-    if len(before) > 1 or any(_ascii_upper(w) in _PROGRAM_CODES for w in before):
-        return None
-    if len(after) > 1 and _ascii_upper(after[0]) in _PROGRAM_CODES:
-        return None  # "10/MEM-A": bileşik ad ilk parçaya kırpılıp şubeler birleşmesin
-    words = after or before  # "A/10" gibi şube-önde yazım
-    if not words:
+    section = _section_from_tokens(
+        _section_tokens(s[: level_m.start()]), _section_tokens(s[level_m.end() :])
+    )
+    if section is None:
         return None
     level = int(level_m.group())
     if level < 9 or level > 12:
         return None
-    section = section_upper(words[0])
-    return level, section
+    return level, section_upper(section)
 
 
 def split_full_name(value: object) -> tuple[str, str]:
