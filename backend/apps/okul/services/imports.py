@@ -245,6 +245,12 @@ def _headerless_shape_problem(cells: list[str]) -> str | None:
         return "Öğrenci Adı ve Öğrenci Soyadı sütunları ad-soyad ile veli adı gibi görünüyor"
     if len(name_words) >= 2 and surname_words in (["veli"], ["baba"]):
         return "Öğrenci Soyadı sütununda Veli Kim değeri var"
+    if (
+        cells[4]
+        and any(ch.isalpha() for ch in cells[4])
+        and normalize.normalize_excel_date(cells[4]) is None
+    ):
+        return "Doğum Tarihi sütununda tarih yerine metin var"
     return None
 
 
@@ -305,6 +311,14 @@ def _headerless_student_mapping(grid: list[list[Any]]) -> ColumnMapping | None:
                 f"{label} sütununda birden çok satırda VELİ/BABA değeri var "
                 "(Veli Kim sütunu olabilir)"
             )
+    both_multi = [c for _, c in sample if c[2] and c[3]]
+    if len(both_multi) >= 2 and all(
+        len(c[2].split()) >= 2 and len(c[3].split()) >= 2 for c in both_multi
+    ):
+        raise _headerless_error(
+            "Öğrenci Adı ve Öğrenci Soyadı sütunları her satırda birden çok sözcük içeriyor "
+            "(ad-soyad ile veli adı ya da alan adı sütunları olabilir)"
+        )
     named = [c[2] for _, c in sample if c[2]]
     if len(named) >= _FULL_NAME_MIN_ROWS and all(len(name.split()) >= 2 for name in named):
         raise _headerless_error(
@@ -410,6 +424,8 @@ def _ingest_students(
     _close_run(run, report.to_dict())
     return report
 
+
+_STUDENT_NUMBER_MAX_LENGTH = 16  # Student.student_number
 
 _GUARDIAN_FIELDS = frozenset(
     {"guardian", "mother_name", "mother_phone", "father_name", "father_phone"}
@@ -593,6 +609,25 @@ def _process_student_row(
         return
     if not row.student_first or not row.student_last:
         report.add_skip(row.row_number, "full_name", "Öğrenci adı ya da soyadı boş; satır atlandı.")
+        return
+    if row.student_number and (
+        not any(ch.isdigit() for ch in row.student_number)
+        or len(row.student_number) > _STUDENT_NUMBER_MAX_LENGTH
+    ):
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Okul numarası geçersiz (sütunlar kaymış olabilir); satır atlandı.",
+            row.student_number,
+        )
+        return
+    if any(ch.isdigit() for ch in row.student_first + row.student_last):
+        # Değer bilinçli rapora yazılmaz: kaymış satırda TCKN ad hücresine düşmüş olabilir.
+        report.add_skip(
+            row.row_number,
+            "full_name",
+            "Öğrenci adı ya da soyadı rakam içeriyor (sütunlar kaymış olabilir); satır atlandı.",
+        )
         return
     if row.class_level is None:
         report.add_skip(

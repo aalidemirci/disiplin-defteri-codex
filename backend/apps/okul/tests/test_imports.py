@@ -548,6 +548,19 @@ class TestBasliksizSekilDenetimi:
         okunus = "1. satır şöyle okundu: Sınıf 10/A · Okul No 220 · Ad AYŞE NUR · Soyad YILMAZ"
         assert okunus in report.warnings[0].issue
 
+    def test_ad_ve_soyad_her_satirda_cok_sozcuklu_ise_reddedilir(self) -> None:
+        """ "Ad Soyad | Alan adı" düzeni: alan adı soyad olarak yazılmasın (2 satır yeter)."""
+        self._reddedilir(
+            [
+                ["10/A", 220, "TUĞBANUR POLAT", "Çocuk Gelişimi ve Eğitimi"],
+                ["10/A", 221, "ELİF KAYA", "Çocuk Gelişimi ve Eğitimi"],
+            ]
+        )
+
+    def test_dogum_tarihi_yerinde_metin_reddedilir(self) -> None:
+        """ "Ad Soyad | Baba | Anne" düzeni: anne adı doğum tarihi sütununa düşer."""
+        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "MEHMET", "AYŞE"]])
+
     def test_veli_adi_ogrencinin_soyadini_tasiyorsa_tek_satirda_reddedilir(self) -> None:
         self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "AYŞE POLAT"]])
 
@@ -590,6 +603,24 @@ class TestBasliksizSekilDenetimi:
         report = import_service.commit_students_text(text=_basliksiz_metin(rows))
         assert report.created_students == 3
         assert [(i.row_number, i.field) for i in report.skipped] == [(4, "full_name")]
+
+    def test_kaymis_satir_baslikli_dosyada_da_atlanir(self) -> None:
+        """Başlıklı dosyada kaymış satır: harfli okul no ya da rakamlı soyad yazılmaz."""
+        from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
+
+        rows: list[list[object]] = [
+            ["10/A", "AYŞE", "KAYA", "201", ""],
+            ["10/A", 202, "ELİF", "01.01.2010", ""],
+            *_SABLON_SATIRLARI,
+        ]
+        report = import_service.commit_students_file(
+            file_bytes=make_xlsx(rows, header=list(STUDENT_TEMPLATE_HEADERS))
+        )
+        assert report.created_students == 3
+        assert [(i.row_number, i.field) for i in report.skipped] == [
+            (2, "number"),
+            (3, "full_name"),
+        ]
 
     def test_okul_numarasi_yerine_tckn_kaydedilmez(self) -> None:
         """Örneklem sonrası (11. satırdan sonra) okul no yerine TCKN: satır atlanır, maskeli."""
