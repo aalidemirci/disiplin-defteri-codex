@@ -257,6 +257,8 @@ def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[in
         "MEM 11/A",
         "AMP – 9. SINIF / A Şubesi",
         "Anadolu Meslek Programı 10. Sınıf / A Şubesi",
+        "10/MEM-A",
+        "10/AMP-B",
     ],
 )
 def test_class_program_oneki_tahmin_edilmez(raw: str) -> None:

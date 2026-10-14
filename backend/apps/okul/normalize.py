@@ -160,6 +160,8 @@ def normalize_class_section(value: object) -> tuple[int, str] | None:
     after = _section_words(s[level_m.end() :])
     if len(before) > 1 or any(_ascii_upper(w) in _PROGRAM_CODES for w in before):
         return None
+    if len(after) > 1 and _ascii_upper(after[0]) in _PROGRAM_CODES:
+        return None  # "10/MEM-A": bileşik ad ilk parçaya kırpılıp şubeler birleşmesin
     words = after or before  # "A/10" gibi şube-önde yazım
     if not words:
         return None
