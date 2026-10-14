@@ -198,6 +198,16 @@ def _missing_columns_error(
 _SCHOOL_NUMBER_RE = re.compile(r"\d{1,6}(\.0)?")
 _NAME_RE = re.compile(r"[^\d]*[^\W\d_][^\d]*")
 _HEADERLESS_SAMPLE_ROWS = 10
+# Ad/soyad yerinde cinsiyet ("Sınıf | No | Ad Soyad | Cinsiyet" düzeni) ad sayılmaz.
+_GENDER_WORDS = frozenset({"e", "k", "kiz", "erkek"})
+
+
+def _looks_like_name(cell: str) -> bool:
+    return (
+        len(cell) >= 2
+        and _NAME_RE.fullmatch(cell) is not None
+        and excel_veli.normalize_header(cell) not in _GENDER_WORDS
+    )
 
 
 def _is_template_data_row(row: list[Any]) -> bool:
@@ -212,7 +222,7 @@ def _is_template_data_row(row: list[Any]) -> bool:
     return (
         has_class_shape
         and _SCHOOL_NUMBER_RE.fullmatch(cells[1]) is not None
-        and all(_NAME_RE.fullmatch(name) for name in cells[2:4])
+        and all(_looks_like_name(name) for name in cells[2:4])
     )
 
 

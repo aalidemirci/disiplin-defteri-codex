@@ -458,6 +458,15 @@ class TestBasliksizSekilDenetimi:
     def test_ad_yerinde_tckn_reddedilir(self) -> None:
         self._reddedilir([["10/A", 220, TCKN_OGRENCI_1, "TUĞBANUR", "POLAT"]])
 
+    def test_soyad_yerinde_cinsiyet_reddedilir(self) -> None:
+        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "K"]])
+        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "Kız"]])
+
+    def test_cok_sozcuklu_ad_soyad_kabul(self) -> None:
+        rows = [["10/A", 220, "AYŞE NUR", "KAYA YILMAZ"], ["10/A", 221, "M. ALİ", "O'NEİL"]]
+        report = import_service.preview_students_text(text=_basliksiz_metin(rows))
+        assert report.created_students == 2
+
     def test_fazladan_sutun_reddedilir(self) -> None:
         self._reddedilir([[*_SABLON_SATIRLARI[0], "K"]])
 
