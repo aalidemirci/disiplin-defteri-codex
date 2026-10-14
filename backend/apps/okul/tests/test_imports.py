@@ -502,6 +502,17 @@ class TestBasliksizSekilDenetimi:
     def test_soyad_yerinde_veli_kim_reddedilir(self) -> None:
         self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "ANNE", "21.02.2012"]])
 
+    def test_okul_numarasi_yerine_tckn_kaydedilmez(self) -> None:
+        """Örneklem sonrası (11. satırdan sonra) okul no yerine TCKN: satır atlanır, maskeli."""
+        rows = [_sablon_satiri("10/A", 300 + i, "AYŞE", "KAYA", "") for i in range(11)]
+        rows.append(["10/A", TCKN_OGRENCI_1, "ELİF", "DEMİR", ""])
+        report = import_service.commit_students_text(text=_basliksiz_metin(rows))
+        assert report.created_students == 11
+        [skip] = report.skipped
+        assert (skip.row_number, skip.field) == (12, "number")
+        assert skip.raw_value != str(TCKN_OGRENCI_1)
+        assert not Student.objects.filter(student_number=str(TCKN_OGRENCI_1)).exists()
+
     def test_dogum_tarihsiz_dort_sutun_kabul(self) -> None:
         rows = [r[:4] for r in _SABLON_SATIRLARI]
         report = import_service.preview_students_text(text=_basliksiz_metin(rows))
@@ -548,7 +559,7 @@ class TestVeliUyarisiSutunDuzeyinde:
         row[4:9] = ["", "", "", "", ""]
         report = import_service.preview_students_file(file_bytes=make_xlsx([row]))
         assert [(w.field, w.issue) for w in report.warnings] == [
-            ("guardian", "Dosyada bu öğrencinin veli bilgisi yok.")
+            ("guardian", "Anne/baba bilgisi okunamadı; veli alanları güncellenmedi.")
         ]
 
     def test_yalniz_anne_bilgisi_varsa_uyari_anne_der(self) -> None:

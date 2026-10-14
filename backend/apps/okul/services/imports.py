@@ -30,7 +30,7 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import excel_personel, excel_veli, selectors
+from apps.okul import excel_personel, excel_veli, normalize, selectors
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.excel_veli import ColumnMapping, ParsedParent, ParsedRow, ParserError
 from apps.okul.models import (
@@ -188,7 +188,7 @@ def _missing_columns_error(
         "alınan dosyayı doldurun."
     )
     if headerless_hint:
-        message += " Başlıksız yapıştırırken sütunlar şablon sırasında olmalıdır."
+        message += " Başlık satırı olmadan yapıştırıyorsanız sütunlar şablon sırasında olmalıdır."
     return ParserError(message)
 
 
@@ -412,6 +412,16 @@ def _process_student_row(
             "Okul numarası veya TCKN bulunamadı.",
         )
         return
+    if row.student_number and normalize.normalize_tckn(row.student_number) is not None:
+        # Okul numarası sütununa TCKN yazılmış: şifresiz student_number alanına ve
+        # evraka düşmesin (KVKK). raw_value MASKELİ.
+        report.add_skip(
+            row.row_number,
+            "number",
+            "Okul numarası yerine TCKN yazılmış; satır atlandı.",
+            mask_tckn(row.student_number),
+        )
+        return
     if row.class_level is None:
         report.add_skip(
             row.row_number, "class", "Sınıf/şube çözülemedi (beklenen yazım: 10/A)", row.raw_class
@@ -567,7 +577,10 @@ def _resolve_guardian(
 
     if not mother.has_any_data and not father.has_any_data:
         report.add_warning(
-            row.row_number, "guardian", "Dosyada bu öğrencinin veli bilgisi yok.", row.guardian
+            row.row_number,
+            "guardian",
+            "Anne/baba bilgisi okunamadı; veli alanları güncellenmedi.",
+            row.guardian,
         )
         return GuardianKinship.FATHER, father, mother
     # Uyarı fiilî sonucu söyler: baba verisi yoksa kayda ANNE yazılır.
