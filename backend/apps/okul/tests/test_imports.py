@@ -470,8 +470,37 @@ class TestBasliksizSekilDenetimi:
     def test_fazladan_sutun_reddedilir(self) -> None:
         self._reddedilir([[*_SABLON_SATIRLARI[0], "K"]])
 
-    def test_ilk_on_satirdan_biri_uymazsa_reddedilir(self) -> None:
-        self._reddedilir([*_SABLON_SATIRLARI, ["10/A", TCKN_OGRENCI_2, "ALİ", "VELİ", ""]])
+    def test_ilk_on_satirda_baska_duzen_kaniti_satir_numarasiyla_reddedilir(self) -> None:
+        from apps.okul.excel_veli import ParserError
+
+        rows = [*_SABLON_SATIRLARI, ["10/A", TCKN_OGRENCI_2, "ALİ", "VELİ", ""]]
+        with pytest.raises(ParserError, match="4. satır şablon sırasına uymuyor: Okul Numarası"):
+            import_service.commit_students_text(text=_basliksiz_metin(rows))
+        assert Student.objects.count() == 0
+
+    def test_tek_bos_hucre_listeyi_reddettirmez_satir_atlanir(self) -> None:
+        """İlk 10 satırdan birinde boş hücre başka düzenin kanıtı değildir."""
+        rows: list[list[object]] = [
+            *_SABLON_SATIRLARI,
+            ["10/A", "", "ELİF", "DEMİR", ""],
+            ["", 240, "AYŞE", "AK", ""],
+        ]
+        report = import_service.preview_students_text(text=_basliksiz_metin(rows))
+        assert report.created_students == 3
+        assert [(i.row_number, i.field) for i in report.skipped] == [(4, "number"), (5, "class")]
+
+    def test_ad_sutununda_her_satir_ad_soyad_ise_reddedilir(self) -> None:
+        """ "Sınıf | No | Ad Soyad | Veli Adı" düzeni: veli adı soyad olarak yazılmasın."""
+        self._reddedilir(
+            [
+                ["10/A", 220, "TUĞBANUR POLAT", "AYŞE POLAT"],
+                ["10/A", 221, "ELİF KAYA", "FATMA KAYA"],
+                ["10/A", 222, "ZEYNEP AK", "HASAN AK"],
+            ]
+        )
+
+    def test_soyad_yerinde_veli_kim_reddedilir(self) -> None:
+        self._reddedilir([["10/A", 220, "TUĞBANUR POLAT", "ANNE", "21.02.2012"]])
 
     def test_dogum_tarihsiz_dort_sutun_kabul(self) -> None:
         rows = [r[:4] for r in _SABLON_SATIRLARI]
@@ -489,6 +518,18 @@ class TestDosyaIciYinelenenOgrenci:
         [skip] = report.skipped
         assert (skip.row_number, skip.field, skip.raw_value) == (4, "number", "220")
         assert "1. satırda" in skip.issue
+
+    def test_ayni_numarali_farkli_tcknli_ogrenciler_birbirini_ezmez(self) -> None:
+        first = _yilmaz_row(numara=500)
+        second = [*_yilmaz_row(sinif="11/B", numara=500)]
+        second[1] = TCKN_OGRENCI_2
+        second[3] = AILE_KAYA["ogrenci_ad_soyad"]
+        report = import_service.commit_students_file(file_bytes=make_xlsx([first, second]))
+        assert report.created_students == 2 and report.skipped == []
+        assert {s.tckn for s in Student.objects.all()} == {
+            str(TCKN_OGRENCI_1),
+            str(TCKN_OGRENCI_2),
+        }
 
     def test_yinelenen_tckn_maskeli_raporlanir(self) -> None:
         first = _yilmaz_row(numara=2612)

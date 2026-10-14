@@ -131,11 +131,18 @@ def normalize_phone(value: object) -> str | None:
 
 
 # e-Okul uzun etiketindeki ("9. Sınıf / A Şubesi") sözcükler şube DEĞİLDİR; ilk
-# harf öbeği şube sayıldığında evraka "9/SINIF" basılıyordu. Önde gelen MTAL
-# program kodu ("AMP 10/A") tahmin edilmez: None → satır görünür biçimde atlanır.
-# Karşılaştırma ASCII-katlanmış hâlle yapılır (yalnız eşleme için, §7.2).
+# harf öbeği şube sayıldığında evraka "9/SINIF" basılıyordu. Seviyeden ÖNCE gelen
+# MTAL program kodu ("AMP 10/A") ya da yazılı program adı ("Anadolu Meslek Programı
+# 10. Sınıf / A Şubesi") tahmin edilmez: None → satır görünür biçimde atlanır.
+# Seviyeden sonra gelen ad şubedir ("10/MEM" → MEM). Karşılaştırma ASCII-katlanmış
+# hâlle yapılır (yalnız eşleme için, §7.2).
 _CLASS_LABEL_WORDS = frozenset({"SINIF", "SINIFI", "SUBE", "SUBESI"})
 _PROGRAM_CODES = frozenset({"AMP", "ATP", "MEM", "MESEM"})
+_SECTION_WORD_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşü]+")
+
+
+def _section_words(text: str) -> list[str]:
+    return [w for w in _SECTION_WORD_RE.findall(text) if _ascii_upper(w) not in _CLASS_LABEL_WORDS]
 
 
 def normalize_class_section(value: object) -> tuple[int, str] | None:
@@ -147,12 +154,14 @@ def normalize_class_section(value: object) -> tuple[int, str] | None:
     if not s:
         return None
     level_m = re.search(r"\d{1,2}", s)
-    words = [
-        w
-        for w in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]+", s)
-        if _ascii_upper(w) not in _CLASS_LABEL_WORDS
-    ]
-    if level_m is None or not words or _ascii_upper(words[0]) in _PROGRAM_CODES:
+    if level_m is None:
+        return None
+    before = _section_words(s[: level_m.start()])
+    after = _section_words(s[level_m.end() :])
+    if len(before) > 1 or any(_ascii_upper(w) in _PROGRAM_CODES for w in before):
+        return None
+    words = after or before  # "A/10" gibi şube-önde yazım
+    if not words:
         return None
     level = int(level_m.group())
     if level < 9 or level > 12:

@@ -239,6 +239,9 @@ def test_excel_date_gelecek_ise_baslama_kabul() -> None:
         ("10/A (AMP)", (10, "A")),
         ("12/A Çocuk Gelişimi", (12, "A")),
         ("10. Sınıf / Ç Şubesi", (10, "Ç")),
+        ("Sınıf 10 A", (10, "A")),
+        ("10/MEM", (10, "MEM")),  # seviyeden SONRA gelen ad şubedir
+        ("A/10", (10, "A")),  # şube-önde yazım
     ],
 )
 def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[int, str]) -> None:
@@ -246,7 +249,16 @@ def test_class_uzun_etiket_sozcukleri_sube_sayilmaz(raw: str, expected: tuple[in
     assert normalize.normalize_class_section(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["AMP 10/A", "ATP-10/B", "MEM 11/A", "AMP – 9. SINIF / A Şubesi"])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "AMP 10/A",
+        "ATP-10/B",
+        "MEM 11/A",
+        "AMP – 9. SINIF / A Şubesi",
+        "Anadolu Meslek Programı 10. Sınıf / A Şubesi",
+    ],
+)
 def test_class_program_oneki_tahmin_edilmez(raw: str) -> None:
     """Program kodu önce gelirse şube tahmin edilmez: satır görünür biçimde atlanır."""
     assert normalize.normalize_class_section(raw) is None
