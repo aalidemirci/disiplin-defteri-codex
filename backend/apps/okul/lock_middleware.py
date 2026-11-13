@@ -9,6 +9,9 @@ KİLİTLİYKEN NE ÇALIŞIR (kritik tasarım sorusu 1'in ikinci yarısı):
 
 * `GET /api/v1/security/status/`, `POST /api/v1/security/unlock/`,
   `POST /api/v1/security/recover/` — kilidi açmanın tek yolu bunlar.
+* `/api/v1/security/backups/` — yedek özeti ve yedekten geri yükleme. Kilit
+  açılamıyorken (ya da boş kurulumda) yedekten dönülebilmelidir; yanıt kişisel
+  veri içermez, şifreli yedek zaten kendi parolasını ister.
 * `GET /api/v1/setup/status/` — masaüstü kabuğunun AÇILIŞ SAĞLIK DENETİMİ bu
   ucu çağırır (`desktop/server.py::HEALTH_PATH`); kilitliyken 423 dönseydi
   parola kurulu her kurulumda program hiç açılmazdı. Yanıtı kişisel veri
@@ -17,8 +20,8 @@ KİLİTLİYKEN NE ÇALIŞIR (kritik tasarım sorusu 1'in ikinci yarısı):
 * API dışı yollar (SPA'nın kendisi, statik dosyalar) — kilit ekranının
   yüklenebilmesi için serbest.
 * **Yerel yedekleme etkilenmez**: günlük yedek bir HTTP ucu değildir, masaüstü
-  kabuğu onu açılışta açık yedek anahtarıyla alır (`desktop/main.py`). Ortaya
-  yalnız AES-256-GCM korumalı `.ddbak` çıkar; kilit bunu engellemez.
+  kabuğu onu açılışta açık yedek anahtarıyla alır (`desktop/main.py`). Parola
+  kuruluyken ortaya yalnız AES-256-GCM korumalı `.ddbak` çıkar; kilit bunu engellemez.
 
 Bu ara katman `config/settings.py` MIDDLEWARE listesine eklenir. Eklenmezse
 program yine çalışır (alanlar şifreli görünür), yalnız bu kapı devre dışı kalır.

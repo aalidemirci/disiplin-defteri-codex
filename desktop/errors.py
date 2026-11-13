@@ -20,6 +20,21 @@ EXIT_WEBVIEW_UNAVAILABLE = 7
 EXIT_PDF_SMOKE_FAILED = 8
 # Paket teşhis kipi (`--kripto-duman`): parola zinciri (Argon2id/Fernet) bozuk.
 EXIT_CRYPTO_SMOKE_FAILED = 9
+# Arayüzden hazırlanan yedek açılışta yerine konamadı (desktop/restore.py).
+EXIT_RESTORE_FAILED = 10
+
+# Yedekten ELLE dönüş adımları — "veritabanı bozuk" ve "güncellenemedi" iletileri
+# ile docs/kurulum.md §5.1 aynı yolu anlatır; metin tek yerde durur.
+MANUAL_RESTORE_STEPS = (
+    "1) Veri klasöründeki 'db.sqlite3' dosyasını (varsa 'db.sqlite3-wal' ve "
+    "'db.sqlite3-shm' ile birlikte) SİLMEDEN başka bir klasöre taşıyın.\n"
+    "2) Yedekler klasöründeki en son yedeğin uzantısı '.sqlite3' ise: onu veri "
+    "klasörüne 'db.sqlite3' adıyla kopyalayıp programı yeniden açın.\n"
+    "3) Uzantısı '.ddbak' ise (şifreli yedek) adını değiştirerek kopyalamak İŞE YARAMAZ: "
+    "programı açın; açılan ekrandaki (kilit ekranı ya da kurulum sihirbazı) "
+    "'Yedekten geri yükle' bölümünden yedeği seçip yedeğin parolasını girin, "
+    "sonra programı kapatıp yeniden açın."
+)
 
 
 class StartupError(Exception):
@@ -72,6 +87,13 @@ class ServerStartError(StartupError):
 
     exit_code = EXIT_SERVER_FAILED
     title = "Program başlatılamadı"
+
+
+class RestoreFailedError(StartupError):
+    """Bekleyen geri yükleme uygulanamadı — veri eski hâliyle yerinde bırakıldı."""
+
+    exit_code = EXIT_RESTORE_FAILED
+    title = "Yedekten geri yükleme tamamlanamadı"
 
 
 class WebViewUnavailableError(StartupError):

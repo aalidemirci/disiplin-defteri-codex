@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from desktop.errors import (
     EXIT_OK,
     EXIT_WEBVIEW_UNAVAILABLE,
     DatabaseCorruptError,
+    MigrationError,
     WebViewUnavailableError,
 )
 from desktop.lock import SingleInstanceLock
@@ -65,6 +67,7 @@ def izlenen_adimlar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
         return sahte
 
+    monkeypatch.setattr(main_mod, "apply_pending_restore", kaydet("bekleyen-geri-yukleme"))
     monkeypatch.setattr(main_mod, "ensure_stamp_compatible", kaydet("surum-damgasi"))
     monkeypatch.setattr(main_mod, "check_database_integrity", kaydet("butunluk"))
     monkeypatch.setattr(main_mod, "encrypt_legacy_backups", kaydet("eski-yedekleri-sifrele", []))
@@ -84,6 +87,7 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
     main_mod.prepare_data(paths, "0.1.0")
 
     assert izlenen_adimlar == [
+        "bekleyen-geri-yukleme",  # hiçbir bağlantı açılmadan önce yerine konur
         "surum-damgasi",  # eski program yeni veriyi açmasın
         "butunluk",  # bozuk veriyle yedek rotasyonu ÇALIŞTIRILMAZ
         "eski-yedekleri-sifrele",
@@ -254,9 +258,11 @@ def test_ikinci_acilis_gunluk_yedegi_alir(tmp_path: Path) -> None:
         )
         assert sonuc.returncode == EXIT_OK, sonuc.stderr
 
-    # Uygulama parolası kurulana dek açık yedek üretmek yerine günlük yedek atlanır.
-    yedekler = list((tmp_path / "backups").glob("gunluk-*"))
-    assert yedekler == []
+    # Parolasız (varsayılan) kurulum: veritabanı zaten düz durduğu için günlük yedek
+    # düz `.sqlite3` olarak alınır. İlk açılışta veritabanı henüz yoktur; yedeği
+    # ikinci açılış üretir. (13.11.2026 öncesi bu kipte yedek sessizce atlanıyordu.)
+    yedekler = [p.name for p in (tmp_path / "backups").glob("gunluk-*")]
+    assert yedekler == [f"gunluk-{date.today().isoformat()}.sqlite3"]
 
 
 @pytest.mark.slow
@@ -288,3 +294,22 @@ def test_gunluge_ogrenci_arama_sorgusu_dusmez(tmp_path: Path) -> None:
     assert "setup/status" not in sonuc.stderr
     assert "Forbidden" not in sonuc.stderr
     assert "Logging error" not in sonuc.stderr
+
+
+def test_goc_oncesi_yedek_yazilamazsa_goc_yapilmaz(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Yedeği alınamayan veri göç ettirilmez: açılış anlaşılır hatayla durur."""
+
+    def dolu(*args: Any, **kwargs: Any) -> None:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(main_mod, "pre_migrate_backup", dolu)
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    with pytest.raises(MigrationError) as hata:
+        main_mod.prepare_data(paths, "0.1.0")
+
+    assert "goc" not in izlenen_adimlar
+    assert "yedek alınamadığı" in hata.value.message
+    assert str(paths.backups) in hata.value.hint

@@ -28,6 +28,7 @@ from apps.okul.serializers import (
     HolidaySerializer,
     ImportRequestSerializer,
     PersonnelSerializer,
+    RestoreBackupRequestSerializer,
     SchoolConfigSerializer,
     SchoolTermConfigurationSerializer,
     SchoolTermSerializer,
@@ -40,6 +41,7 @@ from apps.okul.services import class_responsibilities as class_responsibility_se
 from apps.okul.services import encrypted_backup as encrypted_backup_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import persons as persons_service
+from apps.okul.services import restore_backup as restore_backup_service
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import templates as template_service
@@ -612,3 +614,45 @@ class EncryptedBackupDownloadView(APIView):
             filename=filename,
             content_type="application/octet-stream",
         )
+
+
+class BackupRestoreView(APIView):
+    """`/api/v1/security/backups/` — yedek özeti ve yedekten geri yükleme.
+
+    Kilit kapısından muaf ön ekin altındadır: kilit açılamıyorken ya da kurulum
+    tamamlanmamışken de yedekten dönülebilmelidir. Yanıt kişisel veri içermez.
+
+    * `GET`    yedek listesi, son günlük yedek, bekleyen geri yükleme var mı
+    * `POST`   yedeği doğrulayıp bir sonraki açılış için bekletir
+    * `DELETE` bekleyen geri yüklemeden vazgeçer
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response(restore_backup_service.overview())
+
+    def post(self, request: Request) -> Response:
+        req = RestoreBackupRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        data = req.validated_data
+        secrets = {
+            "password": str(data.get("password", "")),
+            "recovery_key": str(data.get("recovery_key", "")),
+        }
+        uploaded = data.get("file")
+        name = str(data.get("name", "")).strip()
+        with _service_errors():
+            if (uploaded is not None) == bool(name):  # ikisi birden veya hiçbiri
+                raise ValueError("Bir yedek seçin: listeden bir yedek ya da bir yedek dosyası.")
+            if uploaded is not None:
+                # Boyut, dosya belleğe okunmadan ÖNCE denetlenir.
+                if (uploaded.size or 0) > restore_backup_service.MAX_RESTORE_BYTES:
+                    raise ValueError(
+                        "Yedek dosyası beklenenden büyük (1 GB üstü); geri yüklenemez."
+                    )
+                sonuc = restore_backup_service.stage_restore(uploaded.read(), **secrets)
+            else:
+                sonuc = restore_backup_service.stage_local_backup(name, **secrets)
+        return Response(sonuc)
+
+    def delete(self, request: Request) -> Response:
+        return Response(restore_backup_service.cancel_pending())

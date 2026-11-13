@@ -16,7 +16,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from desktop.errors import DatabaseCorruptError
+from desktop.errors import MANUAL_RESTORE_STEPS, DatabaseCorruptError
 
 logger = logging.getLogger("disiplin_defteri.integrity")
 
@@ -25,15 +25,8 @@ _MESSAGE = "Veri dosyası bozuk görünüyor; program veriyi korumak için açı
 
 def _hint(backup_dir: Path | None) -> str:
     if backup_dir is None:
-        return (
-            "Son sağlam yedeği veri klasöründeki yedekler dizininden geri yükleyin "
-            "(yedek dosyasını db.sqlite3 adıyla veri dizinine kopyalayın)."
-        )
-    return (
-        f"Yedek klasörü: {backup_dir}\n"
-        "En son tarihli yedeği veri klasörüne 'db.sqlite3' adıyla kopyalayıp programı "
-        "yeniden açın. Bozuk dosyayı silmeyin; bir kopyasını saklayın."
-    )
+        return f"Son sağlam yedeği yedekler dizininden geri yükleyin:\n{MANUAL_RESTORE_STEPS}"
+    return f"Yedek klasörü: {backup_dir}\n{MANUAL_RESTORE_STEPS}"
 
 
 def check_database_integrity(db_path: Path, *, backup_dir: Path | None = None) -> None:

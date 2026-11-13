@@ -101,7 +101,7 @@ disiplin-defteri/
 │   └── modules/           # disiplin/ (uyarlama) + kurul/ (iki kurulun sayfaları, gündem,
 │                          #   toplantı ekranı — 04.10.2026) + odul/ (onur panelleri) + kurulum/
 │                          #   + kisiler/ + ayarlar/ + panel/ + bilgi-notlari/ (YENİ)
-├── desktop/               # main.py (kilit→yedek→migrate→waitress thread→pywebview), server.py, lock.py
+├── desktop/               # main.py (kilit→geri yükleme→bütünlük→yedek→migrate→waitress thread→pywebview), server.py, lock.py
 ├── packaging/             # PyInstaller spec, windows/ (Inno + DLL kapanışı), linux/ (.deb)
 └── docs/, scripts/
 ```
@@ -264,8 +264,10 @@ celery, gunicorn, sentry, simplejwt, axes, cors, csp, structlog…) ayıklanır;
 ### 5.3 Çalışma zamanı düzeni
 - **Veri dizini exe DIŞINDA:** Win `%LOCALAPPDATA%\DisiplinDefteri\{data,backups,logs,cache}` (§10.3; Roaming DEĞİL — profil senkronu
   açık SQLite'ı bozar); Linux XDG (`~/.local/share|state|.cache/disiplin-defteri`).
-- **Açılış sırası:** tek-instance kilidi (`msvcrt.locking`/`fcntl.flock`) → günlük otomatik yedek
-  (`sqlite3.Connection.backup()`, 14 gün rotasyon; migrate öncesi ayrıca `pre-migrate-<sürüm>` kopyası) →
+- **Açılış sırası:** tek-instance kilidi (`msvcrt.locking`/`fcntl.flock`) → arayüzden hazırlanmış yedeğin
+  yerine konması (`desktop/restore.py`, 13.11.2026) → sürüm damgası → `PRAGMA integrity_check` (bilinçli
+  olarak yedekten ÖNCE) → günlük otomatik yedek (`sqlite3.Connection.backup()`, 14 gün rotasyon; parola
+  kuruluysa şifreli `.ddbak`, değilse düz `.sqlite3`; migrate öncesi ayrıca `pre-migrate-<sürüm>` kopyası) →
   `migrate --no-input` (hata → pencere açılmaz, "son yedekten dön" diyaloğu) → `waitress` arka-plan thread'i
   (127.0.0.1, `bind(0)` ile boş port) → pywebview penceresi.
 - **Yerel güvenlik sigortası:** authsuz olduğundan rastgele oturum belirteci URL'ye eklenir; middleware belirteçsiz istekleri reddeder

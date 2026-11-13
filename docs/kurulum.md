@@ -116,12 +116,29 @@ Sihirbaz tamamlanmadan disiplin dosyası açılamaz.
 | Otomatik yedekler | `%LOCALAPPDATA%\DisiplinDefteri\backups` | `~/.local/share/disiplin-defteri/backups` |
 | Günlük kayıtları | `%LOCALAPPDATA%\DisiplinDefteri\logs` | `~/.local/state/disiplin-defteri/logs` |
 
-* Program **her açılışta** otomatik yedek alır (`gunluk-<tarih>.sqlite3`) ve
+* Program **her açılışta** o günün yedeğini alır (`gunluk-<tarih>`) ve günlük
   yedekleri 14 gün saklar.
 * Program **güncellenmeden önce** ayrıca bir yedek alır
-  (`pre-migrate-<sürüm>-<tarih>.sqlite3`).
+  (`pre-migrate-<sürüm>-<tarih>`; son 5 tanesi saklanır).
+* Yedeğin biçimi uygulama parolasına bağlıdır:
+  * **Parola kurulu değilse** (varsayılan) yedek, veritabanının kendisi gibi düz
+    bir dosyadır: uzantısı `.sqlite3`.
+  * **Parola kuruluysa** yedek şifrelidir: uzantısı `.ddbak`. Parolayı kurduğunuz
+    anda eski düz günlük ve güncelleme öncesi yedekler de şifrelenir.
+    (`geri-yukleme-oncesi-…` klasörleri şifrelenmez; bkz. §5.1.)
+* Son otomatik yedeğin tarihini **Ayarlar → Güvenlik → Otomatik yedekler ve geri
+  yükleme** kartında görürsünüz. Kart "Bugünün yedeği alınmamış" uyarısını art
+  arda iki gün gösteriyorsa yedekleme çalışmıyor demektir (çoğu kez disk
+  doludur); okul bilişim sorumlusuna haber verin.
 * **Yedekler aynı bilgisayardadır.** Disk arızasına karşı `backups` klasörünü
   ayda en az bir kez USB belleğe kopyalayın.
+* Yedek yalnız **veritabanını** içerir. Dosyalara eklediğiniz belgeler (taranmış
+  dilekçe vb.) `data\media` klasöründedir; onları korumak için `data` klasörünü de
+  USB belleğe kopyalayın.
+
+> **`2026.10.0-beta.2` ve önceki sürümler:** Parola kurulmamış kurulumlarda
+> otomatik yedek **alınmıyordu** (yedek klasörü boş kalıyordu). Sonraki sürüme
+> güncelledikten sonraki açılışlarda yedekler oluşmaya başlar.
 
 > **Önemli:** Programı kaldırmak veya yeniden kurmak bu klasörleri silmez.
 > Bu davranış güncelleme sırasında kayıtların kaybolmasını önler. Aynı Windows
@@ -130,12 +147,65 @@ Sihirbaz tamamlanmadan disiplin dosyası açılamaz.
 
 ### 5.1 Yedekten geri dönme
 
-1. Programı **kapatın**.
-2. `backups` klasöründeki en güncel dosyayı seçin
-   (örn. `gunluk-2026-07-20.sqlite3`).
-3. Bu dosyayı `data` klasörüne kopyalayın ve adını **`db.sqlite3`** yapın
-   (eski `db.sqlite3` dosyasını silmeden önce başka bir yere taşıyın).
-4. Programı yeniden açın.
+**Program açılıyorsa (yanlış bir işlemi geri almak, eski bir güne dönmek):**
+
+1. **Ayarlar → Güvenlik → Otomatik yedekler ve geri yükleme** kartını açın.
+2. Listeden yedeği seçin (ya da USB bellekteki yedek dosyasını gösterin).
+   Yedek şifreliyse (`.ddbak`) ve program parola isterse **yedeğin alındığı
+   tarihteki** uygulama parolasını ya da kurtarma anahtarını girin.
+3. **Geri yüklemeyi hazırla** deyin. Program yedeği doğrular; bu aşamada
+   kayıtlarınız değişmez ve **Vazgeç** ile işlemi iptal edebilirsiniz.
+4. Programı **hemen kapatıp yeniden açın**. Yedek yerine konur. Hazırlıktan sonra
+   programı kapatmadan girdiğiniz kayıtlar da geri yüklemeyle birlikte kaybolur;
+   program bunu her ekranın üstünde kırmızı bir uyarıyla hatırlatır.
+
+**Parolanız ne olur?** Aynı kurulumun eski bir yedeğine dönüyorsanız parolanız
+**değişmez** (parolayı sonradan değiştirmiş olsanız bile bugünkü parolanız
+geçerlidir). Yedek başka bir kurulumdan geliyorsa ya da parolayı kaldırıp yeniden
+kurduysanız, geri yüklemeden sonra geçerli parola ve kurtarma anahtarı **yedeğin
+alındığı tarihteki** parola ve anahtardır; program bunu hazırlık sırasında söyler.
+
+Geri yüklemeden önceki veriniz silinmez: `backups` klasöründe
+`geri-yukleme-oncesi-<tarih-saat>` adlı bir klasöre taşınır ve orada **14 gün**
+saklanır (sonra program siler). Bu klasördeki veritabanı, parola kurulu olsa da
+`.ddbak` biçiminde değildir: içindeki kimlik/veli alanları şifreli, diğer
+kayıtlar düz durur. Yanlış yedeği seçtiyseniz, program kapalıyken:
+
+1. `data` klasöründeki `db.sqlite3`, `db.sqlite3-wal` ve `db.sqlite3-shm`
+   dosyalarını başka bir yere taşıyın.
+2. `geri-yukleme-oncesi-…` klasöründeki **bütün dosyaları** (`db.sqlite3`,
+   varsa `db.sqlite3-wal`, `db.sqlite3-shm` ve `guvenlik.json`) `data`
+   klasörüne kopyalayın.
+3. Klasörde `guvenlik.json` varsa `data` klasöründeki `yedekleme.json`
+   dosyasını silin (program ilk kilit açılışında yeniden üretir).
+
+**Hazırlanan yedek yerine konamadıysa (çıkış kodu 10):** kayıtlarınız
+değişmemiştir. Birkaç saniye bekleyip programı yeniden açın. Sorun sürerse ve
+geri yüklemeden vazgeçmek isterseniz `data` klasöründeki
+`geri-yukleme-bekliyor.sqlite3` dosyasını silin.
+
+**Program açılmıyorsa ("Veritabanı bozuk" ya da "güncellenemedi" iletisi, çıkış
+kodu 3 veya 5):**
+
+1. `data` klasöründeki `db.sqlite3` dosyasını — varsa `db.sqlite3-wal` ve
+   `db.sqlite3-shm` ile birlikte — **silmeden** başka bir klasöre taşıyın.
+   (Bu iki yan dosya `data` klasöründe kalırsa yeni veritabanını bozar.)
+2. En güncel yedeğin uzantısı **`.sqlite3`** ise: onu `data` klasörüne kopyalayıp
+   adını **`db.sqlite3`** yapın ve programı açın.
+3. Uzantısı **`.ddbak`** ise (şifreli): adını değiştirip kopyalamak **işe
+   yaramaz**. Programı açın. Parola kurulu olduğu için **kilit ekranı** gelir;
+   altındaki **"Kilidi açamıyor musunuz? Yedekten geri yükleyin"** bölümünü açıp
+   yedeği seçin, yedeğin parolasını girin, sonra programı kapatıp yeniden açın.
+   (Kilit ekranı yerine kurulum sihirbazı gelirse aynı bölüm sihirbazın üstünde
+   **"Elinizde yedek mi var?"** adıyla durur.)
+
+**Yeni bilgisayara taşıma** da aynı yoldan yapılır: programı yeni bilgisayara
+kurun, ilk açılıştaki sihirbazda yedeği seçin. Şifreli yedek kendi güvenlik
+bilgisini taşır; parolanız (ya da kurtarma anahtarınız) yeterlidir. Dosya ekleri
+için `data\media` klasörünü ayrıca kopyalayın.
+
+> Programın daha **yeni** bir sürümüyle alınmış yedek eski sürüme geri
+> yüklenemez; önce programı güncelleyin.
 
 ### 5.2 Bütün verileri silip temiz başlama
 
@@ -265,6 +335,7 @@ Uçbirimden `disiplin-defteri --autotest` çalıştırıp kodu okuyabilirsiniz
 | 7 | Pencere motoru yok (WebView2) | §6.1 |
 | 8 | PDF duman testi başarısız | §6.6 |
 | 9 | Parola/şifreleme duman testi başarısız | §6.8 |
+| 10 | Hazırlanan yedek yerine konamadı (kayıtlar değişmedi) | §5.1 |
 
 ---
 

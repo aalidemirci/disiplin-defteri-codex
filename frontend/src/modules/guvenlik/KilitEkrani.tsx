@@ -14,6 +14,7 @@ import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
 import TextField from "../../ui/TextField";
+import YedektenGeriYuklemeAcilir from "./YedektenGeriYuklemeAcilir";
 import { guvenlikApi } from "./api";
 import { KAPSAM_METNI, YARIM_GECIS_METNI } from "./metinler";
 
@@ -58,7 +59,7 @@ export default function KilitEkrani({ onAcildi, yarimGecis = false }: KilitEkran
   }
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center p-4">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-4">
       <Card elevation={1} className="w-full max-w-md p-6">
         <div className="mb-4 flex items-center gap-3">
           <Icon name="lock" size="lg" className="text-primary" />
@@ -134,6 +135,12 @@ export default function KilitEkrani({ onAcildi, yarimGecis = false }: KilitEkran
           {KAPSAM_METNI}
         </p>
       </Card>
+
+      {/* Kilit açılamıyorsa (ya da veritabanı bozulup boş açıldıysa) yedekten dönüş:
+          uç kilit kapısından muaftır, şifreli yedek kendi parolasını ister. */}
+      <div className="w-full max-w-2xl">
+        <YedektenGeriYuklemeAcilir etiket="Kilidi açamıyor musunuz? Yedekten geri yükleyin" />
+      </div>
     </div>
   );
 }

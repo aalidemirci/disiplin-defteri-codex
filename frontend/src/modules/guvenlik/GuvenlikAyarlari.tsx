@@ -17,6 +17,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import KurtarmaAnahtariDiyalogu from "./KurtarmaAnahtariDiyalogu";
 import SifreliYedekleme from "./SifreliYedekleme";
+import YedektenGeriYukleme from "./YedektenGeriYukleme";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
 import { kilitOlayiYayinla } from "./GuvenlikKapisi";
@@ -161,6 +162,10 @@ export default function GuvenlikAyarlari({ okulAdi = "" }: GuvenlikAyarlariProps
           )}
         </div>
       </Card>
+
+      {/* Parola kurulunca/kaldırılınca yedek klasörü değişir (düz yedekler `.ddbak` olur,
+          parola işlemi öncesi yedek eklenir); kart yeniden kurulup listeyi baştan okur. */}
+      <YedektenGeriYukleme key={durum.password_set ? "parolali" : "parolasiz"} />
 
       <SifreliYedekleme parolaKurulu={durum.password_set} />
 

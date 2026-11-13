@@ -25,6 +25,12 @@ const oapi = vi.hoisted(() => ({
 }));
 
 vi.mock("../okul/api", () => ({ okulApi: oapi }));
+// Kendi testi var (guvenlik/YedektenGeriYukleme.test.tsx); burada yalnız yeri sınanır.
+vi.mock("../guvenlik/YedektenGeriYuklemeAcilir", () => ({
+  default: ({ etiket }: { etiket: string }) => (
+    <div data-testid="yedekten-geri-yukleme">{etiket}</div>
+  ),
+}));
 
 import KurulumPage from "./KurulumPage";
 
@@ -71,6 +77,13 @@ afterEach(() => {
 });
 
 describe("KurulumPage", () => {
+  it("tamamlanmamış kurulumda yedekten geri yükleme bölümünü sunar", async () => {
+    renderPage();
+
+    expect(await screen.findByText(/Elinizde yedek mi var/)).toBeInTheDocument();
+    expect(screen.getByTestId("yedekten-geri-yukleme")).toBeInTheDocument();
+  });
+
   it("boş kurulumda 1. adımdan başlar; okul bilgileri kaydedilince 2. adıma geçer", async () => {
     oapi.updateSchoolConfig.mockResolvedValue({ ...BOS_CONFIG, school_name: "Deneme Lisesi" });
     const user = userEvent.setup();

@@ -15,9 +15,11 @@ türetilenle. Parola unutulursa kurtarma anahtarı veriyi kurtarır (tasarım §
 "parola unutma = veri kaybı olmasın").
 
 NEDEN GÜVENLİK DOSYASI VERİ DİZİNİNDE, DB'DE DEĞİL?
-  * Yedekler (`backups/gunluk-*.ddbak`) X25519 + AES-256-GCM kapsayıcılarıdır.
-    Sarmallar orada olmadığı için USB'ye/Drive'a alınan bir yedek TEK BAŞINA
-    açılamaz — parolalı kipin en somut kazancı budur.
+  * Yedekler (`backups/gunluk-*.ddbak`) X25519 + AES-256-GCM kapsayıcılarıdır ve
+    güvenlik dosyasının bir kopyasını (KDF parametreleri + SARMALANMIŞ anahtar)
+    başlıkta taşırlar. USB'ye/Drive'a alınan bir yedek bu yüzden parola ya da
+    kurtarma anahtarı OLMADAN açılamaz, ama onlarla başka bir bilgisayarda da
+    açılabilir (`services/restore_backup.py`).
   * Buna karşılık DB'de yalnız anahtarın PARMAK İZİ durur; yanlış eşleşme
     (başka kurulumun güvenlik dosyası) sessizce bozuk çözme yerine açık ret
     üretir.
@@ -584,6 +586,22 @@ def _adopt_key(state: dict[str, Any], data_key: bytes) -> None:
     _reset_failures()
     if gecis != TRANSITION_DONE or not kayitli:
         resume_pending()
+
+
+def data_key_from_state(
+    state: dict[str, Any], *, password: str = "", recovery_key: str = ""
+) -> bytes:
+    """Verilen güvenlik durumundan veri anahtarını açar (yedekten geri yükleme).
+
+    `state` diskteki `guvenlik.json` olmak zorunda değildir: şifreli yedek kendi
+    başlığını taşır, yedek o günkü parola ya da kurtarma anahtarıyla açılır.
+    Başarısız denemeler diğer açma yollarıyla aynı gecikmeye tabidir.
+    """
+    if password:
+        return _unwrap_with_password(state, password)
+    if recovery_key:
+        return _unwrap_with_recovery(state, recovery_key)
+    raise AppPasswordError("Parola ya da kurtarma anahtarı gerekli.")
 
 
 def _unwrap_with_password(state: dict[str, Any], password: str) -> bytes:

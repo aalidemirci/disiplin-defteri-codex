@@ -219,3 +219,20 @@ class HolidaySeedRequestSerializer(serializers.Serializer[dict[str, Any]]):
     """Tatil seed isteği — yıl verilmezse aktif ders yılı kullanılır."""
 
     school_year = serializers.IntegerField(required=False, allow_null=True)
+
+
+class RestoreBackupRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Geri yükleme girdisi: yüklenen yedek dosyası VEYA yedekler klasöründeki ad.
+
+    "Tam olarak biri" kuralı view'da denetlenir: serializer düzeyindeki alan dışı
+    hata sözleşmede `fields.non_field_errors` altına düşer ve arayüz yalnız genel
+    "Gönderilen veride hatalar var" iletisini gösterirdi.
+    """
+
+    file = serializers.FileField(required=False)
+    name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    # Parola alanları kırpılmaz: baştaki/sondaki boşluk parolanın parçası olabilir.
+    password = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=False, max_length=1024
+    )
+    recovery_key = serializers.CharField(required=False, allow_blank=True, max_length=255)

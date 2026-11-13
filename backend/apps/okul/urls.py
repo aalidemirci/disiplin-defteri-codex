@@ -104,6 +104,8 @@ urlpatterns = [
         name="security-change-password",
     ),
     path("security/disable/", views.SecurityDisableView.as_view(), name="security-disable"),
+    # Yedek özeti + yedekten geri yükleme — kilitliyken de erişilebilir (security/ ön eki).
+    path("security/backups/", views.BackupRestoreView.as_view(), name="backup-restore"),
     path(
         "backups/encrypted/",
         views.EncryptedBackupDownloadView.as_view(),
