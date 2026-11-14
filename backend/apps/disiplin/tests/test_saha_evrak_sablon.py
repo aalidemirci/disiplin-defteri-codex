@@ -386,12 +386,12 @@ def test_mem_tedbir_yazilarinda_muhatap_ilce_adiyla(variant: str) -> None:
     assert "ÇEKMEKÖY İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE" in text
 
 
-def test_ilceye_gonderme_yazisinda_muhatap_dolu_iade_yazisi_tarihi_noktali() -> None:
-    """Bulgu 68 (muhatap) + gözden geçirme E4: İlgi (b) iade yazısı tarihi NOKTALI kalır.
+def test_ilceye_gonderme_yazisinda_muhatap_dolu_iade_yazisi_tarihi_kayittan() -> None:
+    """Bulgu 68 (muhatap) + kullanıcı kararı 14.11.2026 — S11b (eski adı `…_tarihi_noktali`):
+    İlgi (b) iade yazısı tarihi kayıttaki İADE tarihidir (`first_returned_at`).
 
-    Önceki tur tarihi kütükteki iade yazısının üretim tarihinden alıyordu; o tarih
-    güvenilir değil ve ilk iade tarihi kayıtta kalmıyor (REFER `returned_at`'i ezer) —
-    eski beklenti ("21.05.2026 tarihli") bu yüzden kaldırıldı."""
+    Kütükteki iade yazısının üretim tarihi yine kaynak değildir: aşağıda yazı iade
+    gününden FARKLI bir tarihle üretilir, İlgi (b) yine iade gününü basar."""
     student = StudentFactory()
     case = _case(student)
     decision = services.record_decision(
@@ -403,7 +403,7 @@ def test_ilceye_gonderme_yazisinda_muhatap_dolu_iade_yazisi_tarihi_noktali() -> 
     services.record_principal_review(
         decision, action="RETURN", reason="Ceza hafif.", decided_on=date(2026, 5, 21)
     )
-    _pdf(case, DocumentType.RETURN_LETTER, student_id=student.pk, generated_on=date(2026, 5, 21))
+    _pdf(case, DocumentType.RETURN_LETTER, student_id=student.pk, generated_on=date(2026, 5, 22))
     services.record_principal_review(
         decision, action="REFER", reason="Kurul ısrar etti.", decided_on=date(2026, 5, 26)
     )
@@ -416,8 +416,8 @@ def test_ilceye_gonderme_yazisinda_muhatap_dolu_iade_yazisi_tarihi_noktali() -> 
         )
     )
     assert "ÇEKMEKÖY İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE" in text
-    assert "b) Müdürlüğümüzün …/…/202… tarihli kurula iade yazısı" in text
-    assert "21.05.2026" not in text
+    assert "b) Müdürlüğümüzün 21.05.2026 tarihli kurula iade yazısı" in text
+    assert "22.05.2026" not in text
 
 
 # ---------------------------------------------------------------------------

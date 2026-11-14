@@ -162,7 +162,44 @@ class DisciplineDecision(BaseModel):
         "iade / sevk tarihi",
         null=True,
         blank=True,
-        help_text="md. 197: kurula iade veya ilçe kuruluna gönderme tarihi.",
+        help_text="md. 197: SON adımın (kurula iade veya ilçe kuruluna gönderme) tarihi; "
+        "iade tarihi ayrıca `first_returned_at`'te korunur.",
+    )
+    # md. 197 — kurula İADE tarihi (kullanıcı kararı 14.11.2026 — S11b). İADE'de yazılır,
+    # ilçeye sevk (REFER) bunu EZMEZ; `returned_at` ise son md. 197 adımının (iade ya da
+    # sevk) tarihidir. S11 göçünden önce sevk edilmiş kararlarda boştur (bilinemez).
+    first_returned_at = models.DateField(
+        "kurula iade tarihi",
+        null=True,
+        blank=True,
+        help_text="md. 197: kararın kurula iade edildiği tarih; ilçeye sevkte korunur.",
+    )
+    # Okul kurulunun VERDİĞİ ceza (S11b). Yalnız ceza sonradan DEĞİŞTİYSE doludur:
+    # üst kurul onayda (md. 200/1-a, 202/1-a; md. 197 sevki dahil) ya da itiraz kurulu
+    # (md. 169/4) cezayı İLK KEZ değiştirirken `services.decisions._apply_penalty_change`
+    # o andaki cezayı buraya yazar; sonraki değişiklikler bunu ezmez, ceza kurulun
+    # verdiğine geri dönse de alan BOŞALTILMAZ (o zaman yürürlükteki cezaya eşittir —
+    # fark yok). Boşsa ceza hiç değişmemiştir (ya da S11 göçünden önce değişmiştir —
+    # özgün ceza bilinemez). Yalnız üst kurul onayı geri alınırken (ceza geri yüklenir)
+    # ve karar düzenlenirken temizlenir.
+    # `DisciplineAppeal.previous_*` FARKLI bir şeydir: o itiraza KONU cezadır (itiraz
+    # kurulunun değiştirdiği, onayda değişmişse okul kurulununkinden farklı olabilir).
+    # `penalty_type` / `suspension_days` her zaman YÜRÜRLÜKTEKİ cezadır: puan, yürürlük,
+    # itiraz mercii ve tebliğler ondan türer; bu alanlar yalnız okul kurulu belgeleri
+    # (EK-1, karar defteri, onaya sevk yazısı…) ve ekrandaki bilgi satırı içindir.
+    board_penalty_type = models.CharField(
+        "okul kurulunun verdiği ceza",
+        max_length=24,
+        choices=PenaltyType.choices,
+        blank=True,
+        default="",
+        help_text="Ceza üst kurulca/itirazla değiştiyse okul kurulunun verdiği özgün ceza.",
+    )
+    board_suspension_days = models.PositiveSmallIntegerField(
+        "okul kurulunun verdiği uzaklaştırma süresi (gün)",
+        null=True,
+        blank=True,
+        help_text="Özgün ceza kısa süreli uzaklaştırmaysa kurulun verdiği gün sayısı.",
     )
     # md. 197 — karar ilçe kuruluna gönderildiyse işaretlenir; ilçe kararına itiraz
     # bir üst kurulda (il) görülür (md. 169/4 "kararı onayan kurul aynı karara
@@ -330,6 +367,19 @@ class DisciplineDecision(BaseModel):
         blank=True,
         default="",
         help_text="EK-1: önceki cezalar (karar anında otomatik derlenir) + genel durum.",
+    )
+    # S11c (kullanıcı kararı 14.11.2026): özetin DERLENDİĞİ andaki otomatik derleme.
+    # Bayatlık bununla ölçülür (güncel derleme ≠ bu iz); kullanıcının özet metnindeki
+    # serbest düzenleme bu alanı değiştirmez, dolayısıyla "bayat" sayılmaz. İçerik karar
+    # NO'SUZ imzadır (satır başına "gg.aa.yyyy — Ceza türü"): önceki karara sonradan
+    # numara atanması bayatlatmaz. Şifreli alan değildir (özetin kendisi de düz metindir).
+    prior_penalties_compiled = models.TextField(
+        "önceki cezalar — derleme izi",
+        blank=True,
+        default="",
+        editable=False,
+        help_text="Özetin son derlendiği andaki otomatik derleme; 'özet güncel değil' "
+        "uyarısı güncel derlemeyle bunun farkından doğar. Evraka basılmaz.",
     )
     notes = models.TextField("açıklama", blank=True, default="")
     md166_override_reason = models.TextField(

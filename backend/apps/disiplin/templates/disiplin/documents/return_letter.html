@@ -2,9 +2,11 @@
 {% comment %}md. 197 kurula iade yazısı — M2 Grup 1 (kullanıcı kararı 27.09.2026). Resmî MEB
 örneği yoktur; içerik md. 197 metninden türetildi, karar kaydı + müdürün iade gerekçesi
 (DisciplineDecision.return_reason) dolu basılır. Müdürden kurul başkanlığına.
-Gözden geçirme 14.11.2026: karar ilçeye sevk edildikten SONRA yeniden üretilen iade yazısında
-iade tarihi kayıtta kalmadığından (returned_at sevk tarihiyle güncellenir) tarih uydurulmaz;
-`return_date_unknown` ile noktalı basılır, elle yazılır.{% endcomment %}
+İade tarihi (S11b, 14.11.2026): kurula İADE tarihi kayıtta `first_returned_at`'te saklanır;
+karar ilçeye sevk edildikten SONRA yeniden üretilen iade yazısında da o basılır (bağlam
+`decision.returned_at` yerine iade tarihini verir — `documents._apply_md197_dates`). Yalnız
+S11 göçünden ÖNCE sevk edilmiş eski kararda iade tarihi bilinmez (returned_at sevk tarihidir):
+tarih uydurulmaz, `return_date_unknown` ile noktalı basılır, elle yazılır.{% endcomment %}
 {% block content %}
 <div class="doc-title">KURUL KARARININ YENİDEN GÖRÜŞÜLMESİ</div>
 <div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 197</div>

@@ -172,6 +172,14 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
     )
     appeals = AppealSerializer(many=True, read_only=True)
 
+    # S11c: EK-1 "önceki cezalar" özeti güncel durumu yansıtmıyor mu (salt-okur uyarı).
+    prior_penalties_stale = serializers.SerializerMethodField()
+
+    def get_prior_penalties_stale(self, obj: DisciplineDecision) -> bool:
+        from apps.disiplin import selectors
+
+        return selectors.prior_penalties_summary_is_stale(obj)
+
     def get_is_final(self, obj: DisciplineDecision) -> bool:
         from apps.disiplin import selectors
 
@@ -204,6 +212,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "approved_at",
             "return_reason",
             "returned_at",
+            "first_returned_at",
+            "board_penalty_type",
+            "board_suspension_days",
             "notified_at",
             "notification_method",
             "appeal_deadline",
@@ -236,6 +247,7 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "incident_place",
             "incident_date",
             "prior_penalties_summary",
+            "prior_penalties_stale",
         ]
         read_only_fields = [
             "behavior_point_deduction",
@@ -244,6 +256,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "approved_at",
             "return_reason",
             "returned_at",
+            "first_returned_at",
+            "board_penalty_type",
+            "board_suspension_days",
             "notified_at",
             "notification_method",
             "appeal_deadline",

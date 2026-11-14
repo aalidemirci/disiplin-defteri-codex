@@ -3,10 +3,11 @@
 kararı 27.09.2026). Resmî MEB örneği yoktur; md. 197 "kurul kararında ısrar ederse müdür
 görüş ve tekliflerini de ekleyerek dosyayı ... en geç beş iş günü içinde ilçe öğrenci
 disiplin kuruluna gönderir" metninden türetildi. Saha denetimi 14.11.2026: muhatap ilçe adı
-kayıtlıysa dolar (`district_upper`); İlgi (b) iade yazısının tarihi ELLE yazılır — ilk iade
-tarihi kayıtta kalmaz (returned_at sevk tarihiyle güncellenir) ve kütükteki PDF üretim tarihi
-güvenilir kaynak değildir; `return_letter_date` bağlamda None'dır (ileride kayıtta ayrı bir
-iade tarihi tutulursa dolacak şekilde koşul korunur).{% endcomment %}
+kayıtlıysa dolar (`district_upper`). İlgi (b) iade yazısının tarihi (S11b, 14.11.2026):
+kurula İADE tarihi kayıtta `first_returned_at`'te saklanır ve `return_letter_date` olarak
+basılır; yazının kendi tarihi sevk tarihidir (`returned_at`). Yalnız S11 göçünden ÖNCE sevk
+edilmiş eski kararda iade tarihi bilinmez — `return_letter_date` None'dır, İlgi (b) noktalı
+kalır ve ELLE yazılır (kütükteki PDF üretim tarihi güvenilir kaynak değildir).{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN DOSYASININ İLÇE KURULUNA GÖNDERİLMESİ</div>
 <div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 197</div>

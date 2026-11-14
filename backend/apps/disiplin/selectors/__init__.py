@@ -50,6 +50,7 @@ from apps.disiplin.selectors.decisions import (
     behavior_point_for_student,
     close_eligibility_details,
     close_eligible,
+    compile_prior_penalties,
     decision_is_final,
     decisions_awaiting_approval,
     decisions_awaiting_notification,
@@ -63,6 +64,7 @@ from apps.disiplin.selectors.decisions import (
     latest_penalty_since,
     latest_resolved_appeal,
     penalties_in_force,
+    prior_penalties_summary_is_stale,
     same_year_prior_penalty,
 )
 from apps.disiplin.selectors.document_log import (
@@ -107,6 +109,8 @@ __all__ = [
     "latest_penalty_since",
     "penalties_in_force",
     "same_year_prior_penalty",
+    "compile_prior_penalties",
+    "prior_penalties_summary_is_stale",
     "case_student_ids",
     "cases_awaiting_committee_decision",
     "cases_for_student",
