@@ -141,9 +141,11 @@ class AppealSerializer(serializers.ModelSerializer[DisciplineAppeal]):
             "resulted_on",
             "result_notes",
             "previous_penalty_type",
+            "previous_suspension_days",
         ]
         read_only_fields = [
             "previous_penalty_type",
+            "previous_suspension_days",
             "decision",
             "within_deadline",
             "appeal_authority",
@@ -519,11 +521,20 @@ class HonorBoardSerializer(serializers.ModelSerializer[HonorBoard]):
 
 
 class HonorGeneralAssemblyMemberSerializer(serializers.ModelSerializer[HonorGeneralAssemblyMember]):
-    is_active = serializers.BooleanField(read_only=True)
+    # Aktiflik tarihe göredir (md. 178/1): ileri tarihli değişiklikte eski temsilci dönem
+    # başına dek görevde, yenisi henüz görevde değildir — "bitiş boş" ölçütü yanıltır.
+    is_active = serializers.SerializerMethodField()
     md181_penalty = serializers.SerializerMethodField()
 
+    def get_is_active(self, obj: HonorGeneralAssemblyMember) -> bool:
+        from apps.disiplin.selectors.committee import is_assembly_member_in_office
+
+        return is_assembly_member_in_office(obj)
+
     def get_md181_penalty(self, obj: HonorGeneralAssemblyMember) -> dict[str, str] | None:
-        return _md181_penalty(obj.member_student_id, obj.school_year.start_date, obj.is_active)
+        return _md181_penalty(
+            obj.member_student_id, obj.school_year.start_date, self.get_is_active(obj)
+        )
 
     class Meta:
         model = HonorGeneralAssemblyMember

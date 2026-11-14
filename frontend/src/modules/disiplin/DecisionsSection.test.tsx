@@ -185,7 +185,10 @@ describe("DecisionsSection — EK-1 anlatı", () => {
 });
 
 describe("DecisionsSection — onay durumu", () => {
-  it("kurula iade edilmiş kararda listede bulunan bir değere ilklenir", async () => {
+  // Saha testi 14.11.2026 (bulgu 28): bu test eskiden formun PENDING'e ilklenip
+  // dokunulmadan "Kaydet"te PENDING göndermesini sabitliyordu — o davranış md. 197
+  // iadesini sessizce "onay bekliyor"a çeviriyordu. Artık form boş açılır, seçim ister.
+  it("kurula iade edilmiş kararda form boş açılır; seçim yapılmadan kaydedilmez", async () => {
     dapi.listDecisions.mockResolvedValue({
       decisions: [
         makeDecision({
@@ -202,10 +205,17 @@ describe("DecisionsSection — onay durumu", () => {
     renderSection();
 
     await user.click(await screen.findByRole("button", { name: "Onay durumu" }));
-    // Seçenekler PENDING/APPROVED ile süzülü; RETURNED listede yok → PENDING görünmeli.
-    expect(screen.getByLabelText("Onay durumu")).toHaveValue("PENDING");
+    // Seçenekler PENDING/APPROVED ile süzülü; RETURNED listede yok → "Seçiniz…" görünmeli.
+    const select = screen.getByLabelText("Onay durumu");
+    expect(select).toHaveValue("");
 
-    // Kullanıcı dokunmadan kaydedince backend'in reddettiği RETURNED gitmemeli.
+    // Kullanıcı dokunmadan kaydedince hiçbir şey gitmemeli (iade sessizce bozulmaz).
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    expect(await screen.findByText("Onay durumunu seçin.")).toBeInTheDocument();
+    expect(dapi.approveDecision).not.toHaveBeenCalled();
+
+    // Bilinçli seçim (kurul yeniden görüşecek → onay bekliyor) kaydedilir.
+    await user.selectOptions(select, "PENDING");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() =>
       expect(dapi.approveDecision).toHaveBeenCalledWith(1, 5, {
@@ -311,6 +321,7 @@ describe("DecisionsSection — mevzuat kilitleri (md. 163/2, 169/4, 197)", () =>
               resulted_on: "2026-03-12",
               result_notes: "",
               previous_penalty_type: "",
+              previous_suspension_days: null,
             },
           ],
         }),
@@ -526,6 +537,212 @@ describe("DecisionsSection — 27.09.2026 denetim bulguları", () => {
   });
 });
 
+describe("DecisionsSection — 14.11.2026 saha testi bulguları", () => {
+  const uzaklastirma = {
+    penalty_type: "SHORT_TERM_SUSPENSION" as const,
+    penalty_type_display: "Okuldan kısa süreli uzaklaştırma",
+    suspension_days: 5,
+    behavior_point_deduction: 20,
+  };
+  const tebligli = {
+    approval_status: "APPROVED" as const,
+    approval_status_display: "Onaylandı",
+    approved_at: "2026-03-03",
+    notified_at: "2026-03-04",
+    appeal_deadline: "2026-03-11",
+  };
+
+  async function sonucFormunuAc(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /Sonucu kaydet/ }));
+    await user.selectOptions(screen.getByLabelText("Sonuç"), "REDUCED");
+  }
+
+  it("itiraz kurulunun gün indirimi aynı ceza türüyle kaydedilir (bulgu 2)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...uzaklastirma, ...tebligli, appeals: [itiraz()] })],
+      behavior_points: {},
+    });
+    dapi.resolveAppeal.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderSection();
+    await sonucFormunuAc(user);
+
+    await user.selectOptions(
+      screen.getByLabelText(/Kurulun verdiği yeni ceza/),
+      "SHORT_TERM_SUSPENSION",
+    );
+    // Mevcut gün sayısı ipucu olarak görünür.
+    expect(screen.getByText(/Mevcut ceza 5 gün/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Uzaklaştırma süresi/), { target: { value: "2" } });
+    await user.click(screen.getAllByRole("button", { name: /Sonucu kaydet/ }).at(-1)!);
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sonucu kaydet" }));
+
+    await waitFor(() =>
+      expect(dapi.resolveAppeal).toHaveBeenCalledWith(
+        1,
+        9,
+        expect.objectContaining({
+          result: "REDUCED",
+          new_penalty_type: "SHORT_TERM_SUSPENSION",
+          new_suspension_days: 2,
+        }),
+      ),
+    );
+  });
+
+  it("aynı tür + aynı gün 'değiştirildi' sayılmaz; kesin sonuç onayı sorulmaz (bulgu 2)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...uzaklastirma, ...tebligli, appeals: [itiraz()] })],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await sonucFormunuAc(user);
+
+    await user.selectOptions(
+      screen.getByLabelText(/Kurulun verdiği yeni ceza/),
+      "SHORT_TERM_SUSPENSION",
+    );
+    fireEvent.change(screen.getByLabelText(/Uzaklaştırma süresi/), { target: { value: "5" } });
+    await user.click(screen.getAllByRole("button", { name: /Sonucu kaydet/ }).at(-1)!);
+
+    expect(await screen.findByText(/Gün sayısı mevcut cezayla aynı/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(dapi.resolveAppeal).not.toHaveBeenCalled();
+  });
+
+  it("kınamada yeni ceza listesinde kınama yoktur (aynı tür yalnız uzaklaştırmada)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ ...tebligli, appeals: [itiraz()] })],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await sonucFormunuAc(user);
+    const yeniCeza = screen.getByLabelText(/Kurulun verdiği yeni ceza/);
+    expect(within(yeniCeza).queryByRole("option", { name: /Kınama/ })).toBeNull();
+    expect(within(yeniCeza).getByRole("option", { name: /uzaklaştırma/ })).toBeInTheDocument();
+  });
+
+  it("değiştirilmiş itirazda itiraz edilen ceza gün sayısıyla görünür (bulgu 2)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...uzaklastirma,
+          ...tebligli,
+          suspension_days: 2,
+          appeals: [
+            {
+              ...itiraz(),
+              result: "REDUCED",
+              result_display: "Hafifletildi/değiştirildi",
+              resulted_on: "2026-03-20",
+              previous_penalty_type: "SHORT_TERM_SUSPENSION",
+              previous_suspension_days: 5,
+            },
+          ],
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(
+      await screen.findByText(/İtiraz edilen ceza: Okuldan kısa süreli uzaklaştırma \(5 gün\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("iade sonrası beklemeye alınmış karar ilçeye gönderilebilir, yeniden iade edilemez (bulgu 28)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ returned_at: "2026-03-05", return_reason: "Ağır." })],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByRole("button", { name: "İlçe kuruluna gönder" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kurula iade" })).not.toBeInTheDocument();
+  });
+
+  it("hiç iade edilmemiş kararda ilçeye gönderme düğmesi yoktur (md. 197)", async () => {
+    dapi.listDecisions.mockResolvedValue({ decisions: [makeDecision()], behavior_points: {} });
+    renderSection();
+    expect(await screen.findByRole("button", { name: "Kurula iade" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "İlçe kuruluna gönder" })).not.toBeInTheDocument();
+  });
+
+  it("yanlış girilen ilçe onayı düzeltilebilir: ilçe değişikliği onaylı kararda da sunulur (bulgu 28)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          ...uzaklastirma,
+          approval_status: "APPROVED",
+          approval_status_display: "Onaylandı",
+          approved_at: "2026-03-10",
+          returned_at: "2026-03-06",
+          referred_to_district: true,
+        }),
+      ],
+      behavior_points: {},
+    });
+    dapi.approveDecision.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: "İlçe kurulu kararı" }));
+    // "Beklemede" seçeneği müdür onayına değil ilçe kuruluna dönüşü anlatır.
+    expect(
+      within(screen.getByLabelText("Onay durumu")).getByRole("option", {
+        name: "İlçe kurulunda (karar bekleniyor)",
+      }),
+    ).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText("Kurul cezayı değiştirdi mi?"),
+      "SHORT_TERM_SUSPENSION",
+    );
+    fireEvent.change(screen.getByLabelText(/Uzaklaştırma süresi/), { target: { value: "1" } });
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(dapi.approveDecision).toHaveBeenCalledWith(1, 5, {
+        approval_status: "APPROVED",
+        approved_on: "2026-03-10",
+        modified_penalty_type: "SHORT_TERM_SUSPENSION",
+        modified_suspension_days: 1,
+      }),
+    );
+  });
+
+  it("ilçe kurulundaki kararda form boş açılır; dokunmadan kaydedilmez (bulgu 28)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "REFERRED",
+          approval_status_display: "İlçe kuruluna gönderildi (md. 197)",
+          returned_at: "2026-03-06",
+          return_reason: "Ağır.\n\nİlçeye sevk: Israr.",
+          referred_to_district: true,
+        }),
+      ],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "İlçe kurulu kararı" }));
+    expect(screen.getByLabelText("Onay durumu")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    expect(await screen.findByText("Onay durumunu seçin.")).toBeInTheDocument();
+    expect(dapi.approveDecision).not.toHaveBeenCalled();
+  });
+
+  it("sevki geri alınmış dosyada karar eklenemez (bulgu 29)", async () => {
+    dapi.listDecisions.mockResolvedValue({ decisions: [], behavior_points: {} });
+    // Sevk olayı duruyor ama aşama geri alınmış (revert_stage olay silmez).
+    renderSection(makeCase({ current_stage: "PETITION" }));
+    expect(
+      await screen.findByText(/yalnız okul öğrenci ödül ve disiplin kuruluna sevk/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Karar ekle" })).not.toBeInTheDocument();
+  });
+});
+
 function itiraz() {
   return {
     id: 9,
@@ -543,5 +760,6 @@ function itiraz() {
     resulted_on: null,
     result_notes: "",
     previous_penalty_type: "",
+    previous_suspension_days: null,
   } as unknown as DisciplineDecision["appeals"][number];
 }

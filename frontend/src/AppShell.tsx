@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
@@ -158,6 +158,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
   const title = pageTitle(location.pathname);
+
+  // Sayfa değişince en üste dön: SPA'da tarayıcı kaydırmayı sıfırlamaz; uzun bir
+  // sayfanın ortasından Ayarlar/Kişiler'e geçince yeni sayfa ortasından açılıyordu.
+  // Yalnız yol değişiminde — aynı sayfadaki sorgu parametresi (arama, süzgeç)
+  // değişiminde konum korunur.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {

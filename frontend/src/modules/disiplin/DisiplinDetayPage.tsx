@@ -42,6 +42,7 @@ import {
   caseBranch,
   caseSteps,
   earlierStages,
+  isDisciplineCommitteeReferred,
   nextStepFor,
 } from "./workflow";
 import type { CaseBranch, CardAction } from "./workflow";
@@ -422,6 +423,10 @@ export default function DisiplinDetayPage() {
   const [tab, setTab] = useState("genel");
   const [reverting, setReverting] = useState(false);
   const [editingIdentity, setEditingIdentity] = useState(false);
+  // §7.5 tazeleme sayaçları: uyarı kaydı triaj önerisini, dosya toplantısı EK-1/karar
+  // bölümünün verisini besler — biri değişince öteki bayat kalmasın.
+  const [triageVersion, setTriageVersion] = useState(0);
+  const [meetingVersion, setMeetingVersion] = useState(0);
 
   // `silent`: iskelet göstermeden arka planda tazeler — bölüm içi işlemlerden
   // (katılımcı senkronu gibi) sonra kartların yerinde kalması için.
@@ -699,7 +704,7 @@ export default function DisiplinDetayPage() {
                   </Card>
                 )}
                 <EventsTimeline events={data.events ?? []} />
-                <TriageSection caseObj={data} />
+                <TriageSection caseObj={data} refreshKey={triageVersion} />
               </div>
             )}
 
@@ -711,15 +716,33 @@ export default function DisiplinDetayPage() {
                   canManage={canManageParticipants}
                   onCaseChanged={() => load(true)}
                 />
-                <WarningsSection caseObj={data} canManage={canIssueWarning} branch={branch} />
+                <WarningsSection
+                  caseObj={data}
+                  canManage={canIssueWarning}
+                  branch={branch}
+                  onChanged={() => setTriageVersion((v) => v + 1)}
+                />
               </div>
             )}
 
             {/* Kurul & Karar: toplantılar + resmî kararlar/EK-1/itiraz + süreler/uzatma/tedbir */}
             {tab === "kurul" && (
               <div className="space-y-6">
-                <MeetingsSection caseObj={data} canManage={canRecordMeeting} />
-                <DecisionsSection caseObj={data} caps={caps} onCaseChanged={() => load(true)} />
+                <MeetingsSection
+                  caseObj={data}
+                  canManage={canRecordMeeting}
+                  onChanged={() => {
+                    setMeetingVersion((v) => v + 1);
+                    load(true);
+                  }}
+                />
+                {/* key: toplantı kaydı/silme sonrası karar bölümü verisini yeniden çeker. */}
+                <DecisionsSection
+                  key={meetingVersion}
+                  caseObj={data}
+                  caps={caps}
+                  onCaseChanged={() => load(true)}
+                />
                 <PeriodsSection caseObj={data} caps={caps} />
               </div>
             )}
@@ -1107,11 +1130,25 @@ function EventForm({
       )}
 
       {selectedStage === "DECIDED" && (
-        <div>
-          <p className="mb-1 text-label-large text-on-surface-variant">
+        // Erişilebilirlik: grup başlığıyla adlandırılır (radiogroup + aria-labelledby),
+        // her düğme kendi etiket metnine açıkça bağlanır ve `value` taşır — yoksa
+        // erişilebilirlik ağacında üç düğme de tarayıcı varsayılanı "on" görünüyordu.
+        <div
+          role="radiogroup"
+          aria-required="true"
+          aria-labelledby={`${fieldIdBase}-principal-label`}
+          aria-describedby={`${fieldIdBase}-principal-desc`}
+        >
+          <p
+            id={`${fieldIdBase}-principal-label`}
+            className="mb-1 text-label-large text-on-surface-variant"
+          >
             Müdür değerlendirmesi / sevk kararı <span className="text-error">*</span> (tek seçim)
           </p>
-          <p className="mb-2 text-body-small text-on-surface-variant">
+          <p
+            id={`${fieldIdBase}-principal-desc`}
+            className="mb-2 text-body-small text-on-surface-variant"
+          >
             Müdür ya yazılı uyarı verir (yalnız daha önce ceza/uyarı almamış öğrenciye — md. 157/7;
             e-Okul&apos;a işlenmez, dosya kapanır) ya da bir kurula sevk eder; ikisi bir arada
             olmaz. Kurula sevkte süreci kurul başkanı yürütür.
@@ -1121,16 +1158,20 @@ function EventForm({
               ([code, label]) => (
                 <label
                   key={code}
+                  htmlFor={`${fieldIdBase}-principal-${code}`}
                   className="flex min-h-12 items-center gap-3 rounded-shape-xs px-2 py-1.5 text-body-medium text-on-surface hover:bg-surface-container-low"
                 >
                   <input
+                    id={`${fieldIdBase}-principal-${code}`}
                     type="radio"
                     name="principal_decision"
+                    value={code}
+                    aria-labelledby={`${fieldIdBase}-principal-${code}-text`}
                     checked={principalDecision === code}
                     onChange={() => setPrincipalDecision(code)}
                     className="h-5 w-5 accent-primary"
                   />
-                  {label}
+                  <span id={`${fieldIdBase}-principal-${code}-text`}>{label}</span>
                 </label>
               ),
             )}
@@ -1461,11 +1502,31 @@ function formatSize(bytes: number): string {
 // Kurul toplantıları (Tur 70) — katılanlar kurul üyelerinden seçilir
 // ---------------------------------------------------------------------------
 
-function MeetingsSection({ caseObj, canManage }: { caseObj: DisciplineCase; canManage: boolean }) {
+function MeetingsSection({
+  caseObj,
+  canManage,
+  onChanged,
+}: {
+  caseObj: DisciplineCase;
+  canManage: boolean;
+  /** Toplantı kaydı EK-1 imza heyetini belirler — karar bölümü verisi de tazelenir. */
+  onChanged: () => void;
+}) {
   const [meetings, setMeetings] = useState<DisciplineMeeting[] | null>(null);
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const snackbar = useSnackbar();
+  const confirm = useConfirm();
+  // Backend `record_meeting` kapalı ve kurula sevk edilmemiş dosyada reddeder; ölçüt
+  // DecisionsSection'daki karar girişiyle aynıdır (md. 163/2). Silme yalnız kapalı
+  // dosyada kilitlidir (`delete_meeting` — kapanış dayanağı).
+  const caseOpen = caseObj.closed_at === null;
+  const meetingEntryOpen =
+    caseOpen &&
+    (caseObj.current_stage === "DECIDED" || caseObj.current_stage === "COMMITTEE_DONE") &&
+    isDisciplineCommitteeReferred(caseObj.events);
 
   const load = useCallback(() => {
     disiplinApi
@@ -1488,18 +1549,49 @@ function MeetingsSection({ caseObj, canManage }: { caseObj: DisciplineCase; canM
 
   if (hidden) return null;
 
+  const removeMeeting = async (m: DisciplineMeeting) => {
+    if (
+      !(await confirm({
+        title: "Toplantı kaydını sil",
+        message: `${formatDate(m.meeting_date)} tarihli kurul toplantısı kaydı silinsin mi? EK-1 imza heyeti bu kayıttan alınır; yanlış girildiyse silip doğrusunu kaydedin.`,
+        confirmLabel: "Sil",
+      }))
+    )
+      return;
+    setDeletingId(m.id);
+    setError(null);
+    try {
+      await disiplinApi.deleteMeeting(caseObj.id, m.id);
+      snackbar.success("Toplantı kaydı silindi.");
+      load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Toplantı kaydı silinemedi.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <Card elevation={1} className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-title-medium text-on-surface">
           Kurul toplantıları ({meetings?.length ?? 0})
         </p>
-        {canManage && (
+        {canManage && meetingEntryOpen && (
           <Button variant="tonal" icon="event" onClick={() => setRecording(true)}>
             Toplantı kaydet
           </Button>
         )}
       </div>
+      {canManage && !meetingEntryOpen && (
+        <p className="mt-1 flex items-start gap-1 text-body-small text-on-surface-variant">
+          <Icon name="info" size="sm" />
+          {caseOpen
+            ? "Kurul toplantısı yalnız disiplin kuruluna sevk edilen dosyada kaydedilir."
+            : "Dosya kapalı; kurul toplantısı kaydedilemez ve silinemez."}
+        </p>
+      )}
 
       {error && (
         <div className="mt-3 flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-2 text-body-small text-on-error-container">
@@ -1522,10 +1614,22 @@ function MeetingsSection({ caseObj, canManage }: { caseObj: DisciplineCase; canM
               key={m.id}
               className="rounded-shape-md border border-outline-variant bg-surface-container-low p-4"
             >
-              <p className="text-body-large text-on-surface">
-                <Icon name="event" size="base" className="mr-1 align-middle text-primary" />
-                {formatDate(m.meeting_date)}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-body-large text-on-surface">
+                  <Icon name="event" size="base" className="mr-1 align-middle text-primary" />
+                  {formatDate(m.meeting_date)}
+                </p>
+                {canManage && caseOpen && (
+                  <Button
+                    variant="text"
+                    icon="delete"
+                    onClick={() => void removeMeeting(m)}
+                    disabled={deletingId !== null}
+                  >
+                    Sil
+                  </Button>
+                )}
+              </div>
               <div className="mt-2">
                 <p className="text-label-small text-on-surface-variant">
                   Katılanlar ({m.attendee_names.length})
@@ -1563,6 +1667,7 @@ function MeetingsSection({ caseObj, canManage }: { caseObj: DisciplineCase; canM
           onDone={() => {
             setRecording(false);
             load();
+            onChanged();
           }}
           caseObj={caseObj}
         />
@@ -1760,6 +1865,8 @@ function ParticipantsSection({
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Backend add/remove_participant kapalı dosyada reddeder ("taraflar değiştirilemez").
+  const caseOpen = caseObj.closed_at === null;
 
   const load = useCallback(() => {
     disiplinApi
@@ -1799,7 +1906,7 @@ function ParticipantsSection({
         <p className="text-title-medium text-on-surface">
           Katılımcılar ({participants?.length ?? 0})
         </p>
-        {canManage && !adding && (
+        {canManage && caseOpen && !adding && (
           <Button variant="tonal" icon="group_add" onClick={() => setAdding(true)}>
             Katılımcı ekle
           </Button>
@@ -1809,8 +1916,14 @@ function ParticipantsSection({
         Hakkında işlem yapılan öğrenci, mağdur ve tanıklar (md. 193 ifade/savunma formları buradan
         üretilir). Hakkında işlem yapılan öğrenci eklemesi dosyanın öğrenci listesiyle senkronlanır.
       </p>
+      {canManage && !caseOpen && (
+        <p className="mt-1 flex items-start gap-1 text-body-small text-on-surface-variant">
+          <Icon name="info" size="sm" />
+          Dosya kapalı; taraflar değiştirilemez.
+        </p>
+      )}
 
-      {adding && (
+      {adding && caseOpen && (
         <div className="mt-4">
           <AddParticipantForm
             caseObj={caseObj}
@@ -1847,7 +1960,7 @@ function ParticipantsSection({
                     key={p.id}
                     caseId={caseObj.id}
                     participant={p}
-                    canManage={canManage}
+                    canManage={canManage && caseOpen}
                     onChanged={refresh}
                   />
                 ))}
@@ -2110,10 +2223,13 @@ function WarningsSection({
   caseObj,
   canManage,
   branch,
+  onChanged,
 }: {
   caseObj: DisciplineCase;
   canManage: boolean;
   branch: CaseBranch;
+  /** Uyarı kaydı triaj önerisini besler — ekleme/silme sonrası triaj tazelenir (§7.5). */
+  onChanged: () => void;
 }) {
   // Kurula sevk edilen dosyada (Dal B) müdür uyarısı uygulanmaz: müdür ya uyarır
   // ya sevk eder, ikisi bir arada olmaz (Tur 109).
@@ -2122,6 +2238,9 @@ function WarningsSection({
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const snackbar = useSnackbar();
+  const confirm = useConfirm();
   const names = studentNameMap(caseObj);
 
   const load = useCallback(() => {
@@ -2142,6 +2261,34 @@ function WarningsSection({
   useEffect(load, [load]);
 
   if (hidden) return null;
+
+  // Dosyada öğrenci başına TEK uyarı kaydı tutulur (md. 157/7-a); yanlış kayıt
+  // silinemezse düzeltilemez (§7.6). Backend `delete_warning` kapalı dosyada ve
+  // kurula sevkli dosyada da siler (uyarı kaydı kapanış dayanağı değildir) —
+  // düğme bu yüzden dosya durumuna bağlı değildir.
+  const removeWarning = async (w: DisciplineWarning) => {
+    const who = names[w.student] ?? `Öğrenci #${w.student}`;
+    if (
+      !(await confirm({
+        title: "Uyarı kaydını sil",
+        message: `${who} için ${formatDate(w.warning_date)} tarihli müdür uyarısı kaydı silinsin mi? Kayıt yanlışsa silip doğrusunu girebilirsiniz; müdürün "yazılı uyarı" kararı (aşama) yerinde kalır.`,
+        confirmLabel: "Sil",
+      }))
+    )
+      return;
+    setDeletingId(w.id);
+    setError(null);
+    try {
+      await disiplinApi.deleteWarning(caseObj.id, w.id);
+      snackbar.success("Uyarı kaydı silindi.");
+      load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Uyarı kaydı silinemedi.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <Card elevation={1} className="p-6">
@@ -2175,6 +2322,7 @@ function WarningsSection({
             onAdded={() => {
               setAdding(false);
               load();
+              onChanged();
             }}
           />
         </div>
@@ -2206,9 +2354,21 @@ function WarningsSection({
                   {names[w.student] ?? `Öğrenci #${w.student}`}
                 </p>
                 {/* Sapma #6: issued_by_name yok — yalnız tarih gösterilir. */}
-                <p className="text-label-small text-on-surface-variant">
-                  {formatDate(w.warning_date)}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-label-small text-on-surface-variant">
+                    {formatDate(w.warning_date)}
+                  </p>
+                  {canManage && (
+                    <Button
+                      variant="text"
+                      icon="delete"
+                      onClick={() => void removeWarning(w)}
+                      disabled={deletingId !== null}
+                    >
+                      Sil
+                    </Button>
+                  )}
+                </div>
               </div>
               {w.summary && (
                 <p className="mt-2 whitespace-pre-wrap text-body-medium text-on-surface-variant">
@@ -2332,7 +2492,14 @@ function AddWarningForm({
 // Triaj önerisi (Tur 74 Faz A) — md. 157/7, 166. Sadece öneri; nihai karar müdürün.
 // ---------------------------------------------------------------------------
 
-function TriageSection({ caseObj }: { caseObj: DisciplineCase }) {
+function TriageSection({
+  caseObj,
+  refreshKey = 0,
+}: {
+  caseObj: DisciplineCase;
+  /** Uyarı kaydı değişince artar; öneri yeniden çekilir (§7.5). */
+  refreshKey?: number;
+}) {
   const [data, setData] = useState<TriageSuggestion | null>(null);
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2352,7 +2519,7 @@ function TriageSection({ caseObj }: { caseObj: DisciplineCase }) {
         }
         setError(e instanceof ApiError ? e.message : "Triaj önerisi yüklenemedi.");
       });
-  }, [caseObj.id]);
+  }, [caseObj.id, refreshKey]);
 
   if (hidden) return null;
 

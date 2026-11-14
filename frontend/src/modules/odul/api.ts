@@ -322,6 +322,11 @@ export const odulApi = {
   ): Promise<HonorGeneralAssemblyMember> =>
     api.post<HonorGeneralAssemblyMember>(`${BASE}/general-assembly/${memberId}/end/`, body),
 
+  // Henüz göreve başlamamış temsilcilik kaydını (planlanan değişikliği) iptal eder;
+  // yerini alacağı temsilcinin bu değişiklikle yazılan bitişi sunucuda temizlenir.
+  cancelPlannedGeneralAssemblyChange: (memberId: number): Promise<void> =>
+    api.post<void>(`${BASE}/general-assembly/${memberId}/cancel-planned/`, {}),
+
   getHonorCompliance: (schoolYearId?: number): Promise<HonorCompliance> =>
     api.get<HonorCompliance>(
       `${BASE}/compliance/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`,

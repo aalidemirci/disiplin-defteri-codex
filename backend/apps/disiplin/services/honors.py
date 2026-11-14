@@ -9,9 +9,10 @@ geçişleri (04.10.2026) yalnız toplantı gündeminden çağrılır (`services.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.disiplin.models import (
     AgendaItemOutcome,
@@ -28,6 +29,7 @@ from apps.disiplin.models import (
     HonorGeneralAssemblyMember,
     HonorProposerRole,
 )
+from apps.disiplin.services.common import assert_not_future
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import SchoolYear, Student
 
@@ -103,6 +105,11 @@ def set_honor_board_chair(board: HonorBoard, chair_id: int) -> HonorBoard:
     chair = okul_selectors.get_personnel(chair_id)
     if chair is None:
         raise ValueError("Onur kurulu başkanı (personel) bulunamadı.")
+    if chair.pk == board.substitute_chair_id:
+        # md. 182: başkan ve yedek üye ayrı seçilir (kurul kurma ve yedek atamayla aynı kural).
+        raise ValueError(
+            "Başkan ve başkan yedeği aynı kişi olamaz; önce başkan yedeğini değiştirin."
+        )
     _validate_chair_outside_discipline_committee(
         school_year_id=board.school_year_id,
         personnel_id=chair.pk,
@@ -199,10 +206,15 @@ def add_honor_board_member(
 
     if not is_eligible_for_honor(student_id, board.school_year_id):
         raise ValueError("Disiplin cezası/davranış puanı nedeniyle öğrenci kurul üyesi olamaz.")
-    assembly_member_qs = HonorGeneralAssemblyMember.objects.filter(
-        school_year=board.school_year,
-        member_student_id=student_id,
-        effective_until__isnull=True,
+    from apps.disiplin.selectors.committee import assembly_members_in_office
+
+    # Görevde olan = bugün itibarıyla başlamış ve bitmemiş temsilcilik (md. 178/1): ileri
+    # tarihli değişiklikte eski temsilci dönem başına dek görevdedir, yenisi henüz değil.
+    assembly_member_qs = assembly_members_in_office(
+        HonorGeneralAssemblyMember.objects.filter(
+            school_year=board.school_year,
+            member_student_id=student_id,
+        )
     )
     if assembly_member_id is not None:
         assembly_member_qs = assembly_member_qs.filter(pk=assembly_member_id)
@@ -211,15 +223,19 @@ def add_honor_board_member(
         raise ValueError(
             "Onur Kurulu öğrencisi, aktif Onur Genel Kurulu temsilcileri arasından seçilmelidir."
         )
+    # md. 180/1: bir asıl ikinci başkan + bir ikinci başkanlık YEDEK üyesi seçilir; yedek
+    # kayıt asıl ikinci başkan sayılmaz (denetim ekleme sırasından bağımsızdır).
     if (
         is_second_chair
         and HonorBoardMember.objects.filter(
             board=board,
             is_second_chair=True,
-            is_substitute=False,
+            is_substitute=is_substitute,
             effective_until__isnull=True,
         ).exists()
     ):
+        if is_substitute:
+            raise ValueError("Onur kurulunda yalnız bir ikinci başkan yedeği olabilir (md. 180/1).")
         raise ValueError("Onur kurulunda yalnız bir aktif ikinci başkan olabilir.")
     grade_level = _validate_md180_composition(
         board,
@@ -249,7 +265,7 @@ def add_honor_board_member(
 @transaction.atomic
 def remove_honor_board_member(member: HonorBoardMember) -> None:
     """Üyeliği tarihçeyi koruyarak sonlandırır."""
-    member.effective_until = date.today()
+    member.effective_until = timezone.localdate()
     member.end_reason = "Elle sonlandırıldı."
     member.save(update_fields=["effective_until", "end_reason", "updated_at"])
 
@@ -278,13 +294,33 @@ def add_general_assembly_member(
 
     if not is_eligible_for_honor(student_id, year.pk):
         raise ValueError("Disiplin cezası/davranış puanı nedeniyle öğrenci temsilci olamaz.")
-    previous = HonorGeneralAssemblyMember.objects.filter(
+    same_section = HonorGeneralAssemblyMember.objects.filter(
         school_year=year,
         class_level=student.class_level,
         class_section=student.class_section,
-        effective_until__isnull=True,
-    ).first()
+    )
+    previous = same_section.filter(effective_until__isnull=True).first()
+    if previous is None:
+        # Görevi sonlandırılmış temsilcinin dönemiyle çakışan başlangıç kabul edilmez.
+        last_ended = same_section.order_by("-effective_until").first()
+        if (
+            last_ended is not None
+            and last_ended.effective_until is not None
+            and effective_from <= last_ended.effective_until
+        ):
+            raise ValueError(
+                f"Bu şubenin önceki temsilcisinin görevi {last_ended.effective_until:%d.%m.%Y} "
+                "tarihinde sona eriyor; yeni temsilcinin görev başlangıcı bu tarihten sonra "
+                "olmalıdır."
+            )
     if previous is not None:
+        if previous.effective_from > timezone.localdate():
+            raise ValueError(
+                f"Bu şube için {previous.effective_from:%d.%m.%Y} tarihinde göreve başlayacak "
+                "temsilci zaten kayıtlı; yeniden değiştirmek için önce planlanan değişikliği "
+                "iptal edin (göreve başlayacak temsilci kaydında 'Planlanan değişikliği iptal "
+                "et'), sonra doğru öğrenciyle yeniden kaydedin."
+            )
         if replaced_member_id != previous.pk:
             raise ValueError("Bu şubenin aktif temsilcisi var; değişiklik olarak kaydedin.")
         from apps.okul.models import SchoolTerm
@@ -296,8 +332,6 @@ def add_general_assembly_member(
             raise ValueError(
                 "Onur Genel Kurulu temsilci değişikliği 2. dönemin başlangıç tarihinde yürürlüğe girer."
             )
-        from datetime import timedelta
-
         previous.effective_until = effective_from - timedelta(days=1)
         previous.end_reason = "İzleyen dönem başında yeni temsilci seçildi."
         previous.save(update_fields=["effective_until", "end_reason", "updated_at"])
@@ -320,16 +354,67 @@ def end_general_assembly_membership(
     effective_until: date | None = None,
     reason: str,
 ) -> HonorGeneralAssemblyMember:
+    """Temsilcinin görevini sonlandırır.
+
+    Bitişi GELECEKTE kayıtlı görev (ileri tarihli temsilci değişikliğinde eski
+    temsilci, 2. dönem başına dek görevdedir) daha ERKEN bir tarihe çekilebilir —
+    ör. ceza alan temsilcinin görevi hemen sona erer (md. 181). Bitmiş (bitişi bugün
+    ya da geçmişte olan) görev kilitlidir: yeniden sonlandırılırsa tarih/neden ezilirdi.
+    """
+    today = timezone.localdate()
+    planned_end = member.effective_until
+    if planned_end is not None and planned_end <= today:
+        raise ValueError(
+            f"Bu temsilcinin görev bitişi zaten kayıtlı ({planned_end:%d.%m.%Y}); "
+            "yeniden sonlandırılamaz."
+        )
     if effective_until is None:
-        effective_until = date.today()
+        effective_until = today
     if not reason.strip():
         raise ValueError("Üyelik bitiş nedeni zorunludur.")
     if effective_until < member.effective_from:
         raise ValueError("Görev bitişi başlangıçtan önce olamaz.")
+    if planned_end is not None and effective_until >= planned_end:
+        raise ValueError(
+            f"Bu temsilcinin görevi zaten {planned_end:%d.%m.%Y} tarihinde sona erecek; "
+            "yalnız daha erken bir tarihe çekilebilir."
+        )
     member.effective_until = effective_until
     member.end_reason = reason.strip()
     member.save(update_fields=["effective_until", "end_reason", "updated_at"])
     return member
+
+
+@transaction.atomic
+def cancel_planned_general_assembly_change(member: HonorGeneralAssemblyMember) -> None:
+    """Henüz göreve BAŞLAMAMIŞ temsilcilik kaydını (planlanan değişikliği) iptal eder.
+
+    §7.6 tek yönlü kapan: ileri tarihli temsilci değişikliği yanlış öğrenciyle
+    kaydedildiyse geri alınabilmelidir. Kayıt soft-delete edilir; yerini aldığı
+    temsilcinin bitişi bu değişiklikle yazılmışsa (başlangıçtan bir gün önce) bitiş ve
+    nedeni temizlenir — o temsilci görevine süresiz devam eder. Önceki temsilcinin
+    görevi bu arada ayrıca erkene çekilmişse (ör. md. 181) o bitişe dokunulmaz.
+    Göreve başlamış temsilcilik iptal edilmez; görevi sonlandırılır.
+    """
+    if member.effective_from <= timezone.localdate():
+        raise ValueError(
+            "Bu temsilci göreve başlamış; kayıt iptal edilemez. Görevi sona erdiyse "
+            "'Görevi sonlandır' ile bitiş tarihini kaydedin."
+        )
+    # Önceki temsilci DB'den taze okunur (`member.replaced_member` önbelleği bayat olabilir:
+    # bitişi bu arada erkene çekilmiş olabilir — §7.5).
+    previous = (
+        HonorGeneralAssemblyMember.objects.filter(pk=member.replaced_member_id).first()
+        if member.replaced_member_id is not None
+        else None
+    )
+    member.delete()  # önce yeni kayıt: şube başına tek "bitişi boş" kaydı kısıtı
+    if previous is not None and previous.effective_until == member.effective_from - timedelta(
+        days=1
+    ):
+        previous.effective_until = None
+        previous.end_reason = ""
+        previous.save(update_fields=["effective_until", "end_reason", "updated_at"])
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +526,7 @@ def propose_honor_certificate(
     _record_event(
         certificate,
         event_type=HonorCertificateEventType.PROPOSED,
-        event_date=date.today(),
+        event_date=timezone.localdate(),
     )
     return certificate
 
@@ -547,6 +632,24 @@ def apply_committee_decision(
     return certificate
 
 
+def _validate_principal_decision_date(certificate: HonorCertificate, decided_on: date) -> None:
+    """Müdür onayı/onaylamaması kurul kararından önce ve ileri tarihli olamaz.
+
+    Karar müdüre kurul kararından SONRA sunulur ("onayları için arz olunur"); müdür
+    onayı geri alınamadığı için yanlış tarih kalıcı olurdu.
+    """
+    if certificate.awarded_at is not None and decided_on < certificate.awarded_at:
+        raise ValueError(
+            "Okul müdürünün kararı, Ödül ve Disiplin Kurulu kararından "
+            f"({certificate.awarded_at:%d.%m.%Y}) önceki bir tarihte olamaz; tarihi düzeltin."
+        )
+    assert_not_future(
+        decided_on,
+        "Okul müdürünün karar tarihi",
+        message="Okul müdürünün kararı ileri bir tarihle kaydedilemez; tarihi düzeltin.",
+    )
+
+
 @transaction.atomic
 def approve_honor_proposal_by_principal(
     certificate: HonorCertificate,
@@ -565,6 +668,7 @@ def approve_honor_proposal_by_principal(
         raise ValueError(
             "Yalnız ödül ve disiplin kurulunca kabul edilen teklif okul müdürünce onaylanabilir."
         )
+    _validate_principal_decision_date(certificate, decided_on)
     if not is_eligible_for_honor(certificate.student_id, certificate.school_year_id):
         raise ValueError(
             "Öğrenci kurul kararından sonra disiplin cezası almış veya davranış puanı "
@@ -605,6 +709,7 @@ def reject_honor_proposal_by_principal(
         raise ValueError(
             "Yalnız ödül ve disiplin kurulunca kabul edilen teklif okul müdürü onayına sunulabilir."
         )
+    _validate_principal_decision_date(certificate, decided_on)
     certificate.status = HonorCertificateStatus.PRINCIPAL_REJECTED
     certificate.principal_decided_at = decided_on
     certificate.principal_decision_reason = reason
@@ -659,8 +764,6 @@ def undo_honor_certificate_step(
     aşaması geri alınamaz. Kurul kararıysa ilgili gündem maddesi yeniden karar
     bekler; geri alınan adımın tarihleri temizlenir; iz `UNDONE` olayı olarak kalır.
     """
-    from django.utils import timezone
-
     reason = (reason or "").strip()
     if not reason:
         raise ValueError("Geri alma gerekçesi zorunludur.")

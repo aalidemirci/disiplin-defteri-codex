@@ -57,21 +57,49 @@ PENALTY_SEVERITY: dict[str, int] = {
 }
 
 
+def school_year_for_decision_date(on: date) -> SchoolYear | None:
+    """Bir karar tarihinin sayıldığı öğretim yılı — md. 166 ve md. 170 için TEK tanım.
+
+    Başlangıcı `on`dan önce (ya da o gün) olan en son `SchoolYear`dır: yaz aylarında
+    (ders yılı bitişinden sonra, yeni yıl başlamadan) verilen karar BİTEN yıla sayılır.
+    İlk yılın başlangıcından önceki tarih hiçbir yıla düşmez (None).
+    """
+    return SchoolYear.objects.filter(start_date__lte=on).order_by("-start_date").first()
+
+
+def decisions_in_school_year(
+    qs: QuerySet[DisciplineDecision], year: SchoolYear
+) -> QuerySet[DisciplineDecision]:
+    """`qs`'i `year`a SAYILAN kararlara süzer (`school_year_for_decision_date` ile aynı kural).
+
+    Pencere yılın başlangıcından bir SONRAKİ yılın başlangıcına kadardır (sonraki yıl
+    yoksa ucu açık) — `end_date` kullanılmaz; yoksa bitişten sonra verilen ceza hiçbir
+    yılın davranış puanına girmezken md. 166'da "aynı yıl" sayılırdı (denetim 13.11.2026).
+    """
+    qs = qs.filter(decision_date__gte=year.start_date)
+    following = (
+        SchoolYear.objects.filter(start_date__gt=year.start_date).order_by("start_date").first()
+    )
+    if following is not None:
+        qs = qs.filter(decision_date__lt=following.start_date)
+    return qs
+
+
 def same_year_prior_penalty(
     student_id: int, on: date, *, exclude_case_id: int | None = None
 ) -> DisciplineDecision | None:
     """md. 166: öğrencinin `on` gününün öğretim yılında yürürlükteki EN AĞIR cezası.
 
-    Öğretim yılı, başlangıcı `on`dan önce olan en son `SchoolYear`dır (yaz aylarında
-    verilen karar da biten yıla sayılır). Karar tarihi yıl başı ile `on` arasındaki,
+    Öğretim yılı `school_year_for_decision_date(on)`dır (yaz aylarında verilen karar da
+    biten yıla sayılır). Karar tarihi yıl başı ile `on` arasındaki,
     `penalties_in_force` süzgecinden geçen cezalar dikkate alınır; aynı dosya hariç.
     """
-    year = SchoolYear.objects.filter(start_date__lte=on).order_by("-start_date").first()
+    year = school_year_for_decision_date(on)
     if year is None:
         return None
     qs = penalties_in_force(
-        DisciplineDecision.objects.filter(
-            student_id=student_id, decision_date__gte=year.start_date, decision_date__lte=on
+        decisions_in_school_year(
+            DisciplineDecision.objects.filter(student_id=student_id, decision_date__lte=on), year
         )
     )
     if exclude_case_id is not None:
@@ -259,9 +287,11 @@ def decisions_for_student(student_id: int) -> QuerySet[DisciplineDecision]:
 def behavior_point_for_student(student_id: int, school_year_id: int | None = None) -> int:
     """Öğrencinin güncel davranış puanı (md. 170): 100 − yürürlükteki cezaların indirimi.
 
-    Ders yılı `decision_date` aralığından çözülür (verilmezse aktif yıl). Yalnız
-    `penalties_in_force` sayılır: onaysız, cezasız, itirazla bozulmuş ve md. 171/2
-    ile kaldırılmış kararlar puan düşürmez. Aktif yıl yoksa tüm kararlar dikkate alınır.
+    Ders yılı `decision_date`ten çözülür (verilmezse aktif yıl) — md. 166 ile AYNI yıl
+    tanımı (`decisions_in_school_year`): ders yılı bitişinden sonra, yeni yıl başlamadan
+    verilen ceza biten yılın puanını düşürür. Yalnız `penalties_in_force` sayılır:
+    onaysız, cezasız, itirazla bozulmuş ve md. 171/2 ile kaldırılmış kararlar puan
+    düşürmez. Aktif yıl yoksa tüm kararlar dikkate alınır.
     """
     year: SchoolYear | None
     if school_year_id is not None:
@@ -270,7 +300,7 @@ def behavior_point_for_student(student_id: int, school_year_id: int | None = Non
         year = okul_selectors.active_school_year()
     qs = DisciplineDecision.objects.filter(student_id=student_id)
     if year is not None:
-        qs = qs.filter(decision_date__gte=year.start_date, decision_date__lte=year.end_date)
+        qs = decisions_in_school_year(qs, year)
     qs = penalties_in_force(qs)
     total = qs.aggregate(s=Sum("behavior_point_deduction"))["s"] or 0
     return max(0, BEHAVIOR_POINT_START - int(total))

@@ -4,7 +4,10 @@
 tasarım (Tur 100, md. 169/5). Sorumlu veli (PRIMARY) ön-doldurulur; adres modelde
 tutulmaz → elle. Antet shared (Kaymakamlık ev stili). Form-14 (öğrenci) ayrı belge.
 26.09.2026 (kullanıcı kararı): "savunması alınmış" yalnız dosyada öğrencinin
-savunma tutanağı (Form-11) kaydı varsa basılır (md. 194/1).{% endcomment %}
+savunma tutanağı (Form-11) kaydı varsa basılır (md. 194/1).
+Saha denetimi 14.11.2026: olay tarihi EK-1 anlatısında kayıtlıysa basılır (yoksa elle);
+cezasız kararda örnek şerh "ceza" demez; ceza sonradan üst kurulca değiştirildiyse
+`penalty_change_note` ayrı paragrafta basılır.{% endcomment %}
 {% block content %}
 <div class="doc-title">{% if decision.penalty_type == 'NO_PENALTY' %}VELİYE DİSİPLİN KURULU KARARI TEBLİĞİ{% else %}VELİYE DİSİPLİN CEZASI TEBLİĞİ{% endif %}</div>
 <div class="doc-subtitle">Form-15 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169/5</div>
@@ -29,7 +32,7 @@ Karar no/tarih sistemden. "İtiraz için son gün" çıkarıldı.{% endcomment %
 
 <p class="para">
   Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
-  <strong>{{ student.full_name }}</strong> hakkında …/…/202… tarihinde meydana gelen ve tutanak
+  <strong>{{ student.full_name }}</strong> hakkında {% if decision.incident_date %}{{ decision.incident_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihinde meydana gelen ve tutanak
   altına alınan disiplin olayı ile ilgili olarak yapılan inceleme ve değerlendirme sonucunda;
   {% if defense_taken %}öğrencinin savunması alınmış, {% endif %}olayla ilgili bilgi ve belgeler incelenmiştir.
 </p>
@@ -47,6 +50,9 @@ Karar no/tarih sistemden. "İtiraz için son gün" çıkarıldı.{% endcomment %
   cezası, kararın kesinleşmesinden sonra e-Okul sistemine işlenecek olup işbu yazı ile
   tarafınıza resmî olarak tebliğ edilmektedir.{% endif %}
 </p>
+{% if penalty_change_note %}
+<p class="para">{{ penalty_change_note }}</p>
+{% endif %}
 
 {% if decision and decision.penalty_type != 'NO_PENALTY' %}
 <p class="para">
@@ -96,7 +102,8 @@ velinin EL YAZISIYLA yazacağı boşluk; altta örnek şerh metni ipucu.{% endco
   <div class="field-box" style="min-height: 2.5cm;"></div>
 </div>
 <p class="muted">
-  Örnek şerh: "Velisi bulunduğum öğrenciye verilen disiplin cezasına ilişkin tebliğ
-  yazısını okudum, içeriğini anladım ve bir suretini elden teslim aldım."
+  {% if decision.penalty_type == 'NO_PENALTY' %}Örnek şerh: "Velisi bulunduğum öğrenci hakkında verilen disiplin kurulu kararına ilişkin
+  tebliğ yazısını okudum, içeriğini anladım ve bir suretini elden teslim aldım."{% else %}Örnek şerh: "Velisi bulunduğum öğrenciye verilen disiplin cezasına ilişkin tebliğ
+  yazısını okudum, içeriğini anladım ve bir suretini elden teslim aldım."{% endif %}
 </p>
 {% endblock %}

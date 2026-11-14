@@ -71,6 +71,11 @@ urlpatterns = [
         name="honor-general-assembly-member-end",
     ),
     path(
+        "honor/general-assembly/<int:member_id>/cancel-planned/",
+        views.HonorGeneralAssemblyMemberCancelPlannedView.as_view(),
+        name="honor-general-assembly-member-cancel-planned",
+    ),
+    path(
         "honor/compliance/",
         views.HonorComplianceView.as_view(),
         name="honor-compliance",

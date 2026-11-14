@@ -171,8 +171,11 @@ export default function DecisionsSection({
   // Kurul kararı girişi başkana aittir (md. 196 — başkan kararı müdüre sunar).
   const canEnterDecision = caps.isChair || caps.isAdmin;
   // md. 163/2: ceza yalnız kurula sevkli ve açık dosyada girilir (backend de zorlar).
+  // Sevk olayı dursa da aşama geri alınmışsa (güncel aşama sevk öncesi) sevk hükümsüzdür.
   const decisionEntryOpen =
-    caseObj.closed_at === null && isDisciplineCommitteeReferred(caseObj.events);
+    caseObj.closed_at === null &&
+    (caseObj.current_stage === "DECIDED" || caseObj.current_stage === "COMMITTEE_DONE") &&
+    isDisciplineCommitteeReferred(caseObj.events);
   const [decisions, setDecisions] = useState<DisciplineDecision[] | null>(null);
   const [behaviorPoints, setBehaviorPoints] = useState<Record<number, number>>({});
   const [md166Priors, setMd166Priors] = useState<Record<string, Md166Prior>>({});
@@ -629,7 +632,7 @@ function DecisionCard({
               d.approval_status !== "REJECTED" &&
               (!d.notified_at || d.approval_status !== "APPROVED") && (
                 <Button variant="text" icon="approval" onClick={() => setPanel("approve")}>
-                  {d.approval_status === "REFERRED" ? "İlçe kurulu kararı" : "Onay durumu"}
+                  {d.referred_to_district ? "İlçe kurulu kararı" : "Onay durumu"}
                 </Button>
               )}
             {/* md. 197: "bir defa daha görüşülmek üzere" — yalnız bir kez iade. */}
@@ -638,11 +641,16 @@ function DecisionCard({
                 Kurula iade
               </Button>
             )}
-            {canApprove && d.approval_status === "RETURNED" && (
-              <Button variant="text" icon="forward" onClick={() => setPanel("refer")}>
-                İlçe kuruluna gönder
-              </Button>
-            )}
+            {/* İade edilmiş karar kurul yeniden görüşsün diye "onay bekliyor"a alınmış olabilir;
+                kurul ısrar ederse sevk yolu yine açık olmalı (tek yönlü kapan olmasın). */}
+            {canApprove &&
+              !d.notified_at &&
+              (d.approval_status === "RETURNED" ||
+                (d.approval_status === "PENDING" && d.returned_at && !d.referred_to_district)) && (
+                <Button variant="text" icon="forward" onClick={() => setPanel("refer")}>
+                  İlçe kuruluna gönder
+                </Button>
+              )}
             {/* md. 163/2, 169/2: ceza onaydan sonra uygulanır — onaysız karar tebliğ edilmez.
                 İtirazsız kararda yanlış girilen tebliğ tarihi düzeltilebilir (backend
                 notify_decision yalnız itirazlı kararda reddeder); yoksa tek yönlü kapan olurdu. */}
@@ -798,6 +806,7 @@ function DecisionCard({
       {/* İtirazlar */}
       <AppealsList
         caseId={caseObj.id}
+        decision={d}
         appeals={d.appeals}
         canManage={canManageAppeal}
         onChanged={onChanged}
@@ -1208,6 +1217,40 @@ function EditDecisionForm({
 // Onay / tebliğ / anlatı formları
 // ===========================================================================
 
+// Üst kurulun (itiraz mercii / onaylayan kurul) cezayı DEĞİŞTİRMESİ: tür değişebilir ya da
+// uzaklaştırmanın yalnız gün sayısı değişebilir (md. 164/2, 200/1-a, 200/1-ç). Aynı tür
+// yalnız uzaklaştırmada seçilebilir; backend `_apply_penalty_change` ile aynı kural.
+function changedPenaltyOptions(d: DisciplineDecision): { value: PenaltyType; label: string }[] {
+  return (Object.entries(PENALTY_TYPE_TR) as [PenaltyType, string][])
+    .filter(([value]) => value !== d.penalty_type || value === "SHORT_TERM_SUSPENSION")
+    .map(([value, label]) => ({
+      value,
+      label: value === d.penalty_type ? `${label} — süre değişti` : label,
+    }));
+}
+
+function suspensionDaysHint(d: DisciplineDecision): string {
+  return d.penalty_type === "SHORT_TERM_SUSPENSION" && d.suspension_days != null
+    ? `1-5 gün (md. 164/2). Mevcut ceza ${d.suspension_days} gün; farklı bir gün sayısı girin.`
+    : "1-5 gün (md. 164/2).";
+}
+
+function penaltyChangeError(
+  d: DisciplineDecision,
+  newPenalty: PenaltyType | "",
+  newDays: number,
+): string | null {
+  if (newPenalty === "") return "Kurulun verdiği yeni cezayı seçin.";
+  if (newPenalty !== "SHORT_TERM_SUSPENSION") return null;
+  if (!Number.isInteger(newDays) || newDays < 1 || newDays > 5) {
+    return "Uzaklaştırma süresi 1-5 gün olmalıdır (md. 164/2).";
+  }
+  if (d.penalty_type === "SHORT_TERM_SUSPENSION" && d.suspension_days === newDays) {
+    return `Gün sayısı mevcut cezayla aynı (${newDays} gün). Kurul süreyi değiştirdiyse yeni gün sayısını girin; ceza aynen kaldıysa "değiştirildi" seçmeyin.`;
+  }
+  return null;
+}
+
 function ApprovalForm({
   caseId,
   decision: d,
@@ -1220,17 +1263,18 @@ function ApprovalForm({
   onDone: () => void;
 }) {
   const today = todayIso();
-  // Liste yalnız PENDING/APPROVED içerir; RETURNED/REFERRED/REJECTED bir karşılığı
-  // olmadığından state listede GERÇEKTEN bulunan değere ilklenir — aksi halde
-  // tarayıcı ilk seçeneği gösterirken state farklı kalır ve dokunulmadan yapılan
-  // kayıt backend'de reddedilirdi (md. 197).
-  const [status, setStatus] = useState<DecisionApprovalStatus>(
-    d.approval_status === "APPROVED" ? "APPROVED" : "PENDING",
+  // Liste yalnız PENDING/APPROVED içerir. İade edilmiş (RETURNED) ya da ilçe kurulundaki
+  // (REFERRED) kararın listede karşılığı yoktur: form BOŞ ("Seçiniz…") açılır ve seçim
+  // yapılmadan kaydedilmez. Eskiden PENDING'e ilkleniyordu; dokunmadan "Kaydet" md. 197
+  // adımını sessizce "onay bekliyor"a çeviriyordu (saha testi 14.11.2026).
+  const [status, setStatus] = useState<DecisionApprovalStatus | "">(
+    d.approval_status === "APPROVED" || d.approval_status === "PENDING" ? d.approval_status : "",
   );
   const [approvedOn, setApprovedOn] = useState(d.approved_at ?? today);
   // Onay mercii bir KURULSA (okul değiştirme → ilçe, örgün dışı → il; md. 197 ile
-  // ilçeye giden karar) kurul "onaylar veya değiştirir" (md. 200/1-a, 202/1-a).
-  const boardApproves = d.approval_authority !== "PRINCIPAL" || d.approval_status === "REFERRED";
+  // ilçeye giden karar) kurul "onaylar veya değiştirir" (md. 200/1-a, 202/1-a). Kalıcı
+  // `referred_to_district` işaretine bakılır: yanlış girilen ilçe onayı da düzeltilebilsin.
+  const boardApproves = d.approval_authority !== "PRINCIPAL" || d.referred_to_district;
   const [modifiedPenalty, setModifiedPenalty] = useState<PenaltyType | "">("");
   const [modifiedDays, setModifiedDays] = useState("1");
   const [busy, setBusy] = useState(false);
@@ -1238,10 +1282,21 @@ function ApprovalForm({
   const snackbar = useSnackbar();
 
   const submit = async () => {
+    if (status === "") {
+      setError("Onay durumunu seçin.");
+      return;
+    }
+    const modifying = boardApproves && status === "APPROVED" && modifiedPenalty !== "";
+    const changeError = modifying
+      ? penaltyChangeError(d, modifiedPenalty, Number(modifiedDays))
+      : null;
+    if (changeError) {
+      setError(changeError);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const modifying = boardApproves && status === "APPROVED" && modifiedPenalty !== "";
       await disiplinApi.approveDecision(caseId, d.id, {
         approval_status: status,
         approved_on: status === "PENDING" ? null : approvedOn,
@@ -1266,17 +1321,28 @@ function ApprovalForm({
       <Select
         label="Onay durumu"
         value={status}
-        onChange={(e) => setStatus(e.target.value as DecisionApprovalStatus)}
+        onChange={(e) => setStatus(e.target.value as DecisionApprovalStatus | "")}
+        placeholder={status === "" ? "Seçiniz…" : undefined}
         options={(Object.entries(DECISION_APPROVAL_STATUS_TR) as [DecisionApprovalStatus, string][])
           .filter(([value]) => value === "PENDING" || value === "APPROVED")
-          .map(([value, label]) => ({ value, label }))}
+          .map(([value, label]) => ({
+            value,
+            // İlçeye gitmiş karar müdür onayına dönmez: "beklemede" = ilçe kurulunda.
+            label: !d.referred_to_district
+              ? label
+              : value === "PENDING"
+                ? "İlçe kurulunda (karar bekleniyor)"
+                : "İlçe kurulu karara bağladı",
+          }))}
         helperText={
-          d.approval_status === "REFERRED"
-            ? "İlçe öğrenci disiplin kurulunun kararını kaydedin (md. 197). Karara itiraz il kurulunda görülür (md. 169/4)."
-            : "Kınama ve kısa süreli uzaklaştırmayı müdür, okul değiştirmeyi ilçe, örgün eğitim dışına çıkarmayı il kurulu onaylar (md. 163/2). Karar onaylanmadan tebliğ edilemez. Müdür kararı reddedemez; uygun bulmazsa bir kez kurula iade eder (md. 197)."
+          d.referred_to_district
+            ? 'İlçe öğrenci disiplin kurulunun kararını kaydedin (md. 197). Karara itiraz il kurulunda görülür (md. 169/4). Yanlış girilen ilçe kararını geri almak için "İlçe kurulunda"yı seçin.'
+            : d.approval_status === "RETURNED"
+              ? 'Karar kurula iade edildi (md. 197). Kurul kararını değiştirecekse "Onay bekliyor"a alıp kararı düzenleyin; yeni karar uygun bulunduysa onaylayın. Kurul kararında ısrar ediyorsa bu form yerine "İlçe kuruluna gönder"i kullanın.'
+              : "Kınama ve kısa süreli uzaklaştırmayı müdür, okul değiştirmeyi ilçe, örgün eğitim dışına çıkarmayı il kurulu onaylar (md. 163/2). Karar onaylanmadan tebliğ edilemez. Müdür kararı reddedemez; uygun bulmazsa bir kez kurula iade eder (md. 197)."
         }
       />
-      {status !== "PENDING" && (
+      {status === "APPROVED" && (
         <TextField
           label="Onay tarihi"
           type="date"
@@ -1291,9 +1357,10 @@ function ApprovalForm({
           onChange={(e) => setModifiedPenalty(e.target.value as PenaltyType | "")}
           options={[
             { value: "", label: "Hayır — aynen onaylandı" },
-            ...(Object.entries(PENALTY_TYPE_TR) as [PenaltyType, string][])
-              .filter(([value]) => value !== d.penalty_type)
-              .map(([value, label]) => ({ value, label: `Değiştirildi: ${label}` })),
+            ...changedPenaltyOptions(d).map(({ value, label }) => ({
+              value,
+              label: `Değiştirildi: ${label}`,
+            })),
           ]}
           helperText="Üst kurul kararı değiştirdiyse yeni cezayı seçin; davranış puanı buna göre hesaplanır (md. 170, 200/1-a)."
         />
@@ -1306,7 +1373,7 @@ function ApprovalForm({
           max={5}
           value={modifiedDays}
           onChange={(e) => setModifiedDays(e.target.value)}
-          helperText="1-5 gün (md. 164/2)."
+          helperText={suspensionDaysHint(d)}
         />
       )}
       <FormError error={error} />
@@ -1890,11 +1957,13 @@ function NarrativeForm({
 
 function AppealsList({
   caseId,
+  decision,
   appeals,
   canManage,
   onChanged,
 }: {
   caseId: number;
+  decision: DisciplineDecision;
   appeals: DisciplineAppeal[];
   canManage: boolean;
   onChanged: () => void;
@@ -1908,6 +1977,7 @@ function AppealsList({
           <AppealRow
             key={a.id}
             caseId={caseId}
+            decision={decision}
             appeal={a}
             canManage={canManage}
             onChanged={onChanged}
@@ -1920,11 +1990,13 @@ function AppealsList({
 
 function AppealRow({
   caseId,
+  decision,
   appeal: a,
   canManage,
   onChanged,
 }: {
   caseId: number;
+  decision: DisciplineDecision;
   appeal: DisciplineAppeal;
   canManage: boolean;
   onChanged: () => void;
@@ -1959,6 +2031,13 @@ function AppealRow({
             : ""}
         {a.resulted_on && ` · sonuç: ${formatDate(a.resulted_on)}`}
       </p>
+      {/* "Değiştirildi": karar yeni cezayı gösterir; itiraz edilen (eski) ceza burada kalır. */}
+      {a.result === "REDUCED" && a.previous_penalty_type && (
+        <p className="mt-1 text-label-small text-on-surface-variant">
+          İtiraz edilen ceza: {PENALTY_TYPE_TR[a.previous_penalty_type]}
+          {a.previous_suspension_days != null && ` (${a.previous_suspension_days} gün)`}
+        </p>
+      )}
       {a.result_notes && (
         <p className="mt-1 whitespace-pre-wrap text-body-small text-on-surface-variant">
           {a.result_notes}
@@ -1992,6 +2071,7 @@ function AppealRow({
       {panel === "resolve" && (
         <ResolveAppealForm
           caseId={caseId}
+          decision={decision}
           appeal={a}
           onCancel={() => setPanel(null)}
           onDone={() => {
@@ -2129,11 +2209,13 @@ function ForwardAppealForm({
 
 function ResolveAppealForm({
   caseId,
+  decision: d,
   appeal: a,
   onCancel,
   onDone,
 }: {
   caseId: number;
+  decision: DisciplineDecision;
   appeal: DisciplineAppeal;
   onCancel: () => void;
   onDone: () => void;
@@ -2157,6 +2239,11 @@ function ResolveAppealForm({
   );
 
   const submit = async () => {
+    // Kesin sonuç onayı sorulmadan ÖNCE: "değiştirildi" gerçekten bir değişiklik mi?
+    const changeError =
+      result === "REDUCED" ? penaltyChangeError(d, newPenalty, Number(newDays)) : null;
+    setError(changeError);
+    if (changeError) return;
     // md. 169/4: itiraz sonucu kesindir; kaydı geri alma yolu yoktur.
     if (
       !(await confirm({
@@ -2215,10 +2302,8 @@ function ResolveAppealForm({
             placeholder="Seçiniz…"
             value={newPenalty}
             onChange={(e) => setNewPenalty(e.target.value as PenaltyType | "")}
-            options={(Object.entries(PENALTY_TYPE_TR) as [PenaltyType, string][]).map(
-              ([value, label]) => ({ value, label }),
-            )}
-            helperText="Karar ve davranış puanı yeni cezaya göre güncellenir (md. 170)."
+            options={changedPenaltyOptions(d)}
+            helperText="Karar ve davranış puanı yeni cezaya göre güncellenir (md. 170). Kurul yalnız uzaklaştırma süresini değiştirdiyse aynı cezayı seçip yeni gün sayısını girin."
           />
         )}
         {result === "REDUCED" && newPenalty === "SHORT_TERM_SUSPENSION" && (
@@ -2229,6 +2314,7 @@ function ResolveAppealForm({
             max={5}
             value={newDays}
             onChange={(e) => setNewDays(e.target.value)}
+            helperText={suspensionDaysHint(d)}
           />
         )}
       </div>

@@ -18,6 +18,7 @@ from apps.disiplin.models import (
     DisciplineCommittee,
     DisciplineDecision,
     DisciplineDecisionType,
+    HonorBoard,
     HonorCertificate,
     PetitionerRole,
 )
@@ -154,6 +155,9 @@ def council_meeting(
         ]
     else:
         ensure_terms(year)
+        # Onur Kurulu tanımlı değilken uygun görüş kararı verilemez (saha denetimi 13.11.2026).
+        if not HonorBoard.objects.filter(school_year=year).exists():
+            services.create_honor_board(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
         attendees = [
             {"person_name": "Onur Başkanı", "attendee_role": "VOTING_MEMBER", "is_chair": True},
             {"person_name": "Öğrenci Üye", "attendee_role": "VOTING_MEMBER", "is_chair": False},

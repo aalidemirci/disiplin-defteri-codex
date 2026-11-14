@@ -12,6 +12,7 @@ from datetime import date
 from django.db import transaction
 
 from apps.disiplin.models import (
+    CaseStage,
     DisciplineCase,
     DisciplineCaseStudent,
     DisciplineDecision,
@@ -19,10 +20,24 @@ from apps.disiplin.models import (
     DisciplineWarning,
     ParticipantPersonType,
     ParticipantRole,
+    PrincipalDecision,
 )
-from apps.disiplin.services.common import case_has_student
+from apps.disiplin.services.common import assert_not_future, case_has_student
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import Personnel, Student
+
+
+def _assert_case_open(case: DisciplineCase) -> None:
+    """Kapalı dosyada taraf listesi değişmez (künye kilidiyle aynı gerekçe).
+
+    Kapanmış dosyadan suçlanan çıkarılırsa hakkındaki uyarı kaydı sahipsiz kalır;
+    sonradan eklenen taraf kapanışın dayanağı olan evrakla çelişir.
+    """
+    if case.closed_at is not None:
+        raise ValueError(
+            "Dosya kapalı: taraflar değiştirilemez. Düzeltme gerekiyorsa önce dosyayı "
+            "yeniden açın (aşama geri alma)."
+        )
 
 
 def ensure_accused_participant(case: DisciplineCase, student: Student) -> None:
@@ -89,6 +104,7 @@ def add_participant(
     Suçlanan-öğrenci katılımcı `DisciplineCaseStudent` ile senkronlanır (through
     satırı garanti edilir). Aynı öğrenci/personel aynı rolde iki kez eklenemez.
     """
+    _assert_case_open(case)
     if role not in set(ParticipantRole.values):
         raise ValueError("Geçersiz katılımcı rolü.")
     student, person, ext_name, name = _resolve_participant_person(
@@ -133,6 +149,7 @@ def remove_participant(participant: DisciplineParticipant) -> None:
     kalmışsa çıkarılamaz (1..n suçlanan). Aksi halde `DisciplineCaseStudent`
     through satırı da kaldırılır (senkron).
     """
+    _assert_case_open(participant.case)
     case_id = participant.case_id
     accused_student_id: int | None = (
         participant.student_id
@@ -172,11 +189,46 @@ def issue_warning(
 
     Öğrenci dosyaya dahil (suçlanan) olmalı. Tekrarı triajda kurula yönlendirir
     (md. 166, selectors.should_route_to_committee).
+
+    Kapalı dosyada da çalışır: Dal A dosyası müdür kararıyla OTOMATİK kapanır,
+    uyarı kaydı ondan sonra girilir (kapanış kilidi burada uygulanmaz).
+
+    Kayıt, müdür kararıyla (aşama olayı) aynı kapıdan geçer:
+    - Dosyada öğrenci başına TEK canlı uyarı (md. 157/7-a tek yazılı uyarı öngörür).
+    - Müdürün son kararı yazılı uyarı değilse (kurula sevk — Dal B) uyarı kaydı açılmaz.
+    - Öğrencinin geçmişinde ceza/uyarı varsa (md. 157/7-e) kayıt yalnız müdür bu
+      dosyada (gerekçeli override ile) yazılı uyarı kararı vermişse açılır.
     """
+    from apps.disiplin import selectors
+
     if not case_has_student(case, student_id):
         raise ValueError("Öğrenci bu disiplin dosyasına dahil değil.")
     if not (summary or "").strip():
         raise ValueError("Uyarı gerekçesi (summary) zorunludur.")
+    assert_not_future(warning_date, "Uyarı tarihi")
+    if warning_date < case.petition_date:
+        raise ValueError(
+            f"Uyarı tarihi dilekçe tarihinden ({case.petition_date:%d.%m.%Y}) önce olamaz."
+        )
+    if DisciplineWarning.objects.filter(case=case, student_id=student_id).exists():
+        raise ValueError(
+            "Bu öğrenci için dosyada zaten müdür uyarısı kaydı var (md. 157/7-a tek yazılı "
+            "uyarı öngörür). Kayıt yanlışsa önce silin, sonra doğrusunu girin."
+        )
+
+    decided = _current_principal_decisions(case)
+    warned_here = decided is not None and PrincipalDecision.WRITTEN_WARNING in decided
+    if decided is not None and not warned_here:
+        raise ValueError(
+            "Dosya kurula sevk edilmiş; müdür uyarısı kaydı açılamaz. Yazılı uyarı (md. "
+            "157/7) yalnız müdürün 'yazılı uyarı' kararı verdiği dosyada kaydedilir."
+        )
+    if not warned_here and selectors.should_route_to_committee(student_id, exclude_case_id=case.pk):
+        raise ValueError(
+            "Öğrencinin geçmişinde disiplin cezası/uyarısı var: ikinci davranışta öğrenci "
+            "doğrudan disiplin kuruluna gönderilir (md. 157/7-e); uyarı kaydı açılamaz. "
+            "Dosyayı kurula sevk edin."
+        )
 
     warning = DisciplineWarning(
         case=case,
@@ -187,3 +239,37 @@ def issue_warning(
     warning.full_clean()
     warning.save()
     return warning
+
+
+def _current_principal_decisions(case: DisciplineCase) -> list[str] | None:
+    """Dosyanın GEÇERLİ müdür kararı — karar aşamasına gelinmemişse None.
+
+    Aşama geri alınmışsa (`revert_stage` olay silmez) eski karar sayılmaz; yeniden
+    verilmişse yalnız SON karar geçerlidir (kullanıcı kararı 27.09.2026).
+    """
+    if case.current_stage in (
+        CaseStage.PETITION,
+        CaseStage.GUIDANCE_REFERRED,
+        CaseStage.GUIDANCE_RETURNED,
+    ):
+        return None
+    from apps.disiplin import selectors
+
+    # Kayıt sırası (olay tarihi değil): geri alınmış, daha geç tarihli sevk geçerli sayılmaz.
+    latest = selectors.latest_principal_decision_event(case)
+    if latest is None:
+        return None
+    return list(latest.principal_decisions or [])
+
+
+@transaction.atomic
+def delete_warning(warning: DisciplineWarning) -> None:
+    """Yanlış girilen müdür uyarısı kaydını siler (soft delete).
+
+    Öğrenci başına tek kayıt kuralı yanlış girişi tek yönlü kapana çevirmesin (§7.6):
+    kayıt triajda öğrenciyi "uyarılmış" saydırır. Uyarı kaydı kapanışın dayanağı
+    değildir (dosya otomatik kapandıktan sonra girilir) — kapalı dosyada da silinir.
+    Müdürün "yazılı uyarı" KARARI (aşama olayı) yerinde kalır; onu geri almak
+    aşama geri alma işidir.
+    """
+    warning.delete()  # soft delete

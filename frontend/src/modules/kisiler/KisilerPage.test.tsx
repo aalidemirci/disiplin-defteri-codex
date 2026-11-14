@@ -288,6 +288,11 @@ describe("KisilerPage — öğrenci ekleme/düzenleme/silme", () => {
     const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
     await user.click(within(dialog).getByRole("button", { name: "Sil" }));
     const confirmDialog = await screen.findByRole("dialog", { name: "Onay" });
+    // Saha testi 14.11.2026: onay metni "geri alınabilir (soft delete)" vaadi vermez —
+    // programda geri yükleme yoktur; ayrılan öğrenci için doğru yol durum değişikliğidir.
+    expect(confirmDialog).toHaveTextContent("geri getirilemez");
+    expect(confirmDialog).toHaveTextContent("Ayrıldı");
+    expect(confirmDialog).not.toHaveTextContent("soft delete");
     await user.click(within(confirmDialog).getByRole("button", { name: "Sil" }));
 
     // Önceki sayfa yeniden yüklenir: liste dolu ve sayfalama çubuğu yerinde.

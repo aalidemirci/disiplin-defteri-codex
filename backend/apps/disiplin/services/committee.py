@@ -224,7 +224,26 @@ def record_meeting(
     Katılımcılar aktif kurulun üyeleri olmalı (md. 191). Tutanak/PDF veriyi
     buradan çeker.
     """
-    from apps.disiplin.selectors import get_active_committee
+    from apps.disiplin.selectors import committee_referred_on, get_active_committee
+
+    # Kurul yalnız kendisine sevk edilen, açık dosyayı görüşür (md. 163/2, 189/h) — karar
+    # girişiyle aynı koşul. Kapalı dosyada toplantı kaydı kapanış dayanağını bulandırır.
+    if case.closed_at is not None:
+        raise ValueError(
+            "Dosya kapalı: kurul toplantısı kaydedilemez. Gerekiyorsa önce dosyayı yeniden "
+            "açın (aşama geri alma)."
+        )
+    referred_on = committee_referred_on(case)
+    if referred_on is None:
+        raise ValueError(
+            "Dosya disiplin kuruluna sevk edilmemiş; kurul toplantısı kaydedilemez. Önce "
+            "müdür kararıyla dosyayı kurula sevk edin (md. 163/2)."
+        )
+    if meeting_date < referred_on:
+        raise ValueError(
+            f"Toplantı tarihi, dosyanın kurula sevk tarihinden ({referred_on:%d.%m.%Y}) önce "
+            "olamaz."
+        )
 
     committee = get_active_committee()
     if committee is None:
@@ -245,3 +264,18 @@ def record_meeting(
     if valid_ids:
         meeting.attendees.set(valid_ids)
     return meeting
+
+
+@transaction.atomic
+def delete_meeting(meeting: DisciplineMeeting) -> None:
+    """Yanlış girilen dosya toplantısı kaydını siler (soft-delete).
+
+    Toplantı kaydı EK-1 imza heyetini belirler; yanlış kayıt düzeltilemezse tek yönlü
+    kapan olur (§7.6). Kapalı dosyada reddedilir (kapanış dayanağı kilitli).
+    """
+    if meeting.case.closed_at is not None:
+        raise ValueError(
+            "Dosya kapalı: kurul toplantısı kaydı silinemez. Gerekiyorsa önce dosyayı yeniden "
+            "açın (aşama geri alma)."
+        )
+    meeting.delete()

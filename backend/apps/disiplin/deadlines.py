@@ -22,6 +22,7 @@ from datetime import date
 from typing import Any
 
 from apps.disiplin import selectors
+from apps.disiplin.models import CaseStage, DecisionApprovalStatus
 from apps.okul.services.calendar import is_working_day
 from shared.working_days import add_working_days
 
@@ -99,16 +100,26 @@ def collect_deadline_items(today: date) -> list[DeadlineItem]:
 
     # 3) Tedbir süreleri (md. 175) — İKİ eşik ayrı satır: işleme-başlama (175/2)
     #    ve bitiş (175/1). min() tekleştirmesi uzun tedbirlerde bitişi gizliyordu.
+    #    İşleme-başlama eşiği yalnız işlem HENÜZ BAŞLAMAMIŞSA (dosya dilekçe
+    #    aşamasında) listelenir: md. 175/2 "üç iş günü içinde disiplin işlemine
+    #    başlanır" — rehberliğe/kurula sevk edilmiş dosyada yükümlülük yerine
+    #    gelmiştir (md. 175/1 tedbir sevkten sonra da alınabilir; o zaman hiç doğmaz).
+    #    Aynı dosyada birden çok öğrencinin tedbiri olabilir → başlıkta öğrenci adı.
     for precaution in selectors.precautions_awaiting_deadline(horizon):
-        thresholds = (
-            (
-                precaution.process_start_deadline,
-                "Tedbir sonrası disiplin işlemine başlanmalı (tedbir + 3 iş günü)",
-            ),
+        who = precaution.student.full_name or f"#{precaution.student_id}"
+        thresholds: list[tuple[date, str]] = []
+        if precaution.case.current_stage == CaseStage.PETITION:
+            thresholds.append(
+                (
+                    precaution.process_start_deadline,
+                    f"Tedbir sonrası disiplin işlemine başlanmalı (tedbir + 3 iş günü) — {who}",
+                )
+            )
+        thresholds.append(
             (
                 precaution.end_date,
-                "Tedbir süresi doluyor (10 iş günü; MEM onayıyla iki kez uzatılabilir)",
-            ),
+                "Tedbir süresi doluyor (10 iş günü; MEM onayıyla iki kez uzatılabilir)" f" — {who}",
+            )
         )
         for due, title in thresholds:
             if due > horizon:
@@ -138,6 +149,25 @@ def collect_deadline_items(today: date) -> list[DeadlineItem]:
                 ),
                 due_date=None,
                 statute_ref="md. 163/2",
+                link=f"/disiplin/{decision.case_id}",
+            )
+        )
+    # md. 197 askısı: kurula iade edilmiş / ilçe kuruluna gönderilmiş karar ne onay
+    # ne tebliğ listesine girer — görünmezse dosya açık kalır ve unutulur.
+    for decision in selectors.decisions_in_md197_review():
+        referred = decision.approval_status == DecisionApprovalStatus.REFERRED_TO_DISTRICT
+        items.append(
+            DeadlineItem(
+                severity=Severity.INFO,
+                case_no=decision.case.case_no,
+                title=(
+                    f"Karar ilçe kurulunda — sonuç bekleniyor ({decision.student.full_name})"
+                    if referred
+                    else "Karar kurula iade edildi — kurulun yeniden görüşmesi bekleniyor "
+                    f"({decision.student.full_name})"
+                ),
+                due_date=None,
+                statute_ref="md. 197",
                 link=f"/disiplin/{decision.case_id}",
             )
         )

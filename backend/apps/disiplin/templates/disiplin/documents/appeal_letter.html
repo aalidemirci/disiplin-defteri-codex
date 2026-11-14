@@ -1,13 +1,21 @@
 {% extends "documents/base.html" %}
+{% load tr_ekler %}
 {% comment %}Form-18 İl/İlçe İtiraz Yazısı — okul müdürlüğünden üst kurula itiraz sevk
 yazısı (md. 169/2-3). Karar + veli itiraz dilekçesi (DisciplineAppeal) ön-doldurulur;
 olay özeti `decision.penalty_detail`'den. Tur 217: örnek okul formundaki sabit
 "Okuldan Kısa Süreli Uzaklaştırma" metni gerçek ceza türüne, itiraz mercii ve onay
 makamı md. 169/2-3 bentlerine (kınama/kısa süreli→ilçe, okul değiştirme→il, örgün
-dışı→üst kurul) bağlandı. Muhatap merci satırı elle netleştirilir.
+dışı→üst kurul) bağlandı.
 26.09.2026 (kullanıcı kararı): itiraz eden, süre durumu, onay makamı ve itiraz
 mercii kayıttan basılır (documents._appeal_letter_context); itiraz derdestken karar
-"kesinleşmiş" yazılmaz; müdür itirazında "orantılıdır" görüşü basılmaz.{% endcomment %}
+"kesinleşmiş" yazılmaz; müdür itirazında "orantılıdır" görüşü basılmaz.
+Saha denetimi 14.11.2026: itiraz edenin adına tamlayan eki ünlü uyumuyla (tr_tamlayan;
+ad boşsa ya da ek üretilemiyorsa "İtiraz edenin"); gerekçe (`penalty_detail`) boşsa köşeli
+yer tutucu değil noktalı satır basılır, elle doldurulur (çok cümleli dosya özeti cümle
+ortasına gömülmez); muhatap, ilçe adı kayıtlıysa
+okulun bağlı olduğu ilçe millî eğitim müdürlüğüdür (md. 169/1 "millî eğitim müdürlükleri
+aracılığıyla" — itiraz mercii gövdede kayıttan yazılır), kayıtlı değilse elle doldurulur;
+ceza sonradan üst kurulca değiştirildiyse `penalty_change_note` ayrı paragrafta basılır.{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN CEZASI İTİRAZI HAKKINDA</div>
 <div class="doc-subtitle">Form-18 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169/3</div>
@@ -22,24 +30,27 @@ mercii kayıttan basılır (documents._appeal_letter_context); itiraz derdestken
   <tr>
     <td class="label">İlgi</td>
     <td class="narr">a) {% if decision %}{{ decision.decision_date|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihli ve {{ decision.decision_no|default:'………' }} sayılı Okul Öğrenci Ödül ve Disiplin Kurulu Kararı
-b) {% if appeal_by_principal %}Okul müdürlüğünün{% else %}{{ appeal.filed_by_name|default:'[Ad Soyad]' }}'nın{% endif %} {% if appeal %}{{ appeal.filed_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihli itiraz {% if appeal_by_principal %}yazısı{% else %}dilekçesi{% endif %}
+b) {% if appeal_by_principal %}Okul müdürlüğünün{% else %}{{ appeal.filed_by_name|tr_tamlayan|default:'İtiraz edenin' }}{% endif %} {% if appeal %}{{ appeal.filed_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihli itiraz {% if appeal_by_principal %}yazısı{% else %}dilekçesi{% endif %}
 c) MEB Ortaöğretim Kurumları Yönetmeliği Madde 169</td>
   </tr>
 </table>
 
 <p class="para" style="margin-top: 14pt; text-align: center;">
-  <strong>……………… İL / İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
+  <strong>{% if district_upper %}{{ district_upper }} İLÇE{% else %}……………… İL / İLÇE{% endif %} MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
   <span class="muted" style="font-style: normal;">(Ortaöğretim Şubesi)</span>
 </p>
 
 <p class="para">
   Okulumuz {{ student.class_label }} öğrencisi {{ student.student_number }} numaralı
   <strong>{{ student.full_name }}</strong> hakkında,
-  <em>{{ decision.penalty_detail|default:'[disipline konu olan olayın kısa özeti]' }}</em>
+  <em>{{ decision.penalty_detail|default:'……………………………………' }}</em>
   nedeniyle İlgi (a) karar ile
   "{% if decision %}{{ decision.get_penalty_type_display }}{% else %}…………………{% endif %}"
   cezası verilmiş ve söz konusu karar {{ approval_phrase }}.
 </p>
+{% if penalty_change_note %}
+<p class="para">{{ penalty_change_note }}</p>
+{% endif %}
 
 <p class="para">
   İlgili ceza, {% if decision.notified_at %}{{ decision.notified_at|date:'d.m.Y' }}{% else %}…/…/202…{% endif %} tarihinde usulüne uygun olarak tebliğ edilmiştir.

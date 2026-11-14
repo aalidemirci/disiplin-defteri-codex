@@ -18,6 +18,7 @@ from apps.disiplin.models import (
     AppealFiledByRole,
     AppealResult,
     ApprovalAuthority,
+    CaseStage,
     DecisionApprovalStatus,
     DisciplineAppeal,
     DisciplineCase,
@@ -169,6 +170,35 @@ def _check_md166(
     return reason
 
 
+#: Ceza kararının girilebildiği aşamalar: kurula sevk (DECIDED) ve sonrası. Kapalı
+#: dosya ayrıca `closed_at` ile reddedilir.
+_DECISION_ENTRY_STAGES = (CaseStage.DECIDED, CaseStage.COMMITTEE_DONE, CaseStage.CLOSED)
+
+
+def _assert_case_referred(case: DisciplineCase) -> date:
+    """md. 163/2: ceza kararı yalnız kurula SEVKLİ dosyada girilir — sevk tarihini döndürür.
+
+    Sevk olayının varlığı yetmez: aşama geri alınmışsa (`revert_stage` olay silmez)
+    dosyanın GÜNCEL aşaması sevk öncesindedir ve sevk hükümsüzdür (saha testi 14.11.2026).
+    """
+    from apps.disiplin import selectors
+
+    if case.current_stage not in _DECISION_ENTRY_STAGES:
+        raise ValueError(
+            "Dosyanın kurula sevki geri alınmış (güncel aşama: "
+            f'"{case.get_current_stage_display()}"); ceza kararı yalnız kurula sevkli '
+            "dosyada girilir (md. 163/2). Önce müdür değerlendirmesinde "
+            '"Disiplin Kuruluna Sevk" kararını yeniden kaydedin.'
+        )
+    referred_on = selectors.committee_referred_on(case)
+    if referred_on is None:
+        raise ValueError(
+            "Dosya okul öğrenci ödül ve disiplin kuruluna sevk edilmemiş; ceza kararı "
+            "yalnız kurulda görüşülüp karara bağlanan dosyada girilir (md. 163/2)."
+        )
+    return referred_on
+
+
 def record_decision(
     case: DisciplineCase,
     *,
@@ -191,18 +221,11 @@ def record_decision(
     türetilir. Öğrenci dosyaya dahil olmalı; dosya başına öğrenciye tek (silinmemiş)
     karar (ikinci kez ValueError).
     """
-    from apps.disiplin import selectors
-
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
     if case.closed_at is not None:
         raise ValueError("Dosya kapatılmış; resmî karar girilemez.")
-    referred_on = selectors.committee_referred_on(case)
-    if referred_on is None:
-        raise ValueError(
-            "Dosya okul öğrenci ödül ve disiplin kuruluna sevk edilmemiş; ceza kararı "
-            "yalnız kurulda görüşülüp karara bağlanan dosyada girilir (md. 163/2)."
-        )
+    referred_on = _assert_case_referred(case)
     if decision_date < referred_on:
         raise ValueError("Karar tarihi kurula sevk tarihinden önce olamaz.")
     if not case_has_student(case, student_id):
@@ -351,11 +374,14 @@ def delete_decision(decision: DisciplineDecision) -> None:
 def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
     """Soft-delete edilmiş bir kararı geri yükler.
 
-    Aynı öğrenci için bu dosyada zaten CANLI bir karar varsa reddedilir.
+    Aynı öğrenci için bu dosyada zaten CANLI bir karar varsa reddedilir. Dosya artık
+    kurula sevkli değilse (sevk geri alınmış / yazılı uyarıya dönülmüş) karar geri
+    gelmez — md. 163/2 (`record_decision` ile aynı kural).
     """
     if decision.deleted_at is None:
         raise ValueError("Karar zaten geri yüklenmiş (silinmemiş).")
     _assert_case_open(decision)
+    _assert_case_referred(decision.case)
     if not case_has_student(decision.case, decision.student_id):
         raise ValueError("Öğrenci artık bu dosyada değil; karar geri yüklenemez.")
     if DisciplineDecision.objects.filter(
@@ -383,7 +409,9 @@ def set_decision_approval(
     Geçiş korumaları: itirazla bozulmuş (REJECTED) karar yeniden onaylanamaz;
     tebliğ edilmiş karar onaysız hâle döndürülemez; onay tarihi karar tarihinden
     önce olamaz. İlçe kuruluna gönderilmiş (md. 197) kararda APPROVED = ilçe
-    kurulunun kararı bağlaması.
+    kurulunun kararı bağlaması; aynı kararda PENDING "müdür onayı bekliyor"a değil
+    "ilçe kurulunda"ya (REFERRED) döner — müdür o kararı artık onaylayamaz, yanlış
+    girilen ilçe kararı böyle geri alınır (saha testi 14.11.2026, tek yönlü kapan).
 
     `modified_penalty_type`: onay mercii bir KURUL ise (okul değiştirme → ilçe,
     örgün dışı → il; md. 197 ile ilçeye giden karar) kurul "onaylar veya
@@ -411,13 +439,35 @@ def set_decision_approval(
         # önce tebliğ" hâline getiremez.
         if decision.notified_at is not None and approved_on > decision.notified_at:
             raise ValueError("Onay tarihi tebliğ tarihinden sonra olamaz.")
+        # md. 169/2-a "onayından sonra uygulanır": başlangıç karar formunda baştan
+        # girilmişse onay tarihi onu geçemez (anlatı ucundaki denetimin eşi).
+        keeps_start = modified_penalty_type in ("", PenaltyType.SHORT_TERM_SUSPENSION)
+        if (
+            keeps_start
+            and decision.penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
+            and decision.enforcement_start_date is not None
+            and decision.enforcement_start_date < approved_on
+        ):
+            raise ValueError(
+                f"Uzaklaştırma başlangıcı ({decision.enforcement_start_date:%d.%m.%Y}) onay "
+                "tarihinden önce kalıyor; ceza onaydan sonra uygulanır (md. 169/2-a). Önce "
+                "uygulama başlangıcını düzeltin ya da boşaltın, sonra onayı kaydedin."
+            )
+    approving = approval_status == DecisionApprovalStatus.APPROVED
+    if not approving:
+        approved_on = None
+        if decision.referred_to_district:
+            approval_status = DecisionApprovalStatus.REFERRED_TO_DISTRICT
     fields = ["approval_status", "approved_at", "updated_at"]
     if modified_penalty_type:
+        # Onay mercii kurul mu: ceza türünden (ilçe/il) ya da md. 197 sevkinden. Anlık
+        # onay durumuna DEĞİL kalıcı `referred_to_district` işaretine bakılır; yoksa
+        # yanlış girilen ilçe onayı düzeltilemezdi.
         board_approves = (
             decision.approval_authority != ApprovalAuthority.PRINCIPAL
-            or decision.approval_status == DecisionApprovalStatus.REFERRED_TO_DISTRICT
+            or decision.referred_to_district
         )
-        if approval_status != DecisionApprovalStatus.APPROVED or not board_approves:
+        if not approving or not board_approves:
             raise ValueError(
                 "Ceza türü yalnız onay mercii kurul olan kararda, onay sırasında "
                 "değiştirilebilir (md. 200/1-a, 202/1-a); okul kurulu kararı müdürce "
@@ -438,12 +488,25 @@ def _apply_penalty_change(
     """Üst kurulun cezayı değiştirmesini karara işler (puan dahil — md. 170).
 
     `approval_authority` DEĞİŞMEZ: kararı bağlayan (onaylayan) merci aynı kalır;
-    itiraz mercii ondan türer (`appeal_authority_for_decision`).
+    itiraz mercii ondan türer (`appeal_authority_for_decision`). Tür aynı kalabilir:
+    yalnız kısa süreli uzaklaştırmada ve gün sayısı farklıysa — süre cezanın unsurudur
+    (md. 164/2, 172/1-a), üst kurul yalnız günü değiştirmiş olabilir (md. 200/1-ç).
+    Uzaklaştırma sürdükçe uygulama başlangıcı korunur; bitiş yeni günden hesaplanır.
     """
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
     if penalty_type == decision.penalty_type:
-        raise ValueError("Değiştirilen ceza türü mevcut cezayla aynı olamaz.")
+        if penalty_type != PenaltyType.SHORT_TERM_SUSPENSION:
+            raise ValueError(
+                "Değiştirilen ceza mevcut cezayla aynı olamaz; ceza aynen kaldıysa "
+                "değişiklik seçmeyin."
+            )
+        if suspension_days == decision.suspension_days:
+            raise ValueError(
+                f"Uzaklaştırma gün sayısı mevcut cezayla aynı ({decision.suspension_days} gün); "
+                "üst kurul süreyi değiştirdiyse yeni gün sayısını girin, ceza aynen kaldıysa "
+                "değişiklik seçmeyin."
+            )
     is_suspension = penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
     decision.penalty_type = penalty_type
     decision.suspension_days = suspension_days if is_suspension else None
@@ -471,6 +534,9 @@ def record_principal_review(
 
     `action="RETURN"`: kararı gerekçeyle kurula iade eder. `action="REFER"`:
     kurul ısrar edince ilçe kuruluna gönderir — yalnız önce iade edilmiş karar.
+    İade edilmiş karar kurulun yeniden görüşmesi için "onay bekliyor"a alınmış olabilir
+    (düzenleme yalnız orada açılır); `returned_at` dolu olduğu sürece sevk yolu açık
+    kalır, ikinci iade ise kapalıdır ("bir defa daha" — saha testi 14.11.2026).
     """
     reason = (reason or "").strip()
     _assert_case_open(decision)
@@ -490,7 +556,15 @@ def record_principal_review(
             )
         new_status = DecisionApprovalStatus.RETURNED_TO_COMMITTEE
     elif action == "REFER":
-        if decision.approval_status != DecisionApprovalStatus.RETURNED_TO_COMMITTEE:
+        returned_before = (
+            decision.approval_status == DecisionApprovalStatus.RETURNED_TO_COMMITTEE
+            or (
+                decision.approval_status == DecisionApprovalStatus.PENDING
+                and decision.returned_at is not None
+                and not decision.referred_to_district
+            )
+        )
+        if not returned_before:
             raise ValueError(
                 "İlçe kuruluna gönderme yalnız önce kurula iade edilmiş kararda yapılabilir "
                 "(md. 197 — kurul ısrarı)."
@@ -695,7 +769,9 @@ def resolve_appeal(
 
     REDUCED (değiştirildi — md. 200/Ç, 202/1-c, 204/1-b) → `new_penalty_type`
     zorunludur; karar yeni cezaya güncellenir (puan md. 170'e göre yeniden
-    türer), eski tür itiraz kaydında (`previous_penalty_type`) saklanır.
+    türer), eski tür ve (uzaklaştırmaysa) eski gün sayısı itiraz kaydında
+    (`previous_penalty_type`, `previous_suspension_days`) saklanır. Yeni ceza aynı
+    türde de olabilir: uzaklaştırmanın yalnız gün sayısı değişmişse.
 
     Sonuç kesin olduğundan bir kez girilir; yeniden sonuçlandırılamaz.
     """
@@ -713,6 +789,7 @@ def resolve_appeal(
                 "(davranış puanı buna göre yeniden hesaplanır — md. 170)."
             )
         appeal.previous_penalty_type = decision.penalty_type
+        appeal.previous_suspension_days = decision.suspension_days
         changed = _apply_penalty_change(decision, new_penalty_type, new_suspension_days)
         decision.save(update_fields=[*changed, "updated_at"])
     appeal.result = result
@@ -724,6 +801,7 @@ def resolve_appeal(
             "resulted_on",
             "result_notes",
             "previous_penalty_type",
+            "previous_suspension_days",
             "updated_at",
         ]
     )

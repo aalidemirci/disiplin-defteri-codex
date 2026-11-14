@@ -332,7 +332,7 @@ class TestHonorApi:
         cid = resp.json()["id"]
         ensure_terms(year)
 
-        def karar(council_type: str, on: str) -> str:
+        def karar(council_type: str, on: str, baskan: str = "Başkan") -> str:
             """Toplantı aç (teklif gündemde) → maddeyi olumlu karara bağla → belge durumu."""
             meeting = client.post(
                 "/api/v1/council/meetings/",
@@ -342,7 +342,7 @@ class TestHonorApi:
                     "meeting_date": on,
                     "attendees": [
                         {
-                            "person_name": "Başkan",
+                            "person_name": baskan,
                             "attendee_role": "VOTING_MEMBER",
                             "is_chair": True,
                         }
@@ -360,9 +360,13 @@ class TestHonorApi:
             status: str = client.get(f"/api/v1/honor/certificates/{cid}/").json()["status"]
             return status
 
+        # ÖDK toplantısında oy hakkı olan katılımcı kurul üyesi olmalıdır (md. 191/1, saha
+        # bulgusu 37) — başkan satırı kurul başkanının adıyla yazılır.
         assert karar("HONOR", "2026-05-25") == "HONOR_BOARD_RECOMMENDED"
-        services.create_committee(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
-        assert karar("DISCIPLINE", "2026-06-01") == "AWARDED"
+        committee = services.create_committee(
+            school_year_id=year.pk, chair_id=PersonnelFactory().pk
+        )
+        assert karar("DISCIPLINE", "2026-06-01", committee.chair.full_name) == "AWARDED"
 
     def test_kurul_uye_ekleme_yaniti_yeni_uyeyi_icerir(self, client: APIClient) -> None:
         """Onur kurulu üye ekleme yanıtı da güncel listeyi taşımalı (FE bununla tazeler)."""

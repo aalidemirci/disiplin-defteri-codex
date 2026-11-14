@@ -328,6 +328,19 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
             )
         return Response(MeetingSerializer(meeting).data, status=201)
 
+    @action(detail=True, methods=["delete"], url_path=r"meeting/(?P<meeting_id>[0-9]+)")
+    def delete_meeting(
+        self, request: Request, pk: str | None = None, meeting_id: str = ""
+    ) -> Response:
+        """Yanlış girilen kurul toplantısı kaydını siler (kapalı dosyada reddedilir)."""
+        case = _get_case_or_404(pk)
+        meeting = selectors.get_meeting_for_case(case, int(meeting_id))
+        if meeting is None:
+            raise NotFound("Toplantı kaydı bulunamadı.")
+        with _service_errors():
+            services.delete_meeting(meeting)
+        return Response(status=204)
+
     @action(detail=True, methods=["get", "post"], url_path="participants")
     def participants(self, request: Request, pk: str | None = None) -> Response:
         case = _get_case_or_404(pk)
@@ -373,6 +386,17 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 summary=str(request.data.get("summary", "")),
             )
         return Response(WarningSerializer(warning).data, status=201)
+
+    @action(detail=True, methods=["delete"], url_path=r"warnings/(?P<wrn>[0-9]+)")
+    def warning_delete(self, request: Request, pk: str | None = None, wrn: str = "") -> Response:
+        """Yanlış girilen müdür uyarısı kaydını siler (öğrenci başına tek kayıt kuralı)."""
+        case = _get_case_or_404(pk)
+        warning = selectors.warnings_for_case(case).filter(pk=int(wrn)).first()
+        if warning is None:
+            raise NotFound("Uyarı kaydı bulunamadı.")
+        with _service_errors():
+            services.delete_warning(warning)
+        return Response(status=204)
 
     @action(detail=True, methods=["get"], url_path="triage-suggestion")
     def triage_suggestion(self, request: Request, pk: str | None = None) -> Response:
@@ -670,6 +694,17 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 notes=str(request.data.get("notes", "")),
             )
         return Response(ExtensionSerializer(extension).data, status=201)
+
+    @action(detail=True, methods=["delete"], url_path=r"extensions/(?P<ext>[0-9]+)")
+    def extension_delete(self, request: Request, pk: str | None = None, ext: str = "") -> Response:
+        """Onaylanmamış süre uzatmasını siler (yanlış giriş / müdür onay vermedi)."""
+        case = _get_case_or_404(pk)
+        extension = selectors.get_extension(case, int(ext))
+        if extension is None:
+            raise NotFound("Süre uzatması bulunamadı.")
+        with _service_errors():
+            services.delete_extension(extension)
+        return Response(status=204)
 
     @action(detail=True, methods=["post"], url_path=r"extensions/(?P<ext>[0-9]+)/approve")
     def extension_approve(self, request: Request, pk: str | None = None, ext: str = "") -> Response:
@@ -1127,6 +1162,18 @@ class HonorGeneralAssemblyMemberEndView(APIView):
                 reason=str(request.data.get("reason", "")),
             )
         return Response(HonorGeneralAssemblyMemberSerializer(member).data)
+
+
+class HonorGeneralAssemblyMemberCancelPlannedView(APIView):
+    """Henüz göreve başlamamış temsilcilik kaydını (planlanan değişikliği) iptal eder."""
+
+    def post(self, request: Request, member_id: int) -> Response:
+        member = selectors.get_honor_general_assembly_member(member_id)
+        if member is None:
+            raise NotFound("Onur Genel Kurulu üyesi bulunamadı.")
+        with _service_errors():
+            services.cancel_planned_general_assembly_change(member)
+        return Response(status=204)
 
 
 class HonorComplianceView(APIView):

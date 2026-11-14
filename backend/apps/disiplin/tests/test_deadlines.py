@@ -104,8 +104,21 @@ def test_itiraz_sevk_suresi_listelenir() -> None:
 
 
 def test_tedbir_suresi_listelenir() -> None:
-    """İKİ eşik (işleme başlama 175/2 + bitiş 175/1) ufka girince ayrı satırlarla listelenir."""
-    case, sid = _committee_case()
+    """İKİ eşik (işleme başlama 175/2 + bitiş 175/1) ufka girince ayrı satırlarla listelenir.
+
+    Saha testi 14.11.2026: işleme-başlama eşiği yalnız işlem HENÜZ başlamamış (dilekçe
+    aşamasındaki) dosyada listelenir — kurula sevkli dosyada yükümlülük yerine gelmiştir
+    (md. 175/2). Bu yüzden test sevksiz dosyayla kurulur.
+    """
+    SchoolYearFactory()
+    sid = StudentFactory().pk
+    case = services.create_case(
+        petition_date=date(2026, 5, 18),
+        petitioner_name="A",
+        petitioner_role="IDARE",
+        summary="x",
+        student_ids=[sid],
+    )
     services.create_precaution(case, student_id=sid, start_date=date(2026, 5, 20), requested_days=5)
     items = collect_deadline_items(date(2026, 5, 21))
     tedbir = sorted(
@@ -142,7 +155,10 @@ def test_siralama_gecti_yaklasiyor_bilgi() -> None:
     d = services.record_decision(
         case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
-    # Tebliğsiz karar (BİLGİ) + kurul süresi 02.06 GEÇTİ durumunda.
+    # Tebliğsiz karar (BİLGİ) + kurul süresi 02.06 GEÇTİ durumunda. Saha testi
+    # 14.11.2026: kararı girilmiş dosya artık "kurul karar süresi" alarmı vermez
+    # (md. 192/3 — karara bağlanmıştır); GEÇTİ satırını kararsız ikinci dosya üretir.
+    _committee_case()
     items = collect_deadline_items(date(2026, 6, 4))
     assert d is not None
     severities = [i.severity for i in items]

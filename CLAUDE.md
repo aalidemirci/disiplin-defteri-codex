@@ -38,7 +38,10 @@
    döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
    `council_meeting_minutes` (karar defteri) 04.10.2026'dan beri yalnız EKLEME ile
    "GÜNDEM MADDELERİ VE KARARLAR" bloğu basar (kurul işleyişi Aşama 1); gündemsiz
-   toplantıda çıktı OYS ile aynıdır — bloğu kaldırma.
+   toplantıda çıktı OYS ile aynıdır — bloğu kaldırma. İkinci bilinçli sapma (kullanıcı
+   kararı, 14.11.2026): imza ızgarası 6 ve üzeri imzacıda 5'erli satırlara bölünür
+   (kalabalık kurulda imza haneleri sayfa dışına taşıyordu); 5 ve altında çıktı OYS ile
+   aynıdır — `_SIGNERS_PER_ROW` değerini düşürme.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek
    kusur bu iki sınıftan çıktı.

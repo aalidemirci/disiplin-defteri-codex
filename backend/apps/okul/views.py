@@ -282,7 +282,8 @@ class StudentDetailView(generics.RetrieveUpdateDestroyAPIView[Student]):
             )
 
     def perform_destroy(self, instance: Student) -> None:
-        persons_service.delete_student(instance)
+        with _service_errors():  # disiplin kaydı olan öğrenci silinmez → sözleşmeli 400
+            persons_service.delete_student(instance)
 
 
 class PersonnelListCreateView(generics.ListCreateAPIView[Personnel]):

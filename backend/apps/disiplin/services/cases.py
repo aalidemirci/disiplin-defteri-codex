@@ -31,6 +31,7 @@ from apps.disiplin.models import (
     PetitionerRole,
     PrincipalDecision,
 )
+from apps.disiplin.services.common import assert_not_future
 from apps.disiplin.services.participants import ensure_accused_participant
 from apps.disiplin.state_machine import InvalidTransitionError, validate_transition
 from apps.okul import selectors as okul_selectors
@@ -77,6 +78,7 @@ def create_case(
     En az bir geçerli öğrenci zorunludur. İlk aşama (PETITION) bir DisciplineEvent
     olarak kaydedilir; her suçlanan öğrenci için ACCUSED katılımcı senkron kurulur.
     """
+    assert_not_future(petition_date, "Dilekçe tarihi")
     students = []
     for sid in dict.fromkeys(student_ids):  # sırayı koru + yinelenenleri ele
         student = okul_selectors.get_student(sid)
@@ -150,6 +152,7 @@ def add_event(
     `is_override` iziyle kaydedilir); değilse InvalidTransitionError.
     """
     current = case.current_stage
+    _assert_event_date_in_order(case, event_date)
     is_override = False
     try:
         validate_transition(current, stage)
@@ -217,8 +220,75 @@ def add_event(
     if final_stage == CaseStage.CLOSED:
         case.closed_at = timezone.now()
         update_fields.append("closed_at")
+    elif case.closed_at is not None:
+        # Kapalı dosyaya (gerekçeli override ile) açık bir aşama olayı eklendi: dosya
+        # yeniden açılmıştır. closed_at dolu kalırsa dosya "yarı açık" olur — aşaması
+        # açık görünür ama kapalı-dosya kilitleri işlemeye devam eder (revert_stage ile aynı).
+        case.closed_at = None
+        update_fields.append("closed_at")
     case.save(update_fields=update_fields)
+
+    if stage == CaseStage.DECIDED and PrincipalDecision.DISCIPLINE_COMMITTEE in (
+        principal_decisions or []
+    ):
+        _refresh_extension_snapshots(case)
     return event
+
+
+def _assert_event_date_in_order(case: DisciplineCase, event_date: date) -> None:
+    """Aşama olayı tarihi: gelecekte olamaz, dilekçeden ve önceki aşamadan önce olamaz.
+
+    Aşama tarihleri resmî evraka basılır ve yasal süreleri besler (kurula sevk tarihi
+    md. 192/3'teki 10 iş gününün başlangıcıdır). "Önceki aşama" dosyanın GÜNCEL
+    aşamasının son olayıdır: `revert_stage` eski olayları silmediğinden, geri alınmış
+    bir aşamanın (yanlış girilmiş, daha geç) tarihi sırayı BAĞLAMAZ — doğru tarihle
+    yeniden girilebilir. Geçmişe dönük kayıt serbesttir; yalnız sıra ve gelecek denetlenir.
+
+    Eski sürüm tarih denetlemiyordu: önceki olayın tarihi BUGÜNDEN ileriyse (planlanan
+    tarihle ya da yanlış yılla girilmiş) o tarih açıkça hatalıdır ve sırayı bağlamaz —
+    yoksa dosyada sonraki aşama hiç girilemezdi (§7.6). Geçmişte ama yanlış girilmiş
+    tarih için çıkış yolu iletide yazılıdır (aşamayı geri alıp doğru tarihle yeniden gir).
+    """
+    assert_not_future(event_date, "Aşama tarihi")
+    if event_date < case.petition_date:
+        raise ValueError(
+            f"Aşama tarihi dilekçe tarihinden ({case.petition_date:%d.%m.%Y}) önce olamaz."
+        )
+    if case.current_stage == CaseStage.PETITION:
+        return  # önceki adım dilekçenin kendisi — yukarıdaki denetim kapsar
+    previous = case.events.filter(stage=case.current_stage).order_by("-recorded_at", "-id").first()
+    if previous is None or previous.event_date > timezone.localdate():
+        return  # önceki olay ileri tarihli (eski sürüm kaydı): hatalı tarih sırayı bağlamaz
+    if event_date < previous.event_date:
+        raise ValueError(
+            "Aşama tarihi bir önceki aşama olayının tarihinden "
+            f"({previous.get_stage_display()}, {previous.event_date:%d.%m.%Y}) önce olamaz. "
+            "Önceki aşamanın tarihi yanlışsa aşamayı geri alıp doğru tarihle yeniden girin."
+        )
+
+
+def _refresh_extension_snapshots(case: DisciplineCase) -> None:
+    """Yeniden sevkte süre uzatmasının son gün snapshot'ını yeni sevk tarihinden hesaplar.
+
+    Aşama geri alınıp dosya kurula yeniden sevk edilirse md. 192/3 süresi SON sevkten
+    işler; uzatma kaydı eski sevkin son gününü taşımaya devam ederse hem panel hem
+    Form-12/13 bayat tarihi gösterir.
+    """
+    from apps.disiplin import discipline_periods, selectors
+    from apps.okul.services.calendar import is_working_day
+
+    referred = selectors.committee_referred_on(case)
+    if referred is None:
+        return
+    base = discipline_periods.committee_decision_deadline(referred, is_working_day=is_working_day)
+    for extension in case.deadline_extensions.all():
+        if extension.original_deadline == base:
+            continue
+        extension.original_deadline = base
+        extension.new_deadline = discipline_periods.add_working_days(
+            base, extension.requested_days, is_working_day=is_working_day
+        )
+        extension.save(update_fields=["original_deadline", "new_deadline", "updated_at"])
 
 
 def _closing_needs_override(case: DisciplineCase, override: bool, override_reason: str) -> bool:
@@ -406,6 +476,16 @@ def update_case(
         raise ValueError("Dosya kapatılmış; künye alanları güncellenemez.")
     if petitioner_role is not None and petitioner_role not in set(PetitionerRole.values):
         raise ValueError("Geçersiz dilekçe veren rolü.")
+    if petition_date is not None and petition_date != case.petition_date:
+        assert_not_future(petition_date, "Dilekçe tarihi")
+        # Dilekçe, süreci başlatan belgedir: kendisinden sonraki ilk aşama olayının
+        # ardına taşınamaz (PETITION genesis olayı dilekçenin kendisidir, sayılmaz).
+        first = case.events.exclude(stage=CaseStage.PETITION).order_by("event_date").first()
+        if first is not None and petition_date > first.event_date:
+            raise ValueError(
+                "Dilekçe tarihi dosyadaki ilk aşama olayından sonra olamaz "
+                f"({first.get_stage_display()}, {first.event_date:%d.%m.%Y})."
+            )
     fields: list[str] = []
     if petitioner_role is not None:
         case.petitioner_role = petitioner_role

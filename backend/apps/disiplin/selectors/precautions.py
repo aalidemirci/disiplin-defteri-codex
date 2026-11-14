@@ -17,12 +17,17 @@ from apps.disiplin.models import (
     CaseStage,
     DisciplineCase,
     DisciplineDeadlineExtension,
-    DisciplineEvent,
     DisciplinePrecaution,
     PrecautionStatus,
     PrincipalDecision,
 )
+from apps.disiplin.selectors.cases import latest_principal_decision_event
 from apps.okul.services.calendar import is_working_day
+
+#: Müdür kararından (DECIDED) ÖNCEKİ aşamalar — bu aşamadaki dosya kurula sevkli değildir.
+_PRE_DECISION_STAGES: frozenset[str] = frozenset(
+    {CaseStage.PETITION, CaseStage.GUIDANCE_REFERRED, CaseStage.GUIDANCE_RETURNED}
+)
 
 
 def committee_referred_on(case: DisciplineCase) -> date | None:
@@ -33,10 +38,15 @@ def committee_referred_on(case: DisciplineCase) -> date | None:
     (kullanıcı kararı 27.09.2026): konu kurula fiilen son sevkte gelir; son karar
     sevk değilse (ör. yazılı uyarıya dönüldüyse) dosya sevkli sayılmaz.
     (JSON contains SQLite'ta yok — Python.)
+
+    GERİ ALINMIŞ SEVK SAYILMAZ: `revert_stage` aşama olaylarını silmez; dosyanın
+    GÜNCEL aşaması müdür kararı öncesindeyse (dilekçe/rehberlik) eski sevk olayı
+    hukuken yoktur — kurul süresi işlemez, ceza kararı girilemez (md. 163/2).
     """
-    latest: DisciplineEvent | None = (
-        case.events.filter(stage=CaseStage.DECIDED).order_by("-event_date", "-recorded_at").first()
-    )
+    if case.current_stage in _PRE_DECISION_STAGES:
+        return None
+    # "Son" = en son KAYDEDİLEN karar (olay tarihi sırası değil) — tek ortak ölçüt.
+    latest = latest_principal_decision_event(case)
     if latest is not None and PrincipalDecision.DISCIPLINE_COMMITTEE in (
         latest.principal_decisions or []
     ):
@@ -97,7 +107,13 @@ def cases_awaiting_committee_decision(through_date: date) -> list[tuple[Discipli
     Kurula sevk edilmiş, henüz kurul kararı verilmemiş (COMMITTEE_DONE/CLOSED
     değil) ve kapatılmamış dosyalar taranır; her biri için deadline hesaplanır
     (uzatma dahil). "Yaklaşan Süreler" paneli bunu okur. (case, deadline) döner.
+
+    Bütün suçlananlar hakkında (canlı) karar girilmiş dosya da listelenmez: kurul
+    "karara bağlamıştır" (md. 192/3); COMMITTEE_DONE olayı henüz eklenmemiş diye
+    süresinde verilmiş karar için GEÇTİ alarmı yanıltıcıdır.
     """
+    from apps.disiplin.models import DisciplineDecision
+
     open_cases = (
         DisciplineCase.objects.filter(closed_at__isnull=True, events__stage=CaseStage.DECIDED)
         .exclude(current_stage__in=[CaseStage.COMMITTEE_DONE, CaseStage.CLOSED])
@@ -105,6 +121,12 @@ def cases_awaiting_committee_decision(through_date: date) -> list[tuple[Discipli
     )
     result: list[tuple[DisciplineCase, date]] = []
     for case in open_cases:
+        accused = set(case.case_students.values_list("student_id", flat=True))
+        decided = set(
+            DisciplineDecision.objects.filter(case=case).values_list("student_id", flat=True)
+        )
+        if accused and accused <= decided:
+            continue
         # Sevk kontrolü Python'da (JSON contains SQLite'ta yok).
         deadline = committee_decision_deadline(case)
         if deadline is not None and deadline <= through_date:
@@ -116,10 +138,13 @@ def precautions_awaiting_deadline(through_date: date) -> QuerySet[DisciplinePrec
     """Süresi (bitiş veya işleme-başlama) `through_date`'e kadar dolan yürürlükteki tedbirler.
 
     md. 175/2: tedbiri izleyen 3 iş günü içinde işleme başlanmalı; tedbir 10 iş
-    gününü geçemez. En erken gün önce.
+    gününü geçemez. En erken gün önce. Kapalı dosyanın tedbiri izlenmez (kapanışta
+    sonlandırılmamış tedbir panelde kalıcı GEÇTİ satırı üretiyordu).
     """
     return (
-        DisciplinePrecaution.objects.filter(status=PrecautionStatus.ACTIVE)
+        DisciplinePrecaution.objects.filter(
+            status=PrecautionStatus.ACTIVE, case__closed_at__isnull=True
+        )
         .filter(Q(end_date__lte=through_date) | Q(process_start_deadline__lte=through_date))
         .select_related("case", "student")
         .order_by("end_date")

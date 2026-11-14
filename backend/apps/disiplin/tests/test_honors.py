@@ -258,7 +258,13 @@ def test_odk_yeter_sayi_yoksa_karar_verilemez() -> None:
             "attendee_role": "VOTING_MEMBER",
             "is_chair": True,
         },
-        {"person_name": "Üye 1", "attendee_role": "VOTING_MEMBER", "is_chair": False},
+        # Oy hakkı olan katılımcı kurul üyesi olmalıdır (md. 191/1) — serbest ad yeter
+        # sayıyı dolduramaz (saha bulgusu 37).
+        {
+            "person_name": committee.members.filter(is_substitute=False)[0].member_name,
+            "attendee_role": "VOTING_MEMBER",
+            "is_chair": False,
+        },
     ]
     services.update_council_meeting(thin, attendees=full)
     services.decide_agenda_item(item, outcome="FAVORABLE")
@@ -548,6 +554,8 @@ def test_gundem_api_akisi() -> None:
 
     year = SchoolYearFactory()
     ensure_terms(year)
+    # Onur Kurulu tanımlı değilken uygun görüş kararı verilemez (saha denetimi 13.11.2026).
+    services.create_honor_board(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
     cert = _propose(StudentFactory().pk)
     client = APIClient()
     base = "/api/v1/council/meetings/"

@@ -229,12 +229,17 @@ def render_recommendation_record(
     members: list[Any]
     chair_name = ""
     if meeting is not None:
+        # İkinci başkan TOPLANTI GÜNÜNDEKİ üyelikten türer: üyelik sonradan sonlansa da
+        # aynı toplantının belgesi yeniden üretildiğinde değişmemeli (saha denetimi
+        # 14.11.2026). Toplantıdan önce sona ermiş üyelik sayılmaz. Görev başlangıcı
+        # bilerek aranmaz — geçmişe dönük girilen kurulda kayıt günü toplantıdan sonradır.
         second_chairs: set[int] = set()
         if board is not None:
             second_chairs = {
                 m.member_student_id
                 for m in board.members.all()
-                if m.is_second_chair and m.effective_until is None
+                if m.is_second_chair
+                and (m.effective_until is None or m.effective_until >= meeting.meeting_date)
             }
         chair_name, members = _meeting_signers(meeting, second_chair_student_ids=second_chairs)
     else:
@@ -255,6 +260,10 @@ def render_recommendation_record(
             "members": members,
             "chair_name": chair_name,
             "committee_chair_name": committee_chair_name,
+            # Uygun görüş kararı toplantıda verilir (md. 183/b): toplantının tarihi ve
+            # defter numarası — toplantısız eski kayıt yolunda None / "".
+            "meeting_date": meeting.meeting_date if meeting is not None else None,
+            "meeting_no": meeting.meeting_no_display if meeting is not None else "",
         }
     )
     return render_pdf(RECOMMENDATION_RECORD_TEMPLATE, ctx)

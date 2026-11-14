@@ -172,6 +172,39 @@ describe("ToplantiDetay", () => {
     expect(kapi.addAgendaItems).toHaveBeenCalledWith(5, [11]);
   });
 
+  it("tarihi gelmemiş toplantıda karar düğmeleri kapalıdır (saha bulgusu 76)", async () => {
+    kapi.getMeeting.mockResolvedValue(meeting({ meeting_date: "2999-01-15" }));
+    ekran();
+    expect(await screen.findByText(/Toplantı tarihi henüz gelmedi/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Uygun gör" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Uygun görme" })).toBeDisabled();
+  });
+
+  it("yanlış girilen toplantı tarihi düzeltilir; karara bağlı toplantıda düzeltme yok", async () => {
+    const user = userEvent.setup();
+    kapi.getMeeting.mockResolvedValue(meeting());
+    kapi.updateMeeting.mockResolvedValue(meeting({ meeting_date: "2026-05-26" }));
+    ekran();
+    await user.click(await screen.findByRole("button", { name: "Tarihi düzelt" }));
+    const tarih = screen.getByLabelText("Toplantı tarihi");
+    await user.clear(tarih);
+    await user.type(tarih, "2026-05-26");
+    await user.click(screen.getByRole("button", { name: "Tarihi kaydet" }));
+    expect(kapi.updateMeeting).toHaveBeenCalledWith(5, { meeting_date: "2026-05-26" });
+    expect(await screen.findByText(/26.05.2026/)).toBeInTheDocument();
+  });
+
+  it("karara bağlı maddesi olan toplantıda tarih düzeltme sunulmaz", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        agenda_items: [{ ...ITEM, outcome: "FAVORABLE", outcome_display: "Uygun görüldü" }],
+      }),
+    );
+    ekran();
+    expect(await screen.findByText(/Toplantı T005/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tarihi düzelt" })).not.toBeInTheDocument();
+  });
+
   it("Onur Genel Kurulu toplantısında teklif görüşülmez", async () => {
     kapi.getMeeting.mockResolvedValue(
       meeting({ honor_meeting_kind: "GENERAL_ASSEMBLY", agenda_items: [] }),

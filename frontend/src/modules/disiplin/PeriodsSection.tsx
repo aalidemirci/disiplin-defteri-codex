@@ -8,6 +8,11 @@
 // son günü izleme (md. 192/3), ancak bir kez uzatma (Form-12/13); (2) Tedbir — acele
 // geçici uzaklaştırma (md. 175), ≤10 iş günü, işleme başlama 3 iş günü, iki kez daha
 // uzatma, devamsızlıktan SAYILMAZ.
+//
+// Saha testi 14.11.2026: (a) onaylanmamış süre uzatması "Sil" ile geri alınır (yanlış
+// giriş / müdür onay vermedi — §7.6 tek yönlü kapan); (b) KAPALI dosyada tedbir/uzatma
+// ekleme, onay ve tedbir uzatma sunulmaz (sunucu da reddeder); yürürlükte kalmış tedbirin
+// "Sonlandır"ı ve onaysız uzatmanın "Sil"i kapalı dosyada da açıktır.
 
 import { useCallback, useEffect, useId, useState } from "react";
 
@@ -16,6 +21,7 @@ import { formatDate, todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import { SkeletonList } from "../../ui/Skeleton";
 import Card from "../../ui/Card";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { useSnackbar } from "../../ui/SnackbarProvider";
@@ -73,8 +79,11 @@ function ExtensionsCard({
 }) {
   // Süre ara kararı (F-12) kurul başkanına; müdür onayı (F-13) müdüre (md. 192/3).
   // ALL_CAPABILITIES ile ikisi de daima açık.
-  const canCreate = caps.isChair || caps.isAdmin;
-  const canApprove = caps.isMudur || caps.isAdmin;
+  const caseOpen = caseObj.closed_at === null;
+  const canCreate = (caps.isChair || caps.isAdmin) && caseOpen;
+  const canApprove = (caps.isMudur || caps.isAdmin) && caseOpen;
+  // Onaysız kaydı silmek hiçbir süreyi değiştirmez — kapalı dosyada da açık.
+  const canDelete = caps.isChair || caps.isMudur || caps.isAdmin;
   const [extensions, setExtensions] = useState<DisciplineDeadlineExtension[] | null>(null);
   const [referredOn, setReferredOn] = useState<string | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
@@ -183,6 +192,7 @@ function ExtensionsCard({
               caseId={caseObj.id}
               extension={x}
               canManage={canApprove}
+              canDelete={canDelete}
               onChanged={load}
             />
           ))}
@@ -196,14 +206,37 @@ function ExtensionRow({
   caseId,
   extension: x,
   canManage,
+  canDelete,
   onChanged,
 }: {
   caseId: number;
   extension: DisciplineDeadlineExtension;
   canManage: boolean;
+  canDelete: boolean;
   onChanged: () => void;
 }) {
   const [approving, setApproving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const snackbar = useSnackbar();
+
+  const remove = async () => {
+    const ok = await confirm({
+      message:
+        `+${x.requested_days} iş günlük süre uzatması kaydı silinsin mi? Yalnız onaylanmamış ` +
+        "kayıt silinir; ardından doğru kayıt yeniden girilebilir.",
+      confirmLabel: "Sil",
+    });
+    if (!ok) return;
+    setDeleteError(null);
+    try {
+      await disiplinApi.deleteExtension(caseId, x.id);
+      snackbar.success("Süre uzatması silindi.");
+      onChanged();
+    } catch (err) {
+      setDeleteError(asMessage(err, "Süre uzatması silinemedi."));
+    }
+  };
 
   return (
     <li className="rounded-shape-md border border-outline-variant bg-surface-container-low p-4">
@@ -234,13 +267,22 @@ function ExtensionRow({
         </p>
       )}
 
-      {canManage && !x.approved_by_principal && !approving && (
-        <div className="mt-2">
-          <Button variant="text" icon="approval" onClick={() => setApproving(true)}>
-            Müdür onayı (Form-13)
-          </Button>
+      {!x.approved_by_principal && !approving && (canManage || canDelete) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {canManage && (
+            <Button variant="text" icon="approval" onClick={() => setApproving(true)}>
+              Müdür onayı (Form-13)
+            </Button>
+          )}
+          {/* Onaylanmış uzatma kurul süresini fiilen uzatmıştır — silinemez (md. 192/3). */}
+          {canDelete && (
+            <Button variant="text" icon="delete" onClick={() => void remove()}>
+              Sil
+            </Button>
+          )}
         </div>
       )}
+      <FormError error={deleteError} />
       {approving && (
         <ApproveExtensionForm
           caseId={caseId}
@@ -418,6 +460,7 @@ function PrecautionsCard({
 }) {
   // Tedbir / geçici uzaklaştırma (md. 175) müdür yetkisindedir.
   const canManage = caps.isMudur || caps.isAdmin;
+  const caseOpen = caseObj.closed_at === null;
   const [precautions, setPrecautions] = useState<DisciplinePrecaution[] | null>(null);
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -447,7 +490,7 @@ function PrecautionsCard({
     <Card elevation={1} className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-title-medium text-on-surface">Tedbir / geçici uzaklaştırma</p>
-        {canManage && !adding && (
+        {canManage && caseOpen && !adding && (
           <Button variant="tonal" icon="block" onClick={() => setAdding(true)}>
             Tedbir ekle
           </Button>
@@ -491,6 +534,7 @@ function PrecautionsCard({
               precaution={p}
               studentName={names[p.student] ?? `Öğrenci #${p.student}`}
               canManage={canManage}
+              caseOpen={caseOpen}
               onChanged={load}
             />
           ))}
@@ -507,12 +551,14 @@ function PrecautionRow({
   precaution: p,
   studentName,
   canManage,
+  caseOpen,
   onChanged,
 }: {
   caseId: number;
   precaution: DisciplinePrecaution;
   studentName: string;
   canManage: boolean;
+  caseOpen: boolean;
   onChanged: () => void;
 }) {
   const [panel, setPanel] = useState<PrecautionPanel>(null);
@@ -564,7 +610,7 @@ function PrecautionRow({
       {canManage && isActive && panel === null && (
         <div className="mt-2 flex flex-wrap gap-1">
           {/* md. 175/2: her uzatma ayrı süre (≤10 iş günü), en fazla iki kez. */}
-          {p.extension_count < 2 && (
+          {caseOpen && p.extension_count < 2 && (
             <Button variant="text" icon="more_time" onClick={() => setPanel("extend")}>
               Uzat
             </Button>
@@ -679,6 +725,7 @@ function AddPrecautionForm({
         required
         value={startDate}
         onChange={(e) => setStartDate(e.target.value)}
+        helperText="İş günü olmalı (md. 175/1 süreyi iş günüyle sayar); hafta sonu ve resmî tatil kabul edilmez."
       />
       <div>
         <label

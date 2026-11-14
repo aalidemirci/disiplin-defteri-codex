@@ -1,14 +1,16 @@
 // Kurul toplantısı katılımcı düzenleyicisi — ToplantiForm (yeni tutanak) ve ToplantiDetay
 // (katılımcı düzeltme) ortak kullanır. Oy hakkı olan üye / oy hakkı olmayan davetli
-// (md. 185/6), tek başkan (md. 188), karşı görüş (md. 206). ToplantiForm'dan ayrıldı
-// (04.10.2026, kurul işleyişi Aşama 1); davranış aynen korunur.
+// (md. 185/6), tek başkan (ÖDK md. 188, Onur Kurulu md. 182), karşı görüş (md. 206).
+// ToplantiForm'dan ayrıldı (04.10.2026, kurul işleyişi Aşama 1).
+// Saha bulguları 37/83: Ödül ve Disiplin Kurulunda oy hakkı yalnız kurul üyelerinindir
+// (md. 191/1) — elle eklenen satır varsayılan olarak davetlidir; aynı kişi iki kez yazılamaz.
 
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import { ATTENDEE_ROLE_TR } from "./api";
-import type { AttendeeInput, AttendeeRole, CouncilAttendee } from "./api";
+import type { AttendeeInput, AttendeeRole, CouncilAttendee, CouncilType } from "./api";
 
 // Form içi geçici katılımcı satırı (key yerel anahtar).
 export interface AttendeeRow extends AttendeeInput {
@@ -44,14 +46,32 @@ export function attendeeToRow(a: CouncilAttendee): AttendeeRow {
   });
 }
 
-/** Satırları doğrular; hata metni ya da null döner (md. 188/191). */
-export function validateRows(rows: AttendeeRow[]): string | null {
+/** Başkan atfı kurula göre: Onur Kurulu başkanı md. 182, ÖDK başkanı md. 188. */
+export function chairArticle(councilType?: CouncilType): string {
+  return councilType === "HONOR" ? "md. 182" : "md. 188";
+}
+
+/** Ad karşılaştırma anahtarı (yalnız eşleştirme): boşluk ve Türkçe büyük/küçük harfe duyarsız. */
+function nameKey(name: string): string {
+  return name.trim().split(/\s+/).join(" ").toLocaleUpperCase("tr");
+}
+
+/** Satırları doğrular; hata metni ya da null döner. */
+export function validateRows(rows: AttendeeRow[], councilType?: CouncilType): string | null {
   const filled = rows.filter((r) => r.person_name.trim());
   if (filled.filter((r) => r.attendee_role === "VOTING_MEMBER").length === 0) {
     return "En az bir oy hakkı olan üye eklenmelidir (md. 191).";
   }
   if (filled.filter((r) => r.is_chair).length !== 1) {
-    return "Tam olarak bir başkan işaretlenmelidir (md. 188).";
+    return `Tam olarak bir başkan işaretlenmelidir (${chairArticle(councilType)}).`;
+  }
+  const seen = new Set<string>();
+  for (const r of filled) {
+    const key = nameKey(r.person_name);
+    if (seen.has(key)) {
+      return `${r.person_name.trim()} katılımcı listesinde birden çok kez yazılmış; her kişi bir kez yazılır.`;
+    }
+    seen.add(key);
   }
   return null;
 }
@@ -76,14 +96,17 @@ interface Props {
   rows: AttendeeRow[];
   onChange: (rows: AttendeeRow[]) => void;
   idBase: string;
+  /** Kurul türü: başkan atfını ve elle eklenen satırın varsayılan rolünü belirler. */
+  councilType?: CouncilType;
 }
 
-export default function KatilimciEditor({ rows, onChange, idBase }: Props) {
+export default function KatilimciEditor({ rows, onChange, idBase, councilType }: Props) {
+  const isDiscipline = councilType === "DISCIPLINE";
   const updateRow = (key: string, patch: Partial<AttendeeRow>) => {
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   };
 
-  // Başkan tekildir: bir satır başkan işaretlenince diğerleri temizlenir (md. 188).
+  // Başkan tekildir: bir satır başkan işaretlenince diğerleri temizlenir.
   const setChair = (key: string) => {
     onChange(rows.map((r) => ({ ...r, is_chair: r.key === key })));
   };
@@ -129,7 +152,7 @@ export default function KatilimciEditor({ rows, onChange, idBase }: Props) {
                 onChange={() => setChair(r.key)}
                 className="size-5 accent-primary"
               />
-              Başkan (md. 188)
+              Başkan ({chairArticle(councilType)})
             </label>
           </div>
           {r.attendee_role === "VOTING_MEMBER" && (
@@ -152,7 +175,20 @@ export default function KatilimciEditor({ rows, onChange, idBase }: Props) {
         </Card>
       ))}
 
-      <Button variant="outlined" icon="add" onClick={() => onChange([...rows, emptyRow()])}>
+      {isDiscipline && (
+        <p className="text-body-small text-on-surface-variant">
+          Oy hakkı olan üye yalnız kurulun başkanı, asıl ya da yedek üyesi olabilir (md. 191/1).
+          Görüşüne başvurulan kişiler davetli olarak eklenir; yedek üye çağrıldıysa adını kurul
+          kaydındaki gibi yazıp rolünü oy hakkı olan üye seçin.
+        </p>
+      )}
+      <Button
+        variant="outlined"
+        icon="add"
+        onClick={() =>
+          onChange([...rows, emptyRow(isDiscipline ? "NON_VOTING_INVITEE" : "VOTING_MEMBER")])
+        }
+      >
         Katılımcı ekle
       </Button>
     </div>

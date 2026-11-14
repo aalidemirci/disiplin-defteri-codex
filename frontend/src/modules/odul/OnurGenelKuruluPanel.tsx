@@ -126,8 +126,67 @@ export default function OnurGenelKuruluPanel() {
     }
   };
 
+  // Bitişi GELECEKTE kayıtlı görev (ileri tarihli değişiklikte eski temsilci) daha erken
+  // bir tarihe çekilebilir — ör. ceza alan temsilcinin görevi hemen sona erer (md. 181).
+  // Sunucu yalnız daha erken tarihi kabul eder; bitmiş görev kilitli kalır.
+  const shortenMember = async (member: HonorGeneralAssemblyMember) => {
+    const approved = await confirm({
+      title: "Bitiş tarihini öne çek",
+      message: `${member.member_name} adlı öğrencinin temsilcilik görevi ${
+        member.effective_until ? formatDate(member.effective_until) : "planlanan tarih"
+      } yerine bugün (${formatDate(todayIso())}) itibarıyla sona erdirilsin mi? Göreve başlayacak temsilcinin başlangıç tarihi değişmez.`,
+      confirmLabel: "Bitişi öne çek",
+    });
+    if (!approved) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await odulApi.endGeneralAssemblyMember(member.id, {
+        effective_until: todayIso(),
+        reason: md181EndReason(member.md181_penalty),
+      });
+      snackbar.success("Görev bitişi bugüne çekildi.");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Bitiş tarihi öne çekilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // §7.6: ileri tarihli temsilci değişikliği yanlış kaydedildiyse geri alınabilmelidir.
+  const cancelPlanned = async (member: HonorGeneralAssemblyMember) => {
+    const approved = await confirm({
+      title: "Planlanan değişikliği iptal et",
+      message: `${member.member_name} adlı öğrencinin ${formatDate(member.effective_from)} tarihinde başlayacak temsilciliği iptal edilsin mi? Şubenin mevcut temsilcisi görevine devam eder.`,
+      confirmLabel: "Değişikliği iptal et",
+    });
+    if (!approved) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await odulApi.cancelPlannedGeneralAssemblyChange(member.id);
+      snackbar.success("Planlanan temsilci değişikliği iptal edildi.");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Planlanan değişiklik iptal edilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Aktiflik tarihe göredir (md. 178/1, saha bulgusu 39): ileri tarihli değişiklikte eski
+  // temsilci dönem başına dek görevdedir; yenisi "göreve başlayacak" olarak ayrı listelenir.
+  const today = todayIso();
   const activeMembers = members.filter((member) => member.is_active);
-  const pastMembers = members.filter((member) => !member.is_active);
+  const upcomingMembers = members.filter(
+    (member) => !member.is_active && member.effective_from > today,
+  );
+  const pastMembers = members.filter(
+    (member) => !member.is_active && member.effective_from <= today,
+  );
+  // Bitişi kayıtlı (değişikliği planlanmış) temsilci yeniden değiştirilemez/sonlandırılamaz.
+  const replaceable = activeMembers.filter((member) => !member.effective_until);
 
   return (
     <div className="space-y-6">
@@ -189,7 +248,7 @@ export default function OnurGenelKuruluPanel() {
                   if (event.target.value && secondTermStart) setEffectiveFrom(secondTermStart);
                 }}
                 placeholder="Yeni temsilci"
-                options={activeMembers.map((member) => ({
+                options={replaceable.map((member) => ({
                   value: String(member.id),
                   label: `${member.class_level}/${member.class_section} · ${member.member_name}`,
                 }))}
@@ -221,17 +280,59 @@ export default function OnurGenelKuruluPanel() {
                       <p className="text-label-small text-on-surface-variant">
                         {member.class_level}/{member.class_section} ·{" "}
                         {formatDate(member.effective_from)}
+                        {member.effective_until
+                          ? ` · ${formatDate(member.effective_until)} tarihine kadar görevde`
+                          : ""}
                       </p>
                       {member.md181_penalty && <Md181Warning penalty={member.md181_penalty} />}
                     </div>
-                    <Button variant="text" onClick={() => void endMember(member)} disabled={busy}>
-                      Görevi sonlandır
-                    </Button>
+                    {!member.effective_until && (
+                      <Button variant="text" onClick={() => void endMember(member)} disabled={busy}>
+                        Görevi sonlandır
+                      </Button>
+                    )}
+                    {member.effective_until && member.effective_until > today && (
+                      <Button
+                        variant="text"
+                        onClick={() => void shortenMember(member)}
+                        disabled={busy}
+                      >
+                        Bitiş tarihini öne çek
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
           </Card>
+
+          {upcomingMembers.length > 0 && (
+            <Card elevation={1} className="p-6">
+              <p className="text-title-medium text-on-surface">Göreve başlayacak temsilciler</p>
+              <ul className="mt-3 divide-y divide-outline-variant/50">
+                {upcomingMembers.map((member) => (
+                  <li
+                    key={member.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-body-medium text-on-surface"
+                  >
+                    <p>
+                      {member.class_level}/{member.class_section} · {member.member_name}
+                      <span className="ml-2 text-label-small text-on-surface-variant">
+                        {formatDate(member.effective_from)} tarihinde göreve başlar
+                      </span>
+                    </p>
+                    <Button
+                      variant="text"
+                      onClick={() => void cancelPlanned(member)}
+                      disabled={busy}
+                    >
+                      Planlanan değişikliği iptal et
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {pastMembers.length > 0 && (
             <Card elevation={1} className="p-6">

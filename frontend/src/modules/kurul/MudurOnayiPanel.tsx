@@ -12,6 +12,7 @@ import { ApiError } from "../../lib/api";
 import { formatDate, todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import TextField from "../../ui/TextField";
@@ -60,6 +61,7 @@ export default function MudurOnayiPanel() {
         <TextField
           label="Onay tarihi"
           type="date"
+          max={todayIso()}
           value={decisionDate}
           onChange={(event) => setDecisionDate(event.target.value)}
         />
@@ -133,9 +135,30 @@ function PrincipalDecisionRow({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const decide = async (approve: boolean) => {
     if (!approve && !reason.trim()) return setError("Onaylamama gerekçesi zorunludur.");
+    // Müdür kararı kurul kararından önce ve ileri tarihli olamaz (backend de reddeder);
+    // onay geri alınamadığı için yanlış tarih kalıcı olurdu.
+    if (!decisionDate) return setError("Onay tarihi girilmelidir.");
+    if (decisionDate > todayIso()) {
+      return setError("Onay tarihi ileri bir tarih olamaz.");
+    }
+    if (item.awarded_at && decisionDate < item.awarded_at) {
+      return setError(
+        `Onay tarihi kurul kabul kararından (${formatDate(item.awarded_at)}) önce olamaz.`,
+      );
+    }
+    if (approve) {
+      // Müdür onayı geri alınamaz — tek tıkla verilmez.
+      const approved = await confirm({
+        title: "Onur belgesini onayla",
+        message: `${item.student_name} için onur belgesi ${formatDate(decisionDate)} tarihiyle onaylansın mı? Müdür onayı geri alınamaz.`,
+        confirmLabel: "Onayla",
+      });
+      if (!approved) return;
+    }
     setBusy(true);
     setError(null);
     try {

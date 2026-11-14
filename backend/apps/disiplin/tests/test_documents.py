@@ -761,6 +761,9 @@ def test_form15_17_savunma_ifadesi_yalniz_savunma_tutanagiyla() -> None:
 def test_form12_oylama_esasi_secilir() -> None:
     """md. 191/1: kurul oy çoğunluğuyla karar alır — Form-12 hep "oy birliği" basmaz."""
     case, _sid = _committee_case()
+    # Saha denetimi 14.11.2026: Form-12/13 artık uzatma KAYDI olmadan üretilmez
+    # ("…… iş günü uzatılmasına karar verilmiştir" boş basılıyordu) — önce kayıt girilir.
+    services.create_extension(case, requested_days=5, reason="x", decided_on=date(2026, 5, 25))
 
     def text(vote_basis: str = "") -> str:
         pdf_bytes, _ = doc_engine.generate_document(
@@ -782,6 +785,9 @@ def test_form12_oylama_esasi_secilir() -> None:
 
 def test_generate_ucu_oylama_esasini_iletir(client: APIClient) -> None:
     case, _sid = _committee_case()
+    # Saha denetimi 14.11.2026: Form-12/13 artık uzatma KAYDI olmadan üretilmez
+    # ("…… iş günü uzatılmasına karar verilmiştir" boş basılıyordu) — önce kayıt girilir.
+    services.create_extension(case, requested_days=5, reason="x", decided_on=date(2026, 5, 25))
     resp = client.post(
         f"/api/v1/discipline/cases/{case.pk}/documents/generate/",
         {
@@ -895,6 +901,9 @@ def test_md175_mem_bilgilendirme_ve_uzatma_onayi_yazisi() -> None:
 
 def test_md192_3_form13_mudur_olur_blogu() -> None:
     case, _sid = _committee_case()
+    # Saha denetimi 14.11.2026: Form-12/13 artık uzatma KAYDI olmadan üretilmez
+    # ("…… iş günü uzatılmasına karar verilmiştir" boş basılıyordu) — önce kayıt girilir.
+    services.create_extension(case, requested_days=5, reason="x", decided_on=date(2026, 5, 25))
     pdf_bytes, _ = doc_engine.generate_document(
         case,
         document_type=DocumentType.DEADLINE_EXTENSION,
@@ -917,7 +926,9 @@ def test_surec_yazilari_kutuge_ve_kategoriye_girer() -> None:
         variant="info",
     )
     assert record is not None
-    assert record.title == "Tedbir Millî Eğitim Müdürlüğü Yazısı (md. 175)"
+    # Saha denetimi 14.11.2026: başlık sürüme göre ayrışır (bilgilendirme ≠ uzatma onayı
+    # talebi dizi pusulasında aynı adla listeleniyordu).
+    assert record.title == "Tedbir MEM Bilgilendirme Yazısı (md. 175/1)"
     assert record.sort_order == 6  # tedbir bildiriminin (5) hemen ardı
     groups = doc_engine.categorized_documents([record])
     assert groups[0]["label"] == "Tedbir / Süre Uzatma"

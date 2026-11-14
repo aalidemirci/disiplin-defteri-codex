@@ -132,7 +132,10 @@ her karar için geçerli — cezasız kararda da "yeniden görüşülmesi" kutus
 md. 191 atfı kaldırıldı.{% endcomment %}
 {% comment %}Tur 220 (talep 2): onay kutusu kurul imza ızgarasından ~3cm aşağıda;
 "ONAYLIYORUM" → "UYGUNDUR"; müdür imza bloğu sayfada ORTALANIR.{% endcomment %}
-<div class="section" style="margin-top: 3cm;">
+{% comment %}Saha denetimi 14.11.2026: onay kutusu ile müdür imza bloğu bölünmez tek
+kapsayıcıda — imza bloğu tek başına boş bir sayfaya düşüyordu. 3cm boşluk korunur.{% endcomment %}
+<div style="margin-top: 3cm; break-inside: avoid; page-break-inside: avoid;">
+<div class="section" style="margin-top: 0;">
   <div class="section-title">OKUL MÜDÜRÜNÜN ONAYI (md. 169/2 · md. 197)</div>
   <div class="field-box" style="white-space: normal;">
   {% if decision and decision.penalty_type == 'NO_PENALTY' %}
@@ -162,5 +165,6 @@ md. 191 atfı kaldırıldı.{% endcomment %}
   <div class="sig-line"></div>
   <div class="name">{{ principal_name|default:'……………………………' }}</div>
   <div class="role">Okul Müdürü</div>
+</div>
 </div>
 {% endblock %}

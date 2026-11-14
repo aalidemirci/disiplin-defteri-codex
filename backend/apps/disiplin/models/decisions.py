@@ -430,6 +430,11 @@ class DisciplineAppeal(BaseModel):
         blank=True,
         default="",
     )
+    # Eski ceza uzaklaştırmaysa gün sayısı: itiraz kurulu yalnız SÜREYİ indirmiş
+    # olabilir (tür aynı kalır) — eski ceza tür + gün olarak okunabilsin (saha 14.11.2026).
+    previous_suspension_days = models.PositiveSmallIntegerField(
+        "değişiklik öncesi uzaklaştırma süresi (gün)", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "disiplin itirazı"

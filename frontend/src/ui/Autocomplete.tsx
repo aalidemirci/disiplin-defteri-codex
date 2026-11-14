@@ -6,6 +6,15 @@
 // (`selected`) etiketi gösterilen "chip" kart olarak görünür; X'e basınca
 // `onClear` ile temizlenir.
 //
+// Sabitlenen davranışlar (Autocomplete.test.tsx):
+//   - Yalnız EN SON sorgunun yanıtı listeye yazılır; eski sorgunun geç gelen yanıtı
+//     güncel (süzülmüş) listeyi ezemez.
+//   - `search` prop'unun kimliği değişse de (satır içi ok işlevi) arama yinelenmez.
+//   - Seçenek `click` ile de seçilir (erişilebilirlik araçlarının "invoke" eylemi
+//     mousedown üretmez).
+//   - Seçimden sonra kutu boşalır: seçim üstte tutulmuyorsa (çoklu ekleme kalıbı)
+//     kutuda kalan ad yeniden aranıp "bulunamadı" listesi açılmasın.
+//
 // KVKK: arama sorguları sunucuya gider; sunucu yetki + KVKK-güvenli serileştirme
 // uygular (yalnız id + ad-soyad döner). UI bu garantiyi gösterilemez ama
 // sonuçları ekstra alan göstermez.
@@ -105,6 +114,13 @@ export default function Autocomplete<T>({
   const debounceRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Sorgu sıra numarası: yalnız en son başlatılan aramanın yanıtı işlenir.
+  const requestSeq = useRef(0);
+  // `search` çoğu kullanımda satır içi ok işlevidir (her render'da yeni kimlik);
+  // effect bağımlılığı olsaydı her sonuç yeni bir aramayı tetikler, liste açıkken
+  // sunucu sürekli yoklanırdı. Güncel işlev ref'ten okunur.
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
   // freeText prop'u dışarıdan değişirse input'u sıfırla (form reset senaryosu).
   useEffect(() => {
@@ -116,28 +132,40 @@ export default function Autocomplete<T>({
 
   // Debounce'lu arama
   useEffect(() => {
-    if (selected) return; // seçim varsa arama yok
+    // Sorgu/seçim değişti: yoldaki eski aramaların yanıtı artık geçersiz.
+    const seq = ++requestSeq.current;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    if (selected) {
+      setLoading(false);
+      return; // seçim varsa arama yok
+    }
     if (query.trim().length < minChars) {
       setResults([]);
       setOpen(false);
+      setLoading(false);
       return;
     }
     debounceRef.current = window.setTimeout(() => {
       setLoading(true);
-      search(query.trim())
+      searchRef
+        .current(query.trim())
         .then((items) => {
+          if (seq !== requestSeq.current) return; // bayat yanıt — güncel listeyi ezme
           setResults(items);
           setHighlighted(0);
           setOpen(true);
         })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .catch(() => {
+          if (seq === requestSeq.current) setResults([]);
+        })
+        .finally(() => {
+          if (seq === requestSeq.current) setLoading(false);
+        });
     }, debounceMs);
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [query, minChars, debounceMs, search, selected]);
+  }, [query, minChars, debounceMs, selected]);
 
   // Dışarı tıklayınca kapansın
   useEffect(() => {
@@ -176,7 +204,9 @@ export default function Autocomplete<T>({
     onSelect(item);
     setOpen(false);
     setResults([]);
-    setQuery(getLabel(item));
+    // Kutu boşalır: seçim üstte tutuluyorsa zaten chip görünür; tutulmuyorsa (çoklu
+    // ekleme) kutuda kalan ad yeniden aranıp "bulunamadı" listesini açmasın.
+    setQuery("");
   };
 
   // Eşleşen alt-metni vurgulamak için basit highlight
@@ -326,6 +356,9 @@ export default function Autocomplete<T>({
                     e.preventDefault();
                     pick(item);
                   }}
+                  // Klavye/ekran okuyucu "etkinleştir" eylemi yalnız click üretir.
+                  // Fareyle seçimde liste mousedown'da kapandığı için çift tetiklenmez.
+                  onClick={() => pick(item)}
                   className={`px-4 py-2 text-body-medium ${
                     disabledReason
                       ? "cursor-not-allowed opacity-50"

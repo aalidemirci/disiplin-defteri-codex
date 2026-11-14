@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, time
 from typing import Any
 
 from django.conf import settings
@@ -41,6 +41,7 @@ from apps.disiplin.models import (
     ApprovalAuthority,
     CaseStage,
     CouncilDecisionBasis,
+    DecisionApprovalStatus,
     DisciplineCase,
     DisciplineDecision,
     DocumentType,
@@ -193,6 +194,72 @@ DOC_TITLES: dict[str, str] = {
     DocumentType.NON_COMPLIANCE_RECORD: "İfade/Savunma Vermedi Tespit Tutanağı (md. 195)",
 }
 
+# Aynı türün FARKLI belgeleri (sürüm / alıcı) kütükte ve dizi pusulasında aynı adla
+# listelenmesin (saha denetimi 14.11.2026): (tür, variant) ve (tür, alıcı) → başlık.
+# Kullanıcının üretim formuna yazdığı başlık her zaman önceliklidir.
+DOC_TITLES_BY_VARIANT: dict[tuple[str, str], str] = {
+    (DocumentType.DEADLINE_EXTENSION, VARIANT_RECORD): "Süre Uzatma Karar Tutanağı (Form-12)",
+    (DocumentType.DEADLINE_EXTENSION, VARIANT_PETITION): "Süre Uzatma İsteği Dilekçesi (Form-13)",
+    (
+        DocumentType.PRECAUTION_MEM_LETTER,
+        VARIANT_MEM_INFO,
+    ): "Tedbir MEM Bilgilendirme Yazısı (md. 175/1)",
+    (
+        DocumentType.PRECAUTION_MEM_LETTER,
+        VARIANT_MEM_EXTENSION,
+    ): "Tedbir Uzatma Onayı Yazısı (md. 175/2)",
+    (DocumentType.PARENT_MEETING, VARIANT_PARENT_INVITE): "Veli Davet Yazısı (md. 157/7-b)",
+    (DocumentType.PARENT_MEETING, VARIANT_PARENT_MEETING): "Veli Görüşme Tutanağı (md. 157/7-b)",
+    (DocumentType.PARENT_MEETING, VARIANT_PARENT_NO_SHOW): "Veli Gelmedi Tutanağı (md. 157/7-b)",
+}
+DOC_TITLES_BY_RECIPIENT: dict[tuple[str, str], str] = {
+    (DocumentType.WARNING_LETTER, RECIPIENT_STUDENT): "Müdür Uyarısı Yazısı (Form-02)",
+    (DocumentType.WARNING_LETTER, RECIPIENT_PARENT): "Müdür Uyarısı — Veli Bilgilendirme Yazısı",
+    (DocumentType.PENALTY_NOTICE, RECIPIENT_STUDENT): "Disiplin Cezası Tebliği — Öğrenci (Form-14)",
+    (DocumentType.PENALTY_NOTICE, RECIPIENT_PARENT): "Disiplin Cezası Tebliği — Veli (Form-15)",
+    (
+        DocumentType.PENALTY_DAYS_NOTICE,
+        RECIPIENT_STUDENT,
+    ): "Disiplin Ceza Günleri Tebliği — Öğrenci (Form-16)",
+    (
+        DocumentType.PENALTY_DAYS_NOTICE,
+        RECIPIENT_PARENT,
+    ): "Disiplin Ceza Günleri Tebliği — Veli (Form-17)",
+    (DocumentType.BOARD_DECISION_NOTICE, RECIPIENT_STUDENT): "Üst Kurul Kararı Tebliği — Öğrenci",
+    (DocumentType.BOARD_DECISION_NOTICE, RECIPIENT_PARENT): "Üst Kurul Kararı Tebliği — Veli",
+}
+
+
+def _effective_variant(document_type: str, variant: str) -> str:
+    """Şablonu fiilen belirleyen sürüm (tanımsız/boş → türün ilk sürümü); sürümsüz türde ""."""
+    by_variant = DOC_TEMPLATES_BY_VARIANT.get(document_type)
+    if by_variant is None:
+        return ""
+    return variant if variant in by_variant else next(iter(by_variant))
+
+
+def default_title(document_type: str, recipient: str = RECIPIENT_STUDENT, variant: str = "") -> str:
+    """Kütük/dizi pusulası varsayılan başlığı — sürüm ve alıcıya göre ayrışır."""
+    effective = _effective_variant(document_type, variant)
+    if effective:
+        by_variant = DOC_TITLES_BY_VARIANT.get((document_type, effective))
+        if by_variant:
+            return by_variant
+    if document_type in DOC_TEMPLATES_BY_RECIPIENT:
+        by_recipient = DOC_TITLES_BY_RECIPIENT.get((document_type, recipient))
+        if by_recipient:
+            return by_recipient
+    return DOC_TITLES.get(document_type, "Disiplin belgesi")
+
+
+def _stored_filename(case_no: str, document_type: str, recipient: str, variant: str) -> str:
+    """Kütükten yeniden indirme adı — sürüm/alıcı eki aynı türün belgelerini ayırır."""
+    suffix = _effective_variant(document_type, variant)
+    if not suffix and document_type in DOC_TEMPLATES_BY_RECIPIENT:
+        suffix = recipient
+    return f"{case_no}-{document_type}{f'-{suffix}' if suffix else ''}.pdf"
+
+
 # Öğrenci-özgü belgeler (öğrenci zorunlu) — dizi pusulası HARİÇ hepsi öğrenciye özgü.
 STUDENT_REQUIRED: frozenset[str] = frozenset(
     {
@@ -290,7 +357,11 @@ INFO_GATHERING_SOURCES: tuple[str, ...] = (
 _OTHER_CATEGORY = "Diğer Evrak"
 DOC_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("İfadeler", frozenset({DocumentType.STATEMENT_RECORD})),
-    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD, DocumentType.NON_COMPLIANCE_RECORD})),
+    ("Savunmalar", frozenset({DocumentType.DEFENSE_RECORD})),
+    # md. 195 tespit tutanağı savunma DEĞİLDİR (ifade/savunma vermeyen ya da gelmeyen
+    # kişi için tutulur) — ayrı kategori (saha denetimi 14.11.2026). Frontend
+    # `DOCUMENT_CATEGORIES` (api.ts) bu listeyle birebirdir.
+    ("Tespit Tutanakları (md. 195)", frozenset({DocumentType.NON_COMPLIANCE_RECORD})),
     ("Bilgi Alma Tutanakları", frozenset({DocumentType.INFO_GATHERING})),
     (
         "Çağrı / Davet Yazıları",
@@ -451,6 +522,7 @@ def _common_context(case: DisciplineCase, *, unit: str = _KURUL_UNIT) -> dict[st
     `unit` antet alt satırı: kurul belgelerinde "Okul Öğrenci Ödül ve Disiplin
     Kurulu"; müdür işlemlerinde (uyarı/tedbir) kuruldan bağımsız → boş geçilir.
     """
+    from apps.okul.normalize import section_upper
     from apps.okul.services import setup as okul_setup
 
     # Antet kimliği: kurulum sihirbazında girilen okul/ilçe/müdür (SchoolConfig).
@@ -462,9 +534,26 @@ def _common_context(case: DisciplineCase, *, unit: str = _KURUL_UNIT) -> dict[st
             district=identity["district"],
             principal_name=identity["principal_name"],
         ),
+        # Muhatap satırı ("<İLÇE> İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE") için ilçe adı TÜRKÇE
+        # büyük harfle (i → İ; çıplak upper() değil — §7.2); kayıtlı değilse "" → şablon
+        # noktalı yer tutucu basar (saha denetimi 14.11.2026).
+        "district_upper": section_upper(identity["district"]),
         "case": case,
         "generated_at": timezone.now(),
     }
+
+
+def _document_datetime(generated_on: date) -> datetime:
+    """Belgeye basılacak tarih = kullanıcının SEÇTİĞİ üretim tarihi (kütükle aynı gün).
+
+    Şablonlar `generated_at|date:'d.m.Y'` basar; eskiden burası hep "şimdi" idi ve
+    geçmişe dönük üretilen davet yazısı, davet ettiği görüşmeden sonraki tarihi
+    taşıyordu (saha denetimi 14.11.2026). Bugün üretilen belgede an korunur; başka bir
+    günde yerel öğlen alınır — UTC'ye çevrilse de gün kaymaz (CLAUDE.md §7.1).
+    """
+    if generated_on == timezone.localdate():
+        return timezone.now()
+    return timezone.make_aware(datetime.combine(generated_on, time(12, 0)))
 
 
 def _parent_context(student: Any) -> dict[str, Any] | None:
@@ -502,26 +591,195 @@ class _Signer:
         return str(self._member.get_member_type_display())
 
 
-def _ek1_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
-    """EK-1 kurul kararı bağlamı — karar + anlatı alanları + kurul üyeleri (TAM-OTO)."""
-    decision = case.decisions.filter(student_id=student.pk).first()
-    committee = selectors.committee_for_case(case)
-    members: list[Any] = list(selectors.committee_members(committee)) if committee else []
-    # md. 196/1 "karar bütün üyelerce imzalanır": imzayı kararı ALAN heyet atar.
-    # Dosyanın kurul toplantısı kaydı varsa katılanlar basılır (şikâyetçi üyenin
-    # yerine gelen yedek dahil — md. 191/2, 186); yoksa kurulun asıl üyeleri.
+def _signing_members(case: DisciplineCase, committee: Any) -> list[Any]:
+    """Dosyayı görüşen HEYET — EK-1, Form-11 ve md. 195 tutanağı imza ızgaraları.
+
+    md. 196/1 "karar bütün üyelerce imzalanır", md. 194/1 savunmayı kurul alır: imzayı
+    işlemi yapan heyet atar. Dosyanın kurul toplantısı kaydı varsa katılanlar basılır
+    (şikâyetçi üyenin yerine gelen yedek dahil — md. 191/2, 186). Kayıt yoksa kurulun
+    üyeleri; ancak dosyada şikâyetçi / zarar gören (veya hakkında işlem yapılan) üye
+    kurula katılamayacağından ızgaradan çıkarılır (md. 191/2 —
+    `services.committee._check_conflicts` ile aynı küme).
+    """
+    if committee is None:
+        return []
     meeting = selectors.meetings_for_case(case).first()
     if meeting is not None:
         attendees = list(meeting.attendees.all())
         if attendees:
-            members = [_Signer(m) for m in attendees]
+            return [_Signer(m) for m in attendees]
+    conflicted_users = set(
+        case.participants.filter(role=ParticipantRole.VICTIM, user__isnull=False).values_list(
+            "user_id", flat=True
+        )
+    )
+    conflicted_students = set(
+        case.participants.filter(
+            role__in=[ParticipantRole.VICTIM, ParticipantRole.ACCUSED], student__isnull=False
+        ).values_list("student_id", flat=True)
+    )
+    if case.petitioner_user_id is not None:
+        conflicted_users.add(case.petitioner_user_id)
+    if case.petitioner_student_id is not None and case.petitioner_role == "OGRENCI":
+        conflicted_students.add(case.petitioner_student_id)
+    return [
+        m
+        for m in selectors.committee_members(committee)
+        if not (
+            (m.member_user_id is not None and m.member_user_id in conflicted_users)
+            or (m.member_student_id is not None and m.member_student_id in conflicted_students)
+        )
+    ]
+
+
+class _DecisionView:
+    """Kararı şablona bazı alanları FARKLI değerle sunan salt-okunur vekil.
+
+    Üst kurul cezayı onayda (md. 200/1-a) ya da itirazda (md. 200/1-Ç) değiştirdiğinde
+    karar kaydı YENİ cezaya güncellenir (§8: puan ve yürürlük güncel cezadan türer).
+    Okul kurulunun belgeleri ise kurulun VERDİĞİ cezayı basmalıdır; AYNEN şablonlar
+    `decision.get_penalty_type_display` okuduğundan şablona dokunmadan bağlamda
+    çözülür. Verilmeyen her alan karar kaydına devredilir; kayıt DEĞİŞMEZ.
+    """
+
+    def __init__(self, decision: Any, **overrides: Any) -> None:
+        self._decision = decision
+        self._overrides = overrides
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        overrides = self.__dict__.get("_overrides", {})
+        if name in overrides:
+            return overrides[name]
+        return getattr(self.__dict__["_decision"], name)
+
+    def get_penalty_type_display(self) -> str:
+        return str(PenaltyType(self.penalty_type).label)
+
+
+# Yalnız üst kurul onayına bağlı cezalar (md. 169/2-b/c): onay mercii değişmediği
+# (`_apply_penalty_change`) için, mercii ilçe/il olan ama cezası artık o olmayan karar
+# onay aşamasında DEĞİŞTİRİLMİŞTİR — okul kurulunun verdiği ceza merciden okunur.
+_PENALTY_BY_APPROVAL_BOARD: dict[str, str] = {
+    ApprovalAuthority.DISTRICT_BOARD: PenaltyType.SCHOOL_CHANGE,
+    ApprovalAuthority.PROVINCIAL_BOARD: PenaltyType.EXPULSION,
+}
+
+
+def _penalty_text(penalty_type: str, suspension_days: int | None) -> str:
+    """Ceza adı (+ uzaklaştırmada gün sayısı): "Okuldan kısa süreli uzaklaştırma — 3 gün"."""
+    label = str(PenaltyType(penalty_type).label)
+    if penalty_type == PenaltyType.SHORT_TERM_SUSPENSION and suspension_days:
+        return f"{label} — {suspension_days} gün"
+    return label
+
+
+def _reduced_appeal(decision: Any) -> Any:
+    """Kararı DEĞİŞTİREN (REDUCED) son itiraz — eski ceza kaydıyla; yoksa None."""
+    appeal = selectors.latest_resolved_appeal(decision)
+    if appeal is None or appeal.result != AppealResult.REDUCED or not appeal.previous_penalty_type:
+        return None
+    return appeal
+
+
+def _appealed_penalty(decision: Any) -> tuple[str, int | None] | None:
+    """İtiraza KONU ceza (itiraz kurulu değiştirmeden önceki) — değişmediyse None."""
+    appeal = _reduced_appeal(decision)
+    if appeal is None:
+        return None
+    days = getattr(appeal, "previous_suspension_days", None)
+    if appeal.previous_penalty_type != PenaltyType.SHORT_TERM_SUSPENSION:
+        days = None
+    if appeal.previous_penalty_type == decision.penalty_type and (
+        days is None or days == decision.suspension_days
+    ):
+        return None  # tür aynı ve eski gün sayısı yok/aynı — gösterilecek fark yok
+    return appeal.previous_penalty_type, days
+
+
+def _board_penalty(decision: Any) -> tuple[str, int | None, str] | None:
+    """Okul kurulunun VERDİĞİ ceza, sonradan değiştiyse: (tür, gün, değiştiren merci).
+
+    Değişmediyse None. İki kaynak: (1) onay aşaması — yalnız onay mercii ilçe/il olan
+    cezada merciden türetilir; (2) itiraz — `DisciplineAppeal.previous_*`.
+    SINIR: md. 197 ile ilçeye giden kararda ilçe kurulunun onayda yaptığı değişiklik
+    kayıtta tutulmaz (şema gerekir) → o durumda güncel ceza basılmaya devam eder.
+    """
+    if decision is None:
+        return None
+    approved_penalty: str | None = None
+    approved_by = ""
+    if not decision.referred_to_district:
+        approved_penalty = _PENALTY_BY_APPROVAL_BOARD.get(decision.approval_authority)
+        if approved_penalty is not None:
+            board = str(ApprovalAuthority(decision.approval_authority).label)
+            approved_by = f"onay aşamasında {board}nca"
+    appealed = _appealed_penalty(decision)
+    if appealed is not None:
+        appeal = _reduced_appeal(decision)
+        board = str(ApprovalAuthority(appeal.appeal_authority).label)
+        appealed_by = f"itiraz üzerine {board}nca"
+        if approved_penalty is not None and approved_penalty != appealed[0]:
+            # Ceza önce onayda, sonra itirazda değişti: kurulun verdiği, onaya sunulandır.
+            return approved_penalty, None, f"{approved_by}, ardından {appealed_by}"
+        return appealed[0], appealed[1], appealed_by
+    if approved_penalty is not None and approved_penalty != decision.penalty_type:
+        return approved_penalty, None, approved_by
+    return None
+
+
+def _board_decision_context(decision: Any) -> dict[str, Any]:
+    """Okul kurulu belgeleri için karar bağlamı — kurulun VERDİĞİ cezayla.
+
+    `decision` ceza sonradan değiştiyse `_DecisionView` (kurulun cezası), değişmediyse
+    kaydın kendisidir; `statute_label` aynı cezadan türer. Ek anahtarlar şablonların
+    değişikliği ayrıca yazabilmesi içindir: `board_penalty_display` (kurulun verdiği),
+    `current_penalty_display` (yürürlükteki) ve `penalty_change_note` (değişmediyse "").
+    """
+    if decision is None:
+        return {
+            "decision": None,
+            "statute_label": statute_label(None),
+            "board_penalty_display": "",
+            "current_penalty_display": "",
+            "penalty_change_note": "",
+        }
+    current = _penalty_text(decision.penalty_type, decision.suspension_days)
+    original = _board_penalty(decision)
+    if original is None:
+        return {
+            "decision": decision,
+            "statute_label": statute_label(decision),
+            "board_penalty_display": current,
+            "current_penalty_display": current,
+            "penalty_change_note": "",
+        }
+    penalty_type, days, changed_by = original
+    view = _DecisionView(decision, penalty_type=penalty_type, suspension_days=days)
+    board_text = _penalty_text(penalty_type, days)
+    return {
+        "decision": view,
+        "statute_label": statute_label(view),
+        "board_penalty_display": board_text,
+        "current_penalty_display": current,
+        "penalty_change_note": (
+            f'Okul Öğrenci Ödül ve Disiplin Kurulunun verdiği "{board_text}" cezası, '
+            f'{changed_by} "{current}" olarak değiştirilmiştir.'
+        ),
+    }
+
+
+def _ek1_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
+    """EK-1 kurul kararı bağlamı — karar + anlatı alanları + kurul üyeleri (TAM-OTO)."""
+    decision = case.decisions.filter(student_id=student.pk).first()
+    committee = selectors.committee_for_case(case)
     return {
         **_common_context(case),
         "student": _student_context(student),
-        "decision": decision,
-        "statute_label": statute_label(decision),
+        **_board_decision_context(decision),
         "committee": committee,
-        "members": members,
+        "members": _signing_members(case, committee),
     }
 
 
@@ -556,6 +814,22 @@ def _case_referred_to_committee(case: DisciplineCase) -> bool:
     )
 
 
+def _keep_title_with_source(doc: Any) -> None:
+    """Dizi pusulasında "kimden" girilmiş HARİCİ evrakın başlığı kaybolmasın.
+
+    AYNEN şablon (index_sheet) `source_label` doluysa başlık yerine yalnız "kimden"i
+    basar (Tur 140 — katılımcı belgelerinde ifade/savunma/çağrı kategorisi türü zaten
+    söyler). Katılımcı belgesi OLMAYAN evrakta (elle eklenen "Diğer Evrak" vb.)
+    kullanıcının yazdığı başlık tek ayırt edici bilgidir → "Başlık — Sıfat: Ad"
+    biçiminde sunulur. Yalnız bellekteki nesne değişir; kütük kaydı YAZILMAZ.
+    """
+    if not doc.source_label or doc.document_type in PARTICIPANT_REQUIRED:
+        return
+    title = (doc.title or "").strip()
+    if title:
+        doc.source_label = f"{title} — {doc.source_label}"
+
+
 def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
     """Dizi pusulası bağlamı — ana evraklar + alt evraklar + toplam sayfa (Tur 104).
 
@@ -564,6 +838,10 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
     dala göre (Tur 213, talep 3): Dal A "Okul Müdürlüğü", Dal B kurul birimi.
     """
     documents = selectors.document_timeline(case)
+    for doc in documents:
+        _keep_title_with_source(doc)
+        for sub in doc.sub_documents.all():
+            _keep_title_with_source(sub)
     total_pages = sum(
         doc.page_count + sum(sub.page_count for sub in doc.sub_documents.all()) for doc in documents
     )
@@ -591,19 +869,33 @@ def _committee_context(case: DisciplineCase) -> dict[str, Any]:
 
 
 def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
-    """Ceza tebliği (Form-14/15) bağlamı — karar + (veli sürümünde) veli + kurul."""
+    """Ceza tebliği (Form-14/15) bağlamı — karar + (veli sürümünde) veli + kurul.
+
+    Tebliğ YÜRÜRLÜKTEKİ cezayı bildirir: `decision` karar kaydının KENDİSİDİR (kurulun
+    verdiği ceza görünümü değil) — öğrenci (Form-14, AYNEN şablon) ve veli (Form-15)
+    suretleri aynı cezayı taşır. Ceza üst kurulca değiştirildiyse kurulun verdiği ceza
+    yalnız `penalty_change_note` ile (Form-15'te ayrı paragraf) anlatılır. EK-1, karar
+    defteri, Form-18 ve onaya sevk/iade/ilçe yazıları kurulun verdiği cezayı basmayı
+    sürdürür (`_board_decision_context`).
+    """
     decision = case.decisions.filter(student_id=student.pk).first()
     if decision is not None:
         from apps.disiplin.services.decisions import ensure_decision_no
 
         ensure_decision_no(decision)
+    shown = _board_decision_context(decision)
+    change_note = shown["penalty_change_note"]
+    if change_note:
+        change_note = f"İşbu yazı ile tebliğ edilen ceza yürürlükteki cezadır. {change_note}"
     return {
         **_common_context(case),
         **_committee_context(case),
         "student": _student_context(student),
         "parent": _parent_context(student),
+        **shown,
         "decision": decision,
         "statute_label": statute_label(decision),
+        "penalty_change_note": change_note,
         # md. 194/1: "savunması alınmış" yalnız Form-11 kaydı varsa basılır.
         "defense_taken": selectors.defense_recorded(case, student.pk),
     }
@@ -734,8 +1026,8 @@ def _appeal_letter_context(case: DisciplineCase, student: Any) -> dict[str, Any]
     return {
         **_common_context(case),
         "student": _student_context(student),
-        "decision": decision,
-        "statute_label": statute_label(decision),
+        # "İlgi (a) karar ile … cezası verilmiş": okul kurulunun VERDİĞİ ceza.
+        **_board_decision_context(decision),
         "appeal": appeal,
         "appeal_filer_phrase": _APPEAL_FILER_PHRASE.get(filer_role, "Öğrenci velisi"),
         "appeal_by_principal": filer_role == "PRINCIPAL",
@@ -844,6 +1136,24 @@ def _board_decision_notice_context(
                 authority = ApprovalAuthority.DISTRICT_BOARD
     if authority not in _BOARD_AUTHORITIES:
         raise ValueError("Karar mercii belirlenemedi; üretim formundan ilçe/il/üst kurul seçin.")
+    if kind == NOTICE_KIND_APPROVAL:
+        # md. 169/2-a: kınama ve kısa süreli uzaklaştırmayı MÜDÜR onaylar; bu cezalarda
+        # üst kurul kararı ancak md. 197 ısrar-sevkiyle doğar. İlçeye gönderilmemiş
+        # kararda "ilçe kurulunca onaylanmıştır (md. 197)" basılamaz.
+        if (
+            decision.approval_authority == ApprovalAuthority.PRINCIPAL
+            and not decision.referred_to_district
+        ):
+            raise ValueError(
+                "Karar ilçe kuruluna gönderilmemiş (md. 197); bu cezayı okul müdürü onaylar "
+                "(md. 169/2-a) — üst kurul onay tebliği üretilemez."
+            )
+        # md. 163/2, 169/2: onaysız karar tebliğ edilemez.
+        if decision.approval_status != DecisionApprovalStatus.APPROVED:
+            raise ValueError(
+                "Karar henüz onaylanmamış; önce üst kurulun onay kararını kaydedin, "
+                "sonra tebliği üretin (md. 169/2)."
+            )
 
     outcome = (extra.get("board_outcome") or "").strip()
     if not outcome:
@@ -863,13 +1173,34 @@ def _board_decision_notice_context(
         )
 
     next_board = _NEXT_BOARD.get(authority)
+    current_text = _penalty_text(decision.penalty_type, decision.suspension_days)
+    if kind == NOTICE_KIND_APPROVAL:
+        # "Okul kurulunun kararı ile verilen … cezası … onaylanmıştır / değiştirilerek
+        # onaylanmıştır": cümlenin öznesi kurulun VERDİĞİ cezadır (md. 200/1-a).
+        decision_ctx = _board_decision_context(decision)
+        appealed_text = current_text
+    else:
+        # "… cezasına karşı yapılan itiraz": itiraza KONU ceza — itiraz kurulu
+        # değiştirdiyse yeni ceza değil, değişmeden önceki (md. 200/1-Ç).
+        appealed = _appealed_penalty(decision)
+        shown: Any = decision
+        if appealed is not None:
+            shown = _DecisionView(decision, penalty_type=appealed[0], suspension_days=appealed[1])
+        appealed_text = _penalty_text(shown.penalty_type, shown.suspension_days)
+        decision_ctx = {
+            "decision": shown,
+            "statute_label": statute_label(shown),
+            "board_penalty_display": appealed_text,
+            "current_penalty_display": current_text,
+            "penalty_change_note": "",
+        }
     return {
         **_common_context(case),
         **_committee_context(case),
         "student": _student_context(student),
         "parent": _parent_context(student),
-        "decision": decision,
-        "statute_label": statute_label(decision),
+        **decision_ctx,
+        "appealed_penalty_display": appealed_text,
         "notice_kind": kind,
         "board_label": ApprovalAuthority(authority).label,
         "appeal_board_label": (
@@ -927,8 +1258,7 @@ def _md197_letter_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
         **_common_context(case, unit=""),  # müdür yazısı — kurul belgesi değil
         **_committee_context(case),
         "student": _student_context(student),
-        "decision": decision,
-        "statute_label": statute_label(decision),
+        **_board_decision_context(decision),
         "return_reason_text": return_part,
         "refer_reason_text": refer_part,
     }
@@ -940,8 +1270,8 @@ def _approval_request_context(case: DisciplineCase, student: Any) -> dict[str, A
     return {
         **_common_context(case, unit=""),
         "student": _student_context(student),
-        "decision": decision,
-        "statute_label": statute_label(decision),
+        # Onaya SUNULAN ceza kurulun verdiğidir (onayda değişmiş olsa bile).
+        **_board_decision_context(decision),
         "to_provincial": decision.approval_authority == ApprovalAuthority.PROVINCIAL_BOARD,
     }
 
@@ -1040,7 +1370,7 @@ def _non_compliance_context(
     """md. 195 tespit tutanağı — ifade vermeyen / savunmada bulunmayan / gelmeyen kişi."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_signers_context(case),
         "participant": _participant_context(participant),
         **_schedule_context(extra),
     }
@@ -1054,6 +1384,13 @@ def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
     committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
     return {"committee": committee, "members": members}
+
+
+def _committee_signers_context(case: DisciplineCase) -> dict[str, Any]:
+    """Dosyanın kurulu + işlemi yapan HEYET — Form-11 "Savunmayı Alanlar" ve md. 195
+    tutanağı imza ızgarası (EK-1 ile aynı heyet; bkz. `_signing_members`)."""
+    committee = selectors.committee_for_case(case)
+    return {"committee": committee, "members": _signing_members(case, committee)}
 
 
 def _participant_context(participant: Any) -> dict[str, Any]:
@@ -1163,7 +1500,7 @@ def _defense_record_context(
     """
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_signers_context(case),
         "participant": _participant_context(participant),
         "statement_subject": (extra.get("statement_subject") or "").strip(),
         "statement_body": (extra.get("statement_body") or "").strip(),
@@ -1180,19 +1517,47 @@ def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[s
     }
 
 
+# Gün sayısının yazıyla hâli (Form-13 "… (beş) iş günü"; md. 192/3 uzatması 1-10 iş günü).
+_DAYS_TEXT: dict[int, str] = {
+    1: "bir",
+    2: "iki",
+    3: "üç",
+    4: "dört",
+    5: "beş",
+    6: "altı",
+    7: "yedi",
+    8: "sekiz",
+    9: "dokuz",
+    10: "on",
+}
+
+
 def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """Süre uzatma (F-12 ara karar / F-13 dilekçe, md. 192/3) — uzatma kaydı + kurul + öğrenci.
 
-    Uzatma dosya başına tektir (alive-unique) → `deadline_extensions.first()`. Öğrenci
-    künyesi dosyanın ilk öğrencisinden (çoğu dosya tek öğrencili); yoksa boş kalır.
+    Uzatma dosya başına tektir (alive-unique) → `deadline_extensions.first()` ve dosya
+    GENELİDİR (md. 192/3): çok öğrencili dosyada bütün öğrenciler yazılır. `students`
+    dosyaya eklenme sırasıyla tam listedir (`case.students` sicil sırasıyla gelir —
+    eskiden yalnız sicildeki ilk öğrenci basılıyordu). `student` ilk öğrencinin SAF
+    künyesidir (`full_name` yalnız ad — tek öğrencili dosyada şablon çıktısı eskisiyle
+    aynıdır); çok öğrencili dosyada şablonlar `students` üzerinden çoğul kalıp basar
+    ("… öğrencileri hakkında"). `requested_days_text` gün sayısının yazıyla hâlidir
+    (Form-13).
     """
     extension = case.deadline_extensions.first()
-    student = case.students.first()
+    students = [
+        _student_context(link.student)
+        for link in case.case_students.select_related("student").order_by("pk")
+    ]
+    student: dict[str, Any] | None = students[0] if students else None
+    days = extension.requested_days if extension is not None else None
     return {
         **_common_context(case),
         **_committee_with_members_context(case),
         "extension": extension,
-        "student": _student_context(student) if student is not None else None,
+        "student": student,
+        "students": students,
+        "requested_days_text": _DAYS_TEXT.get(days, "") if days else "",
         # Form-12 "oy birliği / oy çoğunluğu ile" (md. 191/1; kullanıcı kararı 26.09.2026).
         "vote_majority": extra.get("vote_basis") == CouncilDecisionBasis.MAJORITY,
     }
@@ -1377,6 +1742,10 @@ def generate_document(
     # altbilgisinden kaldırılmıştı; ölü bağlam enjeksiyonu Tur 217'de temizlendi.
     # Form ↔ madde eşlemesi artık yalnız şablon alt başlıklarında yaşar.
     context["recipient"] = recipient
+    # Belge tarihi = seçilen üretim tarihi (kütük ve dizi pusulasıyla aynı gün).
+    context["generated_at"] = _document_datetime(generated_on)
+    if document_type in (DocumentType.RETURN_LETTER, DocumentType.DISTRICT_REFERRAL_LETTER):
+        _apply_md197_dates(context, document_type)
     # NOT: Form-14/15'te hesaplanan itiraz son günü BASILMAZ (Tur 181, Talep 1d —
     # tebligat günü belirsiz, PTT olabilir); şablonda yalnız "5 iş günü" hakkı yazılıdır.
     # Karar snapshot'ı (decision.appeal_deadline) tebliğ kaydında tutulur
@@ -1385,10 +1754,18 @@ def generate_document(
 
     # Kütükte öğrenci bağı: öğrenci-özgü belgede student_id; katılımcı belgesinde
     # katılımcı bir öğrenciyse onun id'si (zaman çizelgesinde öğrenciyle ilişkilensin).
+    # Kütük bağı yalnız DOSYANIN öğrencisi (hakkında işlem yapılan) içindir: mağdur /
+    # tanık öğrenci dosyaya "dahil" değildir (DisciplineCaseStudent yok) → bağ kurulmaz,
+    # "kimden" bilgisi source_label/source_name ile taşınır. Aksi hâlde kütük servisi
+    # belgeyi reddediyordu ve md. 193/1 tanık ifadesi evrakı üretilemiyordu.
     log_student_id: int | None = None
     if document_type in STUDENT_REQUIRED:
         log_student_id = student_id
-    elif participant is not None:
+    elif (
+        participant is not None
+        and participant.student_id is not None
+        and case.case_students.filter(student_id=participant.student_id).exists()
+    ):
         log_student_id = participant.student_id
 
     # "Kimden" snapshot (Tur 140): katılımcı belgelerinde rol/kaynak + ad → dizi pusulası.
@@ -1399,7 +1776,7 @@ def generate_document(
         record = services.log_generated_document(
             case,
             document_type=document_type,
-            title=title or DOC_TITLES.get(document_type, "Disiplin belgesi"),
+            title=title or default_title(document_type, recipient, variant),
             generated_on=generated_on,
             document_no=document_no,
             student_id=log_student_id,
@@ -1407,7 +1784,7 @@ def generate_document(
             source_name=src_name,
             page_count=page_count,  # WeasyPrint'ten otomatik
             pdf_content=pdf_bytes,
-            stored_filename=f"{case.case_no}-{document_type}.pdf",
+            stored_filename=_stored_filename(case.case_no, document_type, recipient, variant),
         )
     return pdf_bytes, record
 
@@ -1415,8 +1792,52 @@ def generate_document(
 def _assert_process_letter_ready(
     case: DisciplineCase, document_type: str, student_id: int | None, variant: str
 ) -> None:
-    """M2 Grup 1 yazılarının kayıt ön koşulları — yanlış aşamada yazı üretilmez."""
+    """Belgenin DAYANAK KAYDI ön koşulları — gerçekleşmemiş işlem "yapıldı" diye basılmaz.
+
+    M2 Grup 1 yazıları (md. 197 / 169/1 / 175 MEM) baştan beri kayıt arar. Saha denetimi
+    (14.11.2026) aynı kuralı kardeş belgelere yaydı: karar yokken Form-14/15 (ceza adı
+    boş tırnakla basılıyordu), tedbir kaydı olmayan öğrenciye tedbir bildirimi (çok
+    öğrencili dosyada yanlış öğrenci seçimi fark edilmiyordu), uzatma kaydı yokken
+    Form-12/13 ve itiraz kaydı yokken Form-18. Önce kayıt girilir, sonra belge üretilir.
+    """
     from apps.disiplin.models import DisciplinePrecaution
+
+    if (
+        document_type == DocumentType.PENALTY_NOTICE
+        and not case.decisions.filter(student_id=student_id).exists()
+    ):
+        raise ValueError(
+            "Dosyada bu öğrenci için kurul kararı yok; ceza tebliği (Form-14/15) "
+            "üretilemez. Önce kurul kararını kaydedin."
+        )
+    if (
+        document_type == DocumentType.PRECAUTION_NOTICE
+        and not DisciplinePrecaution.objects.filter(case=case, student_id=student_id).exists()
+    ):
+        raise ValueError(
+            "Bu öğrenci için dosyada tedbir (md. 175) kaydı yok; önce tedbir kaydını girin."
+        )
+    if document_type == DocumentType.DEADLINE_EXTENSION and not case.deadline_extensions.exists():
+        raise ValueError(
+            "Dosyada süre uzatma kaydı yok; önce kurulun süre uzatma ara kararını "
+            "(md. 192/3) kaydedin, sonra Form-12/13'ü üretin."
+        )
+    if document_type == DocumentType.APPEAL_LETTER:
+        # Form-18 itirazı üst kurula sevk eder: "karar … onaylanmıştır", "… tarihinde
+        # tebliğ edilmiştir", "… itiraz etmiştir" cümleleri kayıttan basılır (md. 169/3).
+        appeal_decision = case.decisions.filter(student_id=student_id).first()
+        if appeal_decision is None:
+            raise ValueError("Dosyada bu öğrenci için kurul kararı yok; itiraz yazısı üretilemez.")
+        if not appeal_decision.appeals.exists():
+            raise ValueError(
+                "Bu karar için itiraz kaydı yok; itiraz yazısı (Form-18) itiraz dilekçesi "
+                "kaydedildikten sonra üretilir (md. 169/3)."
+            )
+        if appeal_decision.notified_at is None:
+            raise ValueError(
+                "Karar onaylanıp tebliğ edilmeden itiraz yazısı (Form-18) üretilemez "
+                "(md. 163/2, 169/3)."
+            )
 
     if document_type in {
         DocumentType.RETURN_LETTER,
@@ -1450,6 +1871,32 @@ def _assert_process_letter_ready(
             raise ValueError("Bu öğrenci için dosyada tedbir (md. 175) kaydı yok.")
         if variant == VARIANT_MEM_EXTENSION and all(p.extension_count >= 2 for p in qs):
             raise ValueError("Tedbir zaten iki kez uzatıldı; üçüncü uzatma yok (md. 175/2).")
+
+
+def _apply_md197_dates(context: dict[str, Any], document_type: str) -> None:
+    """md. 197 yazılarında İADE tarihi: bilinmiyorsa UYDURULMAZ (yalnız bağlam).
+
+    `record_principal_review` REFER'de `returned_at`'i SEVK tarihiyle ezer; ilk iade
+    tarihi karar kaydında KALMAZ (ayrı alan yok — şema gerekir). İade yazısı sevkten
+    sonra yeniden üretilince sevk tarihini taşıyordu (saha denetimi 14.11.2026). Evrak
+    kütüğündeki iade yazısının ÜRETİM tarihi güvenilir bir kaynak değildir (yazı sonradan,
+    başka bir tarih seçilerek ya da hiç üretilmeden iade kaydedilmiş olabilir) —
+    kullanılmaz. Bu yüzden sevkten sonra:
+    - iade yazısı: `return_date_unknown` → şablon tarihi noktalı basar (elle yazılır),
+      `decision.returned_at` vekilde None'dır (sevk tarihi iade tarihi diye basılmaz);
+    - ilçeye gönderme yazısı İlgi (b): `return_letter_date` None → noktalı kalır.
+    Sevk edilmemiş kararda iade tarihi kayıttadır (`decision.returned_at`).
+    """
+    context["return_letter_date"] = None
+    context["return_date_unknown"] = False
+    decision = context.get("decision")
+    if (
+        document_type == DocumentType.RETURN_LETTER
+        and decision is not None
+        and decision.referred_to_district
+    ):
+        context["decision"] = _DecisionView(decision, returned_at=None)
+        context["return_date_unknown"] = True
 
 
 def _student_in_case(case: DisciplineCase, student_id: int) -> Any:
@@ -1541,18 +1988,26 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
     case = meeting.discipline_case if meeting.minutes_type == "CASE_REVIEW" else None
     case_decisions: list[dict[str, Any]] = []
     if case is not None:
+        # Gündemsiz (dosya görüşme) tutanağının çıktısı OYS ile AYNI kalır (CLAUDE.md §1/3):
+        # kararlar model sırasıyla ve ceza yalnız TÜR etiketiyle basılır. Karar numarasına
+        # göre sıralama ve uzaklaştırmada "— N gün" eki OYS paritesinden sapmadır; kullanıcı
+        # kararı alınmadan uygulanmaz (gözden geçirme 14.11.2026).
         for decision in selectors.decisions_for_case(case).select_related("student"):
             student = decision.student
+            # Karar defteri okul kurulunun kararını kaydeder (md. 196/1): ceza sonradan üst
+            # kurulca değiştirildiyse tür etiketi kurulun VERDİĞİ cezadır (değişmemiş
+            # kararda kaydın kendi etiketi — OYS ile aynı).
+            shown = _board_decision_context(decision)
             case_decisions.append(
                 {
                     "full_name": student.full_name or "",
                     "class_label": student.class_label,
                     "student_number": student.student_number or "",
-                    "penalty_display": decision.get_penalty_type_display(),
+                    "penalty_display": shown["decision"].get_penalty_type_display(),
                     "penalty_detail": decision.penalty_detail,
                     "decision_no": decision.decision_no,
                     "decision_date": decision.decision_date,
-                    "statute_label": statute_label(decision),
+                    "statute_label": shown["statute_label"],
                 }
             )
     context: dict[str, Any] = {
@@ -1568,6 +2023,7 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
         "meeting": meeting,
         "chair": chair,
         "voting_members": voting,
+        "signer_rows": _signer_rows(chair, voting),
         "invitees": invitees,
         "dissenters": dissenters,
         "case": case,
@@ -1575,6 +2031,27 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
         "agenda_items": _council_agenda_rows(meeting),
     }
     return context
+
+
+# Karar defteri imza ızgarasında satır başına hane. 5: ÖDK ve Onur Kurulu (başkan + 4
+# üye) tek satırda kalır — az imzacılı çıktı eski tek satırlı ızgarayla aynıdır.
+_SIGNERS_PER_ROW = 5
+
+
+def _signer_rows(chair: Any, voting: list[Any]) -> list[list[Any]]:
+    """İmza ızgarası satırları: başkan + oy hakkı olan diğer üyeler, 5'erli.
+
+    Tek satırlı ızgara kalabalık Onur Genel Kurulunda (md. 178: her şubeden bir öğrenci)
+    sayfa dışına taşıyordu (saha denetimi 14.11.2026). Birden çok satır varsa son satır
+    `None` ile tamamlanır ki haneler aynı genişlikte kalsın.
+    """
+    signers = ([chair] if chair is not None else []) + [a for a in voting if not a.is_chair]
+    rows: list[list[Any]] = [
+        signers[i : i + _SIGNERS_PER_ROW] for i in range(0, len(signers), _SIGNERS_PER_ROW)
+    ]
+    if len(rows) > 1:
+        rows[-1] += [None] * (_SIGNERS_PER_ROW - len(rows[-1]))
+    return rows or [[]]
 
 
 def _council_agenda_rows(meeting: Any) -> list[dict[str, Any]]:
