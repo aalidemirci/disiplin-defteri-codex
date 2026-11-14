@@ -39,6 +39,10 @@ _NEXT_APPEAL_BOARD: dict[str, str] = {
 }
 
 
+#: "Verilmedi" nöbetçisi — None'dan ayırt etmek için (None = alanı TEMİZLE).
+_UNSET: object = object()
+
+
 def appeal_authority_for_decision(decision: DisciplineDecision) -> str:
     """Kararın itiraz mercii — cezayı ONAYLAYAN merciinin bir üstü (md. 169/3-4).
 
@@ -179,27 +183,141 @@ def _assert_case_referred(case: DisciplineCase) -> date:
     return referred_on
 
 
+# ---------------------------------------------------------------------------
+# TOPLANTI ZORUNLU (kullanıcı kararı, 14.11.2026 — S8) — md. 191/1, 196/1
+# ---------------------------------------------------------------------------
+def _live_meeting(meeting_id: int | None) -> DisciplineMeeting | None:
+    """Kararın bağlı olduğu toplantı — yalnız CANLI ise (silinmişse / bağ yoksa None)."""
+    if meeting_id is None:
+        return None
+    return DisciplineMeeting.objects.filter(pk=meeting_id).first()
+
+
+def _assert_meeting_usable(
+    case: DisciplineCase,
+    meeting: DisciplineMeeting,
+    *,
+    referred_on: date | None,
+) -> None:
+    """Karar bağlanacak toplantı: aynı dosyada, canlı, yeter sayılı ve sevkten sonra (S8)."""
+    from apps.disiplin.services.committee import case_meeting_quorum, meeting_quorum_message
+
+    if meeting.case_id != case.pk:
+        raise ValueError("Seçilen toplantı bu dosyaya ait değil.")
+    if meeting.deleted_at is not None:
+        raise ValueError(
+            "Seçilen toplantı kaydı silinmiş; kararı kayıtlı bir kurul toplantısına bağlayın."
+        )
+    quorum = case_meeting_quorum(meeting)
+    if not quorum["ok"]:
+        raise ValueError(meeting_quorum_message(meeting, quorum))
+    if referred_on is not None and meeting.meeting_date < referred_on:
+        # Sevk geri alınıp yeniden yapıldığında eski toplantı bu duruma düşebilir.
+        raise ValueError(
+            f"Seçilen toplantı ({meeting.meeting_date:%d.%m.%Y}) dosyanın kurula sevk "
+            f"tarihinden ({referred_on:%d.%m.%Y}) önce; karar tarihi kurula sevk tarihinden "
+            "önce olamaz. Sevkten sonraki toplantıyı seçin ya da yeni toplantı kaydedin."
+        )
+
+
+def _resolve_meeting(case: DisciplineCase, meeting: DisciplineMeeting | None) -> DisciplineMeeting:
+    """Yeni kararın bağlanacağı toplantı: verilmişse o; verilmemişse dosyanın TEK toplantısı."""
+    if meeting is not None:
+        return meeting
+    meetings = list(case.meetings.all())
+    if not meetings:
+        raise ValueError(
+            "Bu dosya için kayıtlı kurul toplantısı yok. Disiplin kararı kurul toplantısında "
+            "verilir (md. 191/1, 196/1): önce 'Kurul toplantıları' bölümünden toplantıyı "
+            "(tarih ve katılan üyeler) kaydedin, sonra kararı o toplantıya bağlı girin."
+        )
+    if len(meetings) > 1:
+        dates = ", ".join(f"{m.meeting_date:%d.%m.%Y}" for m in meetings)
+        raise ValueError(
+            f"Bu dosyada birden çok kurul toplantısı kayıtlı ({dates}); kararın hangi "
+            "toplantıda verildiğini seçin."
+        )
+    return meetings[0]
+
+
 def record_decision(
     case: DisciplineCase,
     *,
     student_id: int,
     penalty_type: str,
-    decision_date: date,
+    meeting: DisciplineMeeting | None = None,
+    decision_date: date | None = None,
     suspension_days: int | None = None,
     enforcement_start_date: date | None = None,
     statute_ref: str = "",
     penalty_detail: str = "",
     decision_no: str = "",
     event: DisciplineEvent | None = None,
-    meeting: DisciplineMeeting | None = None,
     notes: str = "",
     md166_override_reason: str = "",
 ) -> DisciplineDecision:
     """Bir dosyadaki öğrenci için resmî disiplin kararı (ceza) kaydeder (md. 163).
 
+    TOPLANTI ZORUNLU (kullanıcı kararı, 14.11.2026 — S8): karar yalnız dosyanın kayıtlı,
+    yeter sayısı olan (md. 191/1) kurul toplantısına bağlı girilir; karar tarihi = toplantı
+    tarihi (ayrı tarih girilemez). `meeting` verilmezse dosyanın TEK toplantısı seçilir;
+    toplantı yoksa ya da birden çoksa eyleme dönük reddedilir. Toplantısız girilmiş ESKİ
+    kararlar (`meeting IS NULL`) geçerlidir; onay/tebliğ/itiraz/kapanış toplantıya bakmaz.
+
     Davranış puanı indirimi (md. 170) ve onay mercii (md. 163/2) cezadan otomatik
     türetilir. Öğrenci dosyaya dahil olmalı; dosya başına öğrenciye tek (silinmemiş)
     karar (ikinci kez ValueError).
+    """
+    # Önce eski sıra (ileti ve sıra DEĞİŞMEZ): ceza türü → kapalı dosya → sevk.
+    if penalty_type not in set(PenaltyType.values):
+        raise ValueError("Geçersiz ceza türü.")
+    if case.closed_at is not None:
+        raise ValueError("Dosya kapatılmış; resmî karar girilemez.")
+    referred_on = _assert_case_referred(case)
+    meeting = _resolve_meeting(case, meeting)
+    _assert_meeting_usable(case, meeting, referred_on=referred_on)
+    if decision_date is not None and decision_date != meeting.meeting_date:
+        raise ValueError(
+            f"Karar tarihi toplantı tarihidir ({meeting.meeting_date:%d.%m.%Y}); ayrı tarih "
+            "girilemez."
+        )
+    return _create_decision(
+        case,
+        student_id=student_id,
+        penalty_type=penalty_type,
+        decision_date=meeting.meeting_date,
+        meeting=meeting,
+        suspension_days=suspension_days,
+        enforcement_start_date=enforcement_start_date,
+        statute_ref=statute_ref,
+        penalty_detail=penalty_detail,
+        decision_no=decision_no,
+        event=event,
+        notes=notes,
+        md166_override_reason=md166_override_reason,
+    )
+
+
+def _create_decision(
+    case: DisciplineCase,
+    *,
+    student_id: int,
+    penalty_type: str,
+    decision_date: date,
+    meeting: DisciplineMeeting | None,
+    suspension_days: int | None = None,
+    enforcement_start_date: date | None = None,
+    statute_ref: str = "",
+    penalty_detail: str = "",
+    decision_no: str = "",
+    event: DisciplineEvent | None = None,
+    notes: str = "",
+    md166_override_reason: str = "",
+) -> DisciplineDecision:
+    """Karar kaydının çekirdeği — toplantı şartını ARAMAZ (S8).
+
+    Yalnız `record_decision` (toplantı çözülüp doğrulandıktan sonra) ve test fabrikası
+    (`meeting=None` ile S8 öncesi toplantısız kayıt taklidi) çağırır; dışa aktarılmaz.
     """
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
@@ -297,7 +415,7 @@ def update_decision(
     decision: DisciplineDecision,
     *,
     penalty_type: str,
-    decision_date: date,
+    decision_date: date | None = None,
     suspension_days: int | None = None,
     enforcement_start_date: date | None = None,
     statute_ref: str = "",
@@ -305,8 +423,15 @@ def update_decision(
     decision_no: str = "",
     notes: str = "",
     md166_override_reason: str | None = None,
+    meeting: DisciplineMeeting | None | object = _UNSET,
 ) -> DisciplineDecision:
     """BEKLEMEDEKİ bir kararın çekirdek alanlarını düzenler (md. 163).
+
+    TOPLANTI BAĞI (S8): toplantıya bağlı kararda karar tarihi toplantı tarihidir — yalnız
+    `meeting` verilerek (başka toplantıya bağlama; md. 197 iadesinden sonraki ikinci görüşme
+    böyle kaydedilir) değişir; bağ KALDIRILAMAZ (`meeting=None` reddedilir). Toplantısız
+    girilmiş ESKİ kararda tarih eskisi gibi düzenlenir, toplantı ZORLANMAZ; `meeting`
+    verilirse karar o toplantıya bağlanır ve tarihi toplantı tarihine çekilir.
 
     md. 166 denetimi yeniden uygulanır; `md166_override_reason` verilmezse mevcut
     gerekçe korunur.
@@ -330,10 +455,51 @@ def update_decision(
     _assert_decision_editable(decision)
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
-    # record_decision ile aynı kural (md. 163/2): karar, kurula sevkten önce olamaz.
     referred_on = selectors.committee_referred_on(decision.case)
-    if referred_on is not None and decision_date < referred_on:
-        raise ValueError("Karar tarihi kurula sevk tarihinden önce olamaz.")
+    bound = _live_meeting(decision.meeting_id)
+    new_meeting: DisciplineMeeting | None = bound
+    # Kararın ZATEN bağlı olduğu toplantı gönderildiyse değişiklik yoktur: bağ korunur,
+    # toplantı yeniden doğrulanmaz (kurul sonradan büyüyüp eski toplantı yetersiz görünse de
+    # beklemedeki karar düzenlenebilir kalır) — aşağıdaki "bağlı karar" dalı işler.
+    same_meeting = (
+        isinstance(meeting, DisciplineMeeting) and bound is not None and meeting.pk == bound.pk
+    )
+    if isinstance(meeting, DisciplineMeeting) and not same_meeting:
+        _assert_meeting_usable(decision.case, meeting, referred_on=referred_on)
+        if decision_date is not None and decision_date != meeting.meeting_date:
+            raise ValueError(
+                f"Karar tarihi toplantı tarihidir ({meeting.meeting_date:%d.%m.%Y}); ayrı "
+                "tarih girilemez."
+            )
+        new_meeting = meeting
+        decision_date = meeting.meeting_date
+    elif bound is not None:
+        if meeting is None:
+            raise ValueError(
+                "Karar toplantıya bağlıdır; bağ kaldırılamaz, başka toplantıya bağlanabilir."
+            )
+        if decision_date is not None and decision_date != bound.meeting_date:
+            raise ValueError(
+                f"Karar tarihi toplantı tarihidir ({bound.meeting_date:%d.%m.%Y}); değiştirmek "
+                "için kararı başka bir toplantıya bağlayın."
+            )
+        if referred_on is not None and bound.meeting_date < referred_on:
+            # md. 163/2 — eski (bağsız) karardaki kuralın aynısı. Sevk geri alınıp yeniden
+            # yapıldıysa bağlı toplantı sevk öncesinde kalabilir; çıkış: başka toplantı / silme.
+            raise ValueError(
+                f"Kararın bağlı olduğu toplantı ({bound.meeting_date:%d.%m.%Y}) dosyanın kurula "
+                f"sevk tarihinden ({referred_on:%d.%m.%Y}) önce; karar tarihi kurula sevk "
+                "tarihinden önce olamaz. Kararı sevkten sonraki bir toplantıya bağlayın (yoksa "
+                "önce o toplantıyı kaydedin)."
+            )
+        decision_date = bound.meeting_date
+    else:
+        # ESKİ (toplantısız) karar: tarih eskisi gibi düzenlenir; toplantı zorlanmaz.
+        if decision_date is None:
+            decision_date = decision.decision_date
+        # record_decision ile aynı kural (md. 163/2): karar, kurula sevkten önce olamaz.
+        if referred_on is not None and decision_date < referred_on:
+            raise ValueError("Karar tarihi kurula sevk tarihinden önce olamaz.")
 
     md166_reason = _check_md166(
         decision.case,
@@ -352,6 +518,8 @@ def update_decision(
     decision.md166_override_reason = md166_reason
     decision.penalty_type = penalty_type
     decision.decision_date = decision_date
+    if new_meeting is not None:
+        decision.meeting = new_meeting
     decision.suspension_days = suspension_days if is_suspension else None
     decision.enforcement_start_date = enforcement_start_date if is_suspension else None
     decision.statute_ref = statute_ref
@@ -383,19 +551,72 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
 
     Aynı öğrenci için bu dosyada zaten CANLI bir karar varsa reddedilir. Dosya artık
     kurula sevkli değilse (sevk geri alınmış / yazılı uyarıya dönülmüş) karar geri
-    gelmez — md. 163/2 (`record_decision` ile aynı kural).
+    gelmez — md. 163/2 (`record_decision` ile aynı kural). Toplantıya bağlı karar (S8),
+    toplantısı silinmişse ya da sevk yeniden yapıldığı için toplantı sevk öncesinde
+    kaldıysa da geri gelmez.
     """
     if decision.deleted_at is None:
         raise ValueError("Karar zaten geri yüklenmiş (silinmemiş).")
     _assert_case_open(decision)
-    _assert_case_referred(decision.case)
+    referred_on = _assert_case_referred(decision.case)
     if not case_has_student(decision.case, decision.student_id):
         raise ValueError("Öğrenci artık bu dosyada değil; karar geri yüklenemez.")
     if DisciplineDecision.objects.filter(
         case_id=decision.case_id, student_id=decision.student_id
     ).exists():
         raise ValueError("Bu öğrenci için bu dosyada zaten (canlı) bir karar var; geri yüklenemez.")
+    if decision.meeting_id is not None and _live_meeting(decision.meeting_id) is None:
+        # S8: karar toplantıya dayanır. Toplantısız girilmiş ESKİ karar (bağ boş) bu denetime
+        # girmez — eski kararlar geçerli kalır.
+        gone = DisciplineMeeting.all_objects.filter(pk=decision.meeting_id).first()
+        when = f" ({gone.meeting_date:%d.%m.%Y})" if gone is not None else ""
+        raise ValueError(
+            f"Kararın bağlı olduğu kurul toplantısı kaydı{when} silinmiş; karar geri "
+            "yüklenemez. Toplantıyı yeniden kaydedip kararı yeniden girin."
+        )
+    if decision.meeting_id is not None and decision.decision_date < referred_on:
+        # Karar silindikten sonra sevk geri alınıp yeniden yapılmış: bağlı toplantı artık
+        # yürürlükteki sevkten ÖNCE (md. 163/2; `_assert_meeting_usable` ile aynı kural). Yalnız
+        # sevk tarihi denetlenir — yeter sayı canlı karardaki gibi yeniden sorgulanmaz. Eski
+        # (bağsız) karar bu denetime girmez: tarihi düzenlemede düzeltilir (S8 öncesi davranış).
+        raise ValueError(
+            f"Kararın bağlı olduğu toplantı ({decision.decision_date:%d.%m.%Y}) dosyanın "
+            f"yürürlükteki kurula sevk tarihinden ({referred_on:%d.%m.%Y}) önce; karar geri "
+            "yüklenemez. Sevkten sonraki toplantıyı kaydedip kararı yeniden girin."
+        )
     decision.restore()
+    return decision
+
+
+@transaction.atomic
+def rebind_decision_meeting(
+    decision: DisciplineDecision, meeting: DisciplineMeeting
+) -> DisciplineDecision:
+    """Kararı AYNI TARİHLİ başka bir toplantı kaydına bağlar — karar tarihi DEĞİŞMEZ (S8).
+
+    Yalnız kullanıcı isteğiyle; düzenlemeye kapalı (onaylı / tebliğli / itirazlı) kararlar ve
+    toplantısız girilmiş eski kararlar içindir (beklemedeki karar başka tarihli toplantıya
+    `update_decision` ile bağlanır). İki işlevi var: (a) eski karara, kullanıcı o tarihli
+    toplantıyı kaydettiyse isteğe bağlı bağlama — geriye dönük tarih ÜRETİLMEZ; (b) §7.6
+    çıkışı: yanlış kaydedilmiş (ör. vekâleti / katılanları hatalı) toplantıya karar bağlıysa
+    toplantı silinemez — doğru kayıt aynı tarihle girilir, karar ona taşınır, eskisi silinir.
+    Tarih değişmediği için onay / tebliğ / itiraz zinciri ve süreler etkilenmez. Kapalı dosyada
+    reddedilir (kapanış dayanağı kilitli).
+    """
+    if decision.deleted_at is not None:
+        raise ValueError("Silinmiş karar toplantıya bağlanamaz; önce kararı geri yükleyin.")
+    _assert_case_open(decision)
+    # Sevk tarihi yeniden denetlenmez: karar tarihi değişmiyor.
+    _assert_meeting_usable(decision.case, meeting, referred_on=None)
+    if meeting.meeting_date != decision.decision_date:
+        raise ValueError(
+            f"Karar tarihi ({decision.decision_date:%d.%m.%Y}) değişmez: karar yalnız aynı "
+            f"tarihli bir toplantı kaydına bağlanabilir (seçilen toplantı: "
+            f"{meeting.meeting_date:%d.%m.%Y}). Beklemedeki (onaylanmamış) kararı başka tarihli "
+            "toplantıya bağlamak için kararı düzenleyin."
+        )
+    decision.meeting = meeting
+    decision.save(update_fields=["meeting", "updated_at"])
     return decision
 
 
@@ -959,10 +1180,6 @@ NARRATIVE_FIELDS: tuple[str, ...] = (
     "incident_date",
     "prior_penalties_summary",
 )
-
-
-#: "Verilmedi" nöbetçisi — None'dan ayırt etmek için (None = alanı TEMİZLE).
-_UNSET: object = object()
 
 
 @transaction.atomic

@@ -17,6 +17,7 @@ from apps.disiplin.models import (
     DisciplineCase,
     DisciplineCommittee,
     DisciplineCommitteeMember,
+    DisciplineDecision,
     DisciplineEvent,
     DisciplineMeeting,
 )
@@ -187,6 +188,87 @@ def _check_quorum(
         )
 
 
+def case_meeting_quorum(meeting: DisciplineMeeting) -> dict[str, Any]:
+    """Dosya toplantısının yeter sayısı — karar bağlanırken YENİDEN doğrulanır (S8, md. 191/1).
+
+    `record_meeting` yeter sayıyı kayıt anında denetler; ancak o denetimden önce kaydedilmiş
+    (ya da katılımcısız) toplantı satırı bulunabilir. Katılanlar ara tablodan sayılır: sonradan
+    kuruldan çıkarılan (soft-delete) üye o gün katılmıştı, sayılmaya devam eder. Başkan
+    katılmadıysa (`chair_absent`, S7) sayılmaz. Üye tam sayısı katılımcıların kurulunun (yoksa
+    dosyanın kurulunun) BUGÜNKÜ asıl üyeleri + başkandır.
+
+    Bilinen sınır: üyelik geçmişi tutulmaz. Toplantıdan sonra kurulun asıl üye SAYISI
+    büyüdüyse eski toplantı yetersiz görünebilir; çare toplantıyı silip yeniden kaydetmek,
+    toplantıya karar bağlıysa (silinemez) yeni bir toplantı kaydetmektir. Bağlı kararlar
+    geçerli kalır.
+    """
+    from apps.disiplin.selectors import committee_for_case
+
+    through = DisciplineMeeting.attendees.through
+    member_ids = list(
+        through.objects.filter(disciplinemeeting_id=meeting.pk).values_list(
+            "disciplinecommitteemember_id", flat=True
+        )
+    )
+    present = len(member_ids) + (0 if meeting.chair_absent else 1)
+    committee: DisciplineCommittee | None = None
+    if member_ids:
+        member = (
+            DisciplineCommitteeMember.all_objects.filter(pk__in=member_ids)
+            .select_related("committee")
+            .first()
+        )
+        committee = member.committee if member is not None else None
+    if committee is None:
+        committee = committee_for_case(meeting.case)
+    if committee is None:
+        return {"full": 0, "required": 0, "present": present, "ok": False}
+    quorum = committee_quorum(committee, present)
+    if not member_ids:
+        quorum["ok"] = False
+    return quorum
+
+
+def meeting_quorum_message(meeting: DisciplineMeeting, quorum: dict[str, Any]) -> str:
+    """Yeter sayısı olmayan toplantıya karar bağlama reddi (eyleme dönük — S8).
+
+    Toplantıya karar bağlıysa kayıt silinemez; yapılamayan adım önerilmez (§7.6) — çıkış
+    yeni bir toplantı kaydıdır.
+    """
+    if DisciplineDecision.objects.filter(meeting=meeting).exists():
+        remedy = (
+            "Bu toplantıya karar bağlı olduğu için kayıt silinemez; katılanları doğru girerek "
+            "yeni bir toplantı kaydedin ve kararı o toplantıya bağlı girin."
+        )
+    else:
+        remedy = "Toplantı kaydını silip katılanları doğru girerek yeniden kaydedin."
+    return (
+        f"Seçilen toplantıda ({meeting.meeting_date:%d.%m.%Y}) yeter sayı yok: kurul "
+        f"{quorum['full']} kişi, en az {quorum['required']} kişi katılmalı; kayıtta "
+        f"{quorum['present']} kişi (md. 191/1). {remedy}"
+    )
+
+
+def meeting_attendees(meeting: DisciplineMeeting) -> list[DisciplineCommitteeMember]:
+    """Toplantıya KATILMIŞ üyeler — sonradan kuruldan çıkarılanlar (soft-delete) DAHİL.
+
+    `meeting.attendees.all()` çıkarılan üyeyi süzer; oysa o üye o gün katılmış ve kararı
+    imzalamıştır (md. 196/1). Yeter sayı (`case_meeting_quorum`), EK-1 imza ızgarası ve
+    arayüzdeki katılımcı listesi AYNI kümeyi kullanır. Sıra üye modelinin sırasıdır.
+    """
+    through = DisciplineMeeting.attendees.through
+    member_ids = list(
+        through.objects.filter(disciplinemeeting_id=meeting.pk).values_list(
+            "disciplinecommitteemember_id", flat=True
+        )
+    )
+    return list(
+        DisciplineCommitteeMember.all_objects.filter(pk__in=member_ids).order_by(
+            "is_substitute", "order", "id"
+        )
+    )
+
+
 def conflicted_ids(case: DisciplineCase) -> tuple[set[int], set[int]]:
     """md. 191/2 kümesi: dosyada şikâyetçi / zarar gören (veya hakkında işlem yapılan)
     kişilerin (personel id'leri, öğrenci id'leri)."""
@@ -315,8 +397,8 @@ def case_chair_warnings(case: DisciplineCase) -> list[str]:
     """Dosya ekranının VEKÂLET uyarısı (S7/K4) — UYARIDIR, hiçbir işlemi engellemez.
 
     Kurula sevkli dosyada kurul başkanı şikâyetçi / zarar gören ise (md. 191/2) ve dosyanın
-    SON toplantı kaydı vekâletli değilse (toplantı kaydı yok ya da S7 öncesi / vekâletsiz
-    kayıt) kurul evrakında başkan hanesi boş basılır (`documents._signing_panel`,
+    SON toplantı kaydı — ya da canlı bir kararın BAĞLI olduğu toplantı (EK-1 heyeti, S8) —
+    vekâletli değilse (toplantı kaydı yok ya da S7 öncesi / vekâletsiz kayıt) kurul evrakında başkan hanesi boş basılır (`documents._signing_panel`,
     `documents._case_committee`). Kayıt kendiliğinden DEĞİŞTİRİLMEZ; kullanıcı toplantıyı
     "Başkan toplantıya katılmadı" kaydıyla (yeniden) kaydedince uyarı kalkar. Kurula sevk
     edilmemiş dosyada kurul evrakı üretilmediğinden uyarı da yoktur.
@@ -328,16 +410,32 @@ def case_chair_warnings(case: DisciplineCase) -> list[str]:
     committee = committee_for_case(case)
     if committee is None or not chair_conflicted(case, committee):
         return []
-    meeting = case.meetings.first()
-    if meeting is None:
-        action = "kurul toplantısını 'Başkan toplantıya katılmadı' kaydıyla kaydedin"
-    elif meeting.chair_absent and meeting.acting_chair_id is not None:
-        return []
-    else:
-        action = (
-            "toplantıyı 'Başkan toplantıya katılmadı' kaydıyla yeniden kaydedin (kaydı silip "
-            "doğrusunu girin)"
+    # Belgelerin başkan hanesini besleyen toplantılar: dosyanın SON toplantısı (Form-11,
+    # md. 195 tutanağı, dizi pusulası…) ve canlı kararların BAĞLI toplantıları (EK-1 — S8).
+    last = case.meetings.first()
+    bound_ids = set(
+        DisciplineDecision.objects.filter(case=case, meeting__isnull=False).values_list(
+            "meeting_id", flat=True
         )
+    )
+    if last is None:
+        action = "kurul toplantısını 'Başkan toplantıya katılmadı' kaydıyla kaydedin"
+    else:
+        relevant = [last, *case.meetings.filter(pk__in=bound_ids).exclude(pk=last.pk)]
+        lacking = [m for m in relevant if not (m.chair_absent and m.acting_chair_id is not None)]
+        if not lacking:
+            return []
+        if any(m.pk in bound_ids for m in lacking):
+            # Karara bağlı toplantı silinemez (S8); çıkış: aynı tarihli doğru kayda taşımak.
+            action = (
+                "toplantıyı 'Başkan toplantıya katılmadı' kaydıyla AYNI tarihle yeniden "
+                "kaydedin, kararları yeni kayda bağlayın, sonra eski kaydı silin"
+            )
+        else:
+            action = (
+                "toplantıyı 'Başkan toplantıya katılmadı' kaydıyla yeniden kaydedin (kaydı "
+                "silip doğrusunu girin)"
+            )
     if case.closed_at is not None:
         # Kapalı dosyada toplantı kaydı reddedilir; yapılamayan adımı önerme (§7.6).
         action = f"önce dosyayı yeniden açın (aşama geri alma), sonra {action}"
@@ -492,5 +590,21 @@ def delete_meeting(meeting: DisciplineMeeting) -> None:
         raise ValueError(
             "Dosya kapalı: kurul toplantısı kaydı silinemez. Gerekiyorsa önce dosyayı yeniden "
             "açın (aşama geri alma)."
+        )
+    bound = list(
+        DisciplineDecision.objects.filter(meeting=meeting)
+        .select_related("student")
+        .order_by("decision_no")
+    )
+    if bound:
+        # S8: karar toplantıya dayanır (karar tarihi = toplantı tarihi, EK-1 imza heyeti).
+        # Karar numarası boş olabilir (düzenlemede silinebilir): o zaman yalnız ad.
+        labels = ", ".join(
+            f"{d.student.full_name} — {d.decision_no}" if d.decision_no else d.student.full_name
+            for d in bound
+        )
+        raise ValueError(
+            f"Bu toplantıda verilmiş karar var ({labels}); toplantı kaydı silinemez. Önce "
+            "kararı silin ya da başka bir toplantıya bağlayın."
         )
     meeting.delete()

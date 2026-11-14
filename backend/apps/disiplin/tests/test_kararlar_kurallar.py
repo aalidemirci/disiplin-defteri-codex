@@ -31,7 +31,7 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve, decide
 from apps.okul.models import Holiday
 
 pytestmark = pytest.mark.django_db
@@ -177,9 +177,7 @@ def test_s4_is_gunu_baslangicinda_belge_degismez() -> None:
 # S9 — cezasız karar tebliğden sonra süre beklemeden kapanır
 # ---------------------------------------------------------------------------
 def _decide(case: DisciplineCase, student_id: int, penalty_type: str) -> Any:
-    return services.record_decision(
-        case, student_id=student_id, penalty_type=penalty_type, decision_date=FRI
-    )
+    return decide(case, student_id=student_id, penalty_type=penalty_type, decision_date=FRI)
 
 
 def test_s9_cezasiz_karar_tebligden_sonra_hemen_kapanir() -> None:

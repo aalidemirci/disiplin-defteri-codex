@@ -437,6 +437,9 @@ export default function DisiplinDetayPage() {
   // bölümünün verisini besler — biri değişince öteki bayat kalmasın.
   const [triageVersion, setTriageVersion] = useState(0);
   const [meetingVersion, setMeetingVersion] = useState(0);
+  // S8: karar toplantıya bağlıdır — karar eklenince/silinince/başka toplantıya bağlanınca
+  // toplantı kartları (bağlı kararlar, "Sil" görünürlüğü) yeniden çekilir.
+  const [decisionVersion, setDecisionVersion] = useState(0);
 
   // `silent`: iskelet göstermeden arka planda tazeler — bölüm içi işlemlerden
   // (katılımcı senkronu gibi) sonra kartların yerinde kalması için.
@@ -741,6 +744,7 @@ export default function DisiplinDetayPage() {
                 <MeetingsSection
                   caseObj={data}
                   canManage={canRecordMeeting}
+                  refreshToken={decisionVersion}
                   onChanged={() => {
                     setMeetingVersion((v) => v + 1);
                     load(true);
@@ -751,7 +755,10 @@ export default function DisiplinDetayPage() {
                   key={meetingVersion}
                   caseObj={data}
                   caps={caps}
-                  onCaseChanged={() => load(true)}
+                  onCaseChanged={() => {
+                    setDecisionVersion((v) => v + 1);
+                    load(true);
+                  }}
                 />
                 <PeriodsSection caseObj={data} caps={caps} />
               </div>
@@ -1623,11 +1630,16 @@ function formatSize(bytes: number): string {
 function MeetingsSection({
   caseObj,
   canManage,
+  refreshToken = 0,
   onChanged,
 }: {
   caseObj: DisciplineCase;
   canManage: boolean;
-  /** Toplantı kaydı EK-1 imza heyetini belirler — karar bölümü verisi de tazelenir. */
+  /** S8: karar bölümündeki değişiklik sayacı — değişince liste yeniden çekilir (bağlı
+   *  kararlar). `key` ile yeniden bağlama açık toplantı diyaloğunu kapatırdı. */
+  refreshToken?: number;
+  /** Toplantı kaydı karar girişini ve EK-1 imza heyetini belirler — karar bölümü verisi de
+   *  tazelenir. */
   onChanged: () => void;
 }) {
   const [meetings, setMeetings] = useState<DisciplineMeeting[] | null>(null);
@@ -1663,7 +1675,7 @@ function MeetingsSection({
         setError(e instanceof ApiError ? e.message : "Toplantılar yüklenemedi.");
       });
   }, [caseObj.id]);
-  useEffect(load, [load]);
+  useEffect(load, [load, refreshToken]);
 
   if (hidden) return null;
 
@@ -1671,7 +1683,7 @@ function MeetingsSection({
     if (
       !(await confirm({
         title: "Toplantı kaydını sil",
-        message: `${formatDate(m.meeting_date)} tarihli kurul toplantısı kaydı silinsin mi? EK-1 imza heyeti bu kayıttan alınır; yanlış girildiyse silip doğrusunu kaydedin.`,
+        message: `${formatDate(m.meeting_date)} tarihli kurul toplantısı kaydı silinsin mi? Karar bu toplantıya bağlı girilir ve EK-1 imza heyeti bu kayıttan alınır; yanlış girildiyse silip doğrusunu kaydedin.`,
         confirmLabel: "Sil",
       }))
     )
@@ -1730,8 +1742,9 @@ function MeetingsSection({
         <SkeletonList rows={3} />
       ) : meetings.length === 0 ? (
         <p className="mt-3 text-body-medium text-on-surface-variant">
-          Henüz kurul toplantısı kaydedilmedi. Kurul kararı için toplantıyı ve katılan üyeleri
-          buradan kaydedin (tutanak verisi buradan üretilir).
+          Henüz kurul toplantısı kaydedilmedi. Karar yalnız kayıtlı toplantıya bağlı girilir (md.
+          191/1): önce toplantıyı ve katılan üyeleri buradan kaydedin (karar tarihi toplantı
+          tarihidir; tutanak verisi buradan üretilir).
         </p>
       ) : (
         <ul className="mt-3 space-y-3">
@@ -1745,7 +1758,9 @@ function MeetingsSection({
                   <Icon name="event" size="base" className="mr-1 align-middle text-primary" />
                   {formatDate(m.meeting_date)}
                 </p>
-                {canManage && caseOpen && (
+                {/* S8: karar bağlı toplantı silinemez (backend de reddeder) — yapılamayan
+                    adım sunulmaz; gerekçe aşağıda yazılır. */}
+                {canManage && caseOpen && (m.decisions?.length ?? 0) === 0 && (
                   <Button
                     variant="text"
                     icon="delete"
@@ -1791,6 +1806,37 @@ function MeetingsSection({
                 <div className="mt-2">
                   <VekaletUyarisi warnings={m.chair_warnings} />
                 </div>
+              )}
+              {/* S8: yeter sayısı olmayan (eski) toplantıya karar bağlanamaz (md. 191/1). */}
+              {m.quorum && !m.quorum.ok && (
+                <p className="mt-2 flex items-start gap-1 text-body-small text-error">
+                  <Icon name="warning" size="sm" />
+                  <span>
+                    Yeter sayı yok: kurul {m.quorum.full} kişi, en az {m.quorum.required} kişi
+                    katılmalı; kayıtta {m.quorum.present} kişi (md. 191/1). Bu toplantıya karar
+                    bağlanamaz
+                    {!(canManage && caseOpen)
+                      ? "."
+                      : m.decisions && m.decisions.length > 0
+                        ? "; katılanları doğru girerek yeni bir toplantı kaydedin."
+                        : "; kaydı silip katılanları doğru girerek yeniden kaydedin."}
+                  </span>
+                </p>
+              )}
+              {m.decisions && m.decisions.length > 0 && (
+                <p className="mt-2 flex items-start gap-1 text-body-small text-on-surface-variant">
+                  <Icon name="gavel" size="sm" />
+                  <span>
+                    Bu toplantıda verilen kararlar:{" "}
+                    {m.decisions
+                      .map((d) =>
+                        d.decision_no ? `${d.student_name} (${d.decision_no})` : d.student_name,
+                      )
+                      .join(", ")}
+                    . Bu toplantıda verilmiş karar var; kayıt silinemez
+                    {caseOpen ? " (önce kararı silin ya da başka bir toplantıya bağlayın)." : "."}
+                  </span>
+                </p>
               )}
               {m.notes && (
                 <p className="mt-2 whitespace-pre-wrap text-body-medium text-on-surface-variant">

@@ -9,7 +9,7 @@ import pytest
 from apps.disiplin import services
 from apps.disiplin.deadlines import Severity, collect_deadline_items
 from apps.disiplin.models import CaseStage, DisciplineCase, PrincipalDecision
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve, decide
 
 pytestmark = pytest.mark.django_db
 
@@ -62,9 +62,7 @@ def test_teblig_bekleyen_karar_bilgi_olarak_listelenir() -> None:
     "tebliğ bekliyor" olarak listelenir (05.10.2026 — onaysız karar "tebliğ bekliyor"
     görünüyordu)."""
     case, sid = _committee_case()
-    d = services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    d = decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     items = collect_deadline_items(date(2026, 5, 23))
     assert [i for i in items if "tebliğ bekliyor" in i.title] == []
     onay = [i for i in items if "onay bekliyor" in i.title]
@@ -84,9 +82,7 @@ def test_teblig_bekleyen_karar_bilgi_olarak_listelenir() -> None:
 
 def test_itiraz_sevk_suresi_listelenir() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    d = decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     services.file_appeal(d, filed_on=date(2026, 5, 25), filed_by_role="PARENT")
@@ -133,9 +129,7 @@ def test_tedbir_suresi_listelenir() -> None:
 
 def test_kapanisa_hazir_dosya_bilgi_olarak_listelenir() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    d = decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     approve(d)
     services.notify_decision(d, notified_on=date(2026, 5, 22))
     # İtiraz süresi dolunca önce e-Okul hatırlatması gelir.
@@ -152,9 +146,7 @@ def test_kapanisa_hazir_dosya_bilgi_olarak_listelenir() -> None:
 
 def test_siralama_gecti_yaklasiyor_bilgi() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    d = decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     # Tebliğsiz karar (BİLGİ) + kurul süresi 02.06 GEÇTİ durumunda. Saha testi
     # 14.11.2026: kararı girilmiş dosya artık "kurul karar süresi" alarmı vermez
     # (md. 192/3 — karara bağlanmıştır); GEÇTİ satırını kararsız ikinci dosya üretir.

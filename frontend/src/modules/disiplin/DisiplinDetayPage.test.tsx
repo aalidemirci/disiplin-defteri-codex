@@ -69,11 +69,18 @@ vi.mock("../okul/api", () => ({ okulApi: oapi }));
 vi.mock("./DecisionsSection", async () => {
   const { useEffect } = await import("react");
   return {
-    default: function DecisionsStub() {
+    default: function DecisionsStub({ onCaseChanged }: { onCaseChanged?: () => void }) {
       useEffect(() => {
         bolum.decisionsMounted();
       }, []);
-      return <div data-testid="kararlar-bolumu" />;
+      // S8: karar değişikliğini (ekle / sil / başka toplantıya bağla) taklit eder.
+      return (
+        <div data-testid="kararlar-bolumu">
+          <button type="button" onClick={() => onCaseChanged?.()}>
+            karar-degisti
+          </button>
+        </div>
+      );
     },
   };
 });
@@ -757,6 +764,83 @@ describe("DisiplinDetayPage — toplantıda başkan vekâleti (S7)", () => {
     ).toBeInTheDocument();
     expect(within(dialog).getByText(/md\. 186/)).toBeInTheDocument();
     expect(within(dialog).queryByText(/üye ekleyin/)).toBeNull();
+  });
+
+  it("karar bağlı toplantıda 'Sil' sunulmaz, gerekçe yazılır; karar değişince liste yeniden çekilir (S8)", async () => {
+    bosListeler();
+    const bagli: DisciplineMeeting = {
+      ...TOPLANTI,
+      quorum: { full: 3, required: 2, present: 3, ok: true },
+      decisions: [
+        { id: 9, student: 50, student_name: "Emre Can Yılmaz", decision_no: "2025-2026/0001" },
+      ],
+    };
+    dapi.listMeetings
+      .mockResolvedValueOnce([bagli])
+      .mockResolvedValue([{ ...bagli, decisions: [] }]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+
+    expect(
+      await screen.findByText(
+        /Bu toplantıda verilen kararlar: Emre Can Yılmaz \(2025-2026\/0001\)/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Bu toplantıda verilmiş karar var; kayıt silinemez/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sil" })).toBeNull();
+    expect(bolum.decisionsMounted).toHaveBeenCalledTimes(1);
+
+    // Karar silindi / başka toplantıya bağlandı → toplantı listesi yeniden çekilir (§7.5),
+    // karar bölümü yeniden BAĞLANMAZ (açık formu kapanmasın), "Sil" geri gelir.
+    await user.click(screen.getByRole("button", { name: "karar-degisti" }));
+    await waitFor(() => expect(dapi.listMeetings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Sil" })).toBeInTheDocument();
+    expect(screen.queryByText(/Bu toplantıda verilmiş karar var/)).toBeNull();
+    expect(bolum.decisionsMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it("yeter sayısı olmayan toplantıda karar bağlanamayacağı ve çaresi yazılır (S8)", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([
+      { ...TOPLANTI, quorum: { full: 5, required: 3, present: 2, ok: false }, decisions: [] },
+    ]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(
+      await screen.findByText(
+        /Yeter sayı yok: kurul 5 kişi, en az 3 kişi katılmalı; kayıtta 2 kişi/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sil" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/kaydı silip katılanları doğru girerek yeniden kaydedin/),
+    ).toBeInTheDocument();
+  });
+
+  it("yeter sayısız toplantıya karar bağlıysa silme önerilmez; yeni toplantı önerilir (S8)", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([
+      {
+        ...TOPLANTI,
+        quorum: { full: 5, required: 3, present: 2, ok: false },
+        decisions: [{ id: 9, student: 50, student_name: "Emre Can Yılmaz", decision_no: "" }],
+      },
+    ]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(
+      await screen.findByText(/katılanları doğru girerek yeni bir toplantı kaydedin/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/kaydı silip/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sil" })).toBeNull();
   });
 
   it("toplantı ayrıntısında 'Başkan katılmadı; … başkanlık etti (md. 188)' satırı görünür", async () => {

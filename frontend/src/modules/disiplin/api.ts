@@ -233,6 +233,25 @@ export interface DisciplineMeeting {
   acting_chair_name: string;
   // Uyarır, engellemez: başkan katılmadı ama katılanlar arasında yedek üye yok (md. 188).
   chair_warnings?: string[];
+  // S8 (14.11.2026): karar yalnız yeter sayılı toplantıya bağlanır (md. 191/1) — sunucu
+  // yeniden hesaplar; `ok: false` toplantı karar formunda seçilemez.
+  quorum?: MeetingQuorum;
+  // Bu toplantıya bağlı CANLI kararlar — karar bağlı toplantı silinemez.
+  decisions?: MeetingDecisionRef[];
+}
+
+export interface MeetingQuorum {
+  full: number;
+  required: number;
+  present: number;
+  ok: boolean;
+}
+
+export interface MeetingDecisionRef {
+  id: number;
+  student: number;
+  student_name: string;
+  decision_no: string;
 }
 
 // Toplantı formları için vekâlet bilgisi (`/discipline/committee/acting-chair-options/`,
@@ -458,7 +477,10 @@ export interface DisciplineDecision extends DecisionNarrative {
   md166_override_reason?: string;
   student_name: string;
   event: number | null;
+  // S8 (14.11.2026): kararın bağlı olduğu kurul toplantısı; karar tarihi = toplantı tarihi.
+  // `null` = karar toplantı zorunluluğundan ÖNCE girildi ("toplantı kaydı yok") — geçerlidir.
   meeting: number | null;
+  meeting_date?: string | null;
   penalty_type: PenaltyType;
   penalty_type_display: string;
   statute_ref: string;
@@ -539,7 +561,9 @@ export function md166NeedsReason(prior: Md166Prior | undefined, penalty: Penalty
 export interface DecisionCreateBody {
   student_id: number;
   penalty_type: PenaltyType;
-  decision_date: string; // YYYY-MM-DD
+  // S8: karar kayıtlı kurul toplantısına bağlı girilir; karar tarihi toplantı tarihidir
+  // (ayrı tarih gönderilmez).
+  meeting: number;
   suspension_days?: number | null; // yalnız kısa süreli uzaklaştırma (1-5)
   enforcement_start_date?: string | null; // uzaklaştırma uygulama başlangıcı (md. 164/2)
   statute_ref?: string;
@@ -549,8 +573,13 @@ export interface DecisionCreateBody {
   md166_override_reason?: string; // md. 166 gerekçesi (gerekmiyorsa backend boşaltır)
 }
 
-// Karar düzenleme gövdesi (yalnız PENDING; öğrenci bağı değişmez).
-export type DecisionEditBody = Omit<DecisionCreateBody, "student_id">;
+// Karar düzenleme gövdesi (yalnız PENDING; öğrenci bağı değişmez). S8: `meeting`
+// gönderilirse karar o toplantıya bağlanır (tarih toplantı tarihine geçer); `decision_date`
+// yalnız toplantısız girilmiş ESKİ kararda düzenlenir.
+export type DecisionEditBody = Omit<DecisionCreateBody, "student_id" | "meeting"> & {
+  meeting?: number;
+  decision_date?: string; // YYYY-MM-DD
+};
 
 // Aşama geri alma gövdesi (seçilen daha erken aşamaya).
 export interface StageRevertBody {
@@ -1408,6 +1437,13 @@ export const disiplinApi = {
 
   deleteDecision: (caseId: number, decisionId: number) =>
     api.del<void>(`${BASE}/cases/${caseId}/decisions/${decisionId}/`),
+
+  // S8: kararı AYNI tarihli başka bir toplantı kaydına bağlar (karar tarihi değişmez) —
+  // düzenlemeye kapalı kararlar ve toplantısız girilmiş eski kararlar için.
+  rebindDecisionMeeting: (caseId: number, decisionId: number, meetingId: number) =>
+    api.post<DisciplineDecision>(`${BASE}/cases/${caseId}/decisions/${decisionId}/meeting/`, {
+      meeting: meetingId,
+    }),
 
   restoreDecision: (caseId: number, decisionId: number) =>
     api.post<DisciplineDecision>(`${BASE}/cases/${caseId}/decisions/${decisionId}/restore/`),

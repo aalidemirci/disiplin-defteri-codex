@@ -33,6 +33,9 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     approve,
+    committee_attendees,
+    committee_for,
+    decide,
     ensure_terms,
 )
 from apps.okul.services import setup as okul_setup
@@ -389,7 +392,7 @@ def test_form18_itiraz_kaydi_olmadan_uretilmez() -> None:
     case = _case(student)
     with pytest.raises(ValueError, match="kurul kararı yok"):
         _generate(case, DocumentType.APPEAL_LETTER, student_id=student.pk)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -413,7 +416,7 @@ def test_ust_kurul_onay_tebligi_ilceye_gitmemis_kararda_uretilmez() -> None:
     doğar. İlçeye gönderilmemiş kararda "ilçe kurulunca onaylanmıştır" basılmaz."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -441,7 +444,7 @@ def test_ust_kurul_onay_tebligi_ilceye_gitmemis_kararda_uretilmez() -> None:
 def test_ust_kurul_onay_tebligi_onaysiz_kararda_uretilmez() -> None:
     student = StudentFactory()
     case = _case(student)
-    services.record_decision(
+    decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -459,7 +462,7 @@ def test_ust_kurul_onay_tebligi_onaysiz_kararda_uretilmez() -> None:
 def test_ust_kurul_onay_tebligi_md197_sevkli_kararda_uretilir(ctx: dict[str, Any]) -> None:
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -487,7 +490,7 @@ def _reduced_case() -> tuple[DisciplineCase, Any, Any]:
     """5 gün uzaklaştırma → onay → tebliğ → itiraz → REDUCED (kınama)."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -615,7 +618,7 @@ def test_ceza_tebligi_ogrenci_ve_veli_suretleri_ayni_cezayi_tasir() -> None:
 def test_ceza_tebligi_degismemis_kararda_not_yok(ctx: dict[str, Any]) -> None:
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -629,7 +632,7 @@ def test_ceza_tebligi_degismemis_kararda_not_yok(ctx: dict[str, Any]) -> None:
 def test_degismemis_kararda_baglam_kararin_kendisidir(ctx: dict[str, Any]) -> None:
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -643,7 +646,7 @@ def test_degismemis_kararda_baglam_kararin_kendisidir(ctx: dict[str, Any]) -> No
 def test_degisen_ceza_gercek_pdfte_kurulun_verdigi_cezadir() -> None:
     """Vekil karar nesnesi AYNEN şablonlarla (EK-1, üst kurul tebliği) sorunsuz basılır."""
     case, student, _decision = _reduced_case()
-    services.create_committee(school_year_id=SchoolYearFactory().pk, chair_id=PersonnelFactory().pk)
+    committee_for(SchoolYearFactory())
     ek1, _ = doc_engine.generate_document(
         case,
         document_type=DocumentType.COMMITTEE_DECISION,
@@ -673,7 +676,7 @@ def test_itirazla_degisen_okul_degistirme_onayda_degismis_sayilmaz(ctx: dict[str
     değişikliği yapan merci itiraz kuruludur (onay mercii çıkarımı yanıltmamalı)."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -701,7 +704,7 @@ def _approval_modified_case() -> tuple[DisciplineCase, Any]:
     """Okul değiştirme → ilçe kurulu onayda 5 gün uzaklaştırmaya çevirir (md. 200/1-a)."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -772,7 +775,7 @@ def _case_review_meeting(case: DisciplineCase, year: Any) -> Any:
         school_year_id=year.pk,
         council_type="DISCIPLINE",
         meeting_date=date(2026, 5, 22),
-        attendees=[{"person_name": "BAŞKAN", "attendee_role": "VOTING_MEMBER", "is_chair": True}],
+        attendees=committee_attendees(),
         minutes_type="CASE_REVIEW",
         discipline_case_id=case.pk,
     )
@@ -784,10 +787,10 @@ def test_karar_defteri_karar_numarasi_sirasi_ve_gun_sayisi() -> None:
     year = SchoolYearFactory()
     a, b = StudentFactory(), StudentFactory()
     case = _case(a, b)
-    first = services.record_decision(
+    first = decide(
         case, student_id=a.pk, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
-    second = services.record_decision(
+    second = decide(
         case,
         student_id=b.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -998,7 +1001,7 @@ def test_iade_yazisi_sevkten_sonra_kayitli_iade_tarihini_basar(ctx: dict[str, An
     kayıtta noktalı basım sürer — `test_s11_sema.py`."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,

@@ -50,6 +50,7 @@ import type {
   DisciplineAppeal,
   DisciplineCase,
   DisciplineDecision,
+  DisciplineMeeting,
   Md166Prior,
   PenaltyType,
 } from "./api";
@@ -77,6 +78,17 @@ const APPEAL_RESULT_CHIP: Record<AppealResult, string> = {
   REDUCED: "bg-primary-container text-on-primary-container",
   OVERTURNED: "bg-error-container text-on-error-container",
 };
+
+// S8 (14.11.2026): karar yalnız yeter sayılı toplantıya bağlanır (md. 191/1). Sunucu yeter
+// sayıyı yeniden hesaplar; `quorum.ok === false` toplantı seçeneklere girmez.
+function usableMeetings(meetings: DisciplineMeeting[]): DisciplineMeeting[] {
+  return meetings.filter((m) => m.quorum?.ok !== false);
+}
+
+function meetingLabel(m: DisciplineMeeting): string {
+  const base = `${formatDate(m.meeting_date)} · ${m.attendee_names.length} katılımcı`;
+  return m.chair_absent ? `${base} · başkan katılmadı` : base;
+}
 
 // Olayla ilgili anlatı (md. 168 takdir + md. 193 ifade/delil).
 // `template` verilen alanlarda "Şablon ekle" butonu çıkar (Tur 149, Faz C) — OYS verisiyle
@@ -177,10 +189,16 @@ export default function DecisionsSection({
     (caseObj.current_stage === "DECIDED" || caseObj.current_stage === "COMMITTEE_DONE") &&
     isDisciplineCommitteeReferred(caseObj.events);
   const [decisions, setDecisions] = useState<DisciplineDecision[] | null>(null);
+  // S8: karar kayıtlı kurul toplantısına bağlı girilir — toplantılar kararlarla birlikte
+  // çekilir (null = henüz yüklenmedi; karar girişi o sırada sunulmaz).
+  const [meetings, setMeetings] = useState<DisciplineMeeting[] | null>(null);
   const [behaviorPoints, setBehaviorPoints] = useState<Record<number, number>>({});
   const [md166Priors, setMd166Priors] = useState<Record<string, Md166Prior>>({});
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Toplantı listesi hatası AYRI tutulur: kararların başarıyla yüklenmesi onu silmesin
+  // (silinirse "Karar ekle" de yönlendirme de görünmez, kullanıcı nedenini göremezdi).
+  const [meetingsError, setMeetingsError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [deletedDecisions, setDeletedDecisions] = useState<DisciplineDecision[] | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -203,6 +221,19 @@ export default function DecisionsSection({
           return;
         }
         setError(e instanceof ApiError ? e.message : "Kararlar yüklenemedi.");
+      });
+    disiplinApi
+      .listMeetings(caseObj.id)
+      .then((list) => {
+        setMeetings(list);
+        setMeetingsError(null);
+      })
+      .catch((e: unknown) => {
+        setMeetingsError(
+          e instanceof ApiError && e.status !== 403
+            ? e.message
+            : "Kurul toplantıları yüklenemedi; karar girişi ve toplantı seçimi için sayfayı yenileyin.",
+        );
       });
   }, [caseObj.id]);
   useEffect(load, [load]);
@@ -269,6 +300,7 @@ export default function DecisionsSection({
     student: s,
     point: behaviorPoints[s.id],
   }));
+  const selectable = usableMeetings(meetings ?? []);
 
   return (
     <Card elevation={1} className="p-6">
@@ -276,7 +308,7 @@ export default function DecisionsSection({
         <p className="text-title-medium text-on-surface">
           Resmî kararlar ({decisions?.length ?? 0})
         </p>
-        {canEnterDecision && decisionEntryOpen && !adding && (
+        {canEnterDecision && decisionEntryOpen && !adding && selectable.length > 0 && (
           <Button variant="tonal" icon="gavel" onClick={() => setAdding(true)}>
             Karar ekle
           </Button>
@@ -292,6 +324,25 @@ export default function DecisionsSection({
             ? "Dosya kapalı; yeni resmî karar girilemez."
             : 'Ceza kararı yalnız okul öğrenci ödül ve disiplin kuruluna sevk edilen dosyada girilir (md. 163/2). Önce müdür değerlendirmesinde "Disiplin Kuruluna Sevk" seçin.'}
         </p>
+      )}
+
+      {/* S8: toplantısız karar girilemez — form açılmaz, yapılacak adım söylenir. */}
+      {canEnterDecision && decisionEntryOpen && meetings !== null && selectable.length === 0 && (
+        <div
+          role="status"
+          className="mt-3 flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-2 text-body-small text-on-tertiary-container"
+        >
+          <Icon name="info" size="sm" />
+          <span>
+            Karar girmek için önce kurul toplantısını kaydedin (md. 191/1): karar, yukarıdaki “Kurul
+            toplantıları” bölümünde kaydedilen toplantıya bağlı girilir; karar tarihi toplantı
+            tarihidir.
+            {meetings.length > 0 &&
+              (meetings.some((m) => (m.decisions?.length ?? 0) > 0)
+                ? " Kayıtlı toplantıların yeter sayısı yok; katılanları doğru girerek yeni bir toplantı kaydedin (karar bağlı toplantı silinemez)."
+                : " Kayıtlı toplantıların yeter sayısı yok; toplantıyı silip katılanları doğru girerek yeniden kaydedin.")}
+          </span>
+        </div>
       )}
 
       {/* Davranış puanı özeti (md. 170 — 100 üzerinden, bozulmamış indirimler düşülür) */}
@@ -312,10 +363,11 @@ export default function DecisionsSection({
         </div>
       )}
 
-      {adding && (
+      {adding && selectable.length > 0 && (
         <div className="mt-4">
           <AddDecisionForm
             caseObj={caseObj}
+            meetings={selectable}
             md166Priors={md166Priors}
             onCancel={() => setAdding(false)}
             onAdded={() => {
@@ -330,6 +382,15 @@ export default function DecisionsSection({
         <div className="mt-3 flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-2 text-body-small text-on-error-container">
           <Icon name="error" size="sm" />
           <span>{error}</span>
+        </div>
+      )}
+      {meetingsError && (
+        <div
+          role="alert"
+          className="mt-3 flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-2 text-body-small text-on-error-container"
+        >
+          <Icon name="error" size="sm" />
+          <span>{meetingsError}</span>
         </div>
       )}
 
@@ -348,6 +409,7 @@ export default function DecisionsSection({
               decision={d}
               studentName={names[d.student] ?? `Öğrenci #${d.student}`}
               caps={caps}
+              meetings={meetings ?? []}
               md166Prior={md166Priors[String(d.student)]}
               onChanged={refresh}
               onDelete={handleDelete}
@@ -387,15 +449,23 @@ export default function DecisionsSection({
                       <span className="text-label-small"> · {d.penalty_type_display}</span>
                       <span className="text-label-small"> · {formatDate(d.decision_date)}</span>
                     </span>
-                    {caseObj.closed_at === null && (
-                      <Button
-                        variant="text"
-                        icon="restore"
-                        onClick={() => void handleRestore(d.id)}
-                      >
-                        Geri yükle
-                      </Button>
-                    )}
+                    {/* S8: bağlı toplantısı silinmiş karar geri yüklenemez (sunucu reddeder) —
+                        yapılamayan adım sunulmaz; ne yapılacağı söylenir. */}
+                    {caseObj.closed_at === null &&
+                      (d.meeting !== null && d.meeting_date === null ? (
+                        <span className="text-body-small text-on-surface-variant">
+                          Bağlı toplantı kaydı silinmiş; karar geri yüklenemez. Toplantıyı yeniden
+                          kaydedip kararı yeniden girin.
+                        </span>
+                      ) : (
+                        <Button
+                          variant="text"
+                          icon="restore"
+                          onClick={() => void handleRestore(d.id)}
+                        >
+                          Geri yükle
+                        </Button>
+                      ))}
                   </li>
                 ))}
               </ul>
@@ -420,6 +490,7 @@ type CardPanel =
   | "refer"
   | "edit"
   | "remove"
+  | "rebind"
   | null;
 
 /** S11b: kayıttaki özgün ceza (kurulun verdiği) yürürlükteki cezadan FARKLI mı. */
@@ -436,6 +507,7 @@ function DecisionCard({
   decision: d,
   studentName,
   caps,
+  meetings,
   md166Prior,
   onChanged,
   onDelete,
@@ -444,6 +516,8 @@ function DecisionCard({
   decision: DisciplineDecision;
   studentName: string;
   caps: DisciplineCapabilities;
+  /** Dosyanın kurul toplantıları (S8 — bağ bilgisi + başka toplantıya bağlama). */
+  meetings: DisciplineMeeting[];
   md166Prior?: Md166Prior;
   onChanged: () => void;
   onDelete: (decision: DisciplineDecision) => void;
@@ -469,6 +543,15 @@ function DecisionCard({
     d.approval_status === "PENDING" &&
     !d.notified_at &&
     (d.appeals?.length ?? 0) === 0;
+  // S8: düzenlemeye KAPALI (onaylı / tebliğli / itirazlı) karar yalnız AYNI tarihli başka bir
+  // toplantı kaydına bağlanabilir (karar tarihi değişmez). Beklemedeki karar "Düzenle"
+  // formundan bağlanır. Uygun toplantı yoksa eylem sunulmaz (yapılamayan adım önerilmez).
+  const rebindCandidates =
+    (caps.isChair || caps.isAdmin) && caseOpen && !canEditDelete
+      ? usableMeetings(meetings).filter(
+          (m) => m.meeting_date === d.decision_date && m.id !== d.meeting,
+        )
+      : [];
 
   return (
     <div className="rounded-shape-md border border-outline-variant bg-surface-container-low p-4">
@@ -504,6 +587,14 @@ function DecisionCard({
         <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
           <Icon name="approval" size="xs" />
           Onay mercii: {d.approval_authority_display}
+        </span>
+        {/* S8: kararın bağlı olduğu toplantı. Bağ yoksa karar toplantı zorunluluğundan önce
+            girilmiştir — geçerlidir; yalnız BİLGİ verilir (uyarı/engel değil). */}
+        <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
+          <Icon name="event" size="xs" />
+          {d.meeting === null
+            ? "Toplantı kaydı yok (bu karar toplantı zorunluluğundan önce girildi)"
+            : `Toplantı: ${formatDate(d.meeting_date ?? d.decision_date)}`}
         </span>
         {d.notified_at ? (
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
@@ -673,7 +764,12 @@ function DecisionCard({
 
       {/* Eylem çubuğu */}
       {panel === null &&
-        (canApprove || canNotify || canEditNarrative || canManageAppeal || canEditDelete) && (
+        (canApprove ||
+          canNotify ||
+          canEditNarrative ||
+          canManageAppeal ||
+          canEditDelete ||
+          rebindCandidates.length > 0) && (
           <div className="mt-3 flex flex-wrap gap-1">
             {/* Tebliğden sonra onay değişmez; eski sürümde onaysız tebliğ edilmiş karar
                 için onayın sonradan girilebilmesi açık kalır. */}
@@ -741,6 +837,11 @@ function DecisionCard({
                   Cezayı kaldır (md. 171/2)
                 </Button>
               )}
+            {rebindCandidates.length > 0 && (
+              <Button variant="text" icon="event" onClick={() => setPanel("rebind")}>
+                {d.meeting === null ? "Toplantıya bağla" : "Toplantıyı değiştir"}
+              </Button>
+            )}
             {canEditDelete && (
               <Button variant="text" icon="edit" onClick={() => setPanel("edit")}>
                 Düzenle
@@ -828,10 +929,23 @@ function DecisionCard({
           }}
         />
       )}
+      {panel === "rebind" && rebindCandidates.length > 0 && (
+        <RebindMeetingForm
+          caseId={caseObj.id}
+          decision={d}
+          candidates={rebindCandidates}
+          onCancel={() => setPanel(null)}
+          onDone={() => {
+            setPanel(null);
+            onChanged();
+          }}
+        />
+      )}
       {panel === "edit" && (
         <EditDecisionForm
           caseObj={caseObj}
           decision={d}
+          meetings={meetings}
           md166Prior={md166Prior}
           onCancel={() => setPanel(null)}
           onSaved={() => {
@@ -914,22 +1028,29 @@ function md166ReasonOrThrow(needed: boolean, reason: string): string {
 
 function AddDecisionForm({
   caseObj,
+  meetings,
   md166Priors,
   onCancel,
   onAdded,
 }: {
   caseObj: DisciplineCase;
+  /** Karar bağlanabilecek (yeter sayılı) toplantılar — en az bir tane (S8). */
+  meetings: DisciplineMeeting[];
   md166Priors: Record<string, Md166Prior>;
   onCancel: () => void;
   onAdded: () => void;
 }) {
-  const today = todayIso();
   const students = caseObj.students;
+  // S8: karar toplantıya bağlı girilir; tek toplantı varsa ön-seçilidir. Karar tarihi
+  // seçilen toplantının tarihidir — bugünden tarih TÜRETİLMEZ (§7.1).
+  const [meetingId, setMeetingId] = useState<string>(
+    meetings.length === 1 ? String(meetings[0].id) : "",
+  );
+  const selectedMeeting = meetings.find((m) => String(m.id) === meetingId);
   const [studentId, setStudentId] = useState<string>(
     students.length === 1 ? String(students[0].id) : "",
   );
   const [penaltyType, setPenaltyType] = useState<PenaltyType>("REPRIMAND");
-  const [decisionDate, setDecisionDate] = useState(today);
   const [suspensionDays, setSuspensionDays] = useState("1");
   const [enforcementStart, setEnforcementStart] = useState("");
   const [statuteRef, setStatuteRef] = useState("");
@@ -951,11 +1072,12 @@ function AddDecisionForm({
     setError(null);
     try {
       if (!studentId) throw new Error("Bir öğrenci seçilmelidir.");
+      if (!selectedMeeting) throw new Error("Kararın verildiği kurul toplantısı seçilmelidir.");
       const md166 = md166ReasonOrThrow(md166Needed, md166Reason);
       const body: DecisionCreateBody = {
         student_id: Number(studentId),
         penalty_type: penaltyType,
-        decision_date: decisionDate,
+        meeting: selectedMeeting.id,
         statute_ref: statuteRef.trim(),
         decision_no: decisionNo.trim(),
         penalty_detail: penaltyDetail.trim(),
@@ -1005,13 +1127,25 @@ function AddDecisionForm({
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Select
+          label="Kurul toplantısı"
+          required
+          placeholder="Seçiniz…"
+          value={meetingId}
+          onChange={(e) => setMeetingId(e.target.value)}
+          options={meetings.map((m) => ({ value: String(m.id), label: meetingLabel(m) }))}
+          helperText="Karar, kayıtlı ve yeter sayısı olan toplantıya bağlı girilir (md. 191/1)."
+        />
         <TextField
           label="Karar tarihi"
           type="date"
-          required
-          value={decisionDate}
-          onChange={(e) => setDecisionDate(e.target.value)}
+          readOnly
+          value={selectedMeeting?.meeting_date ?? ""}
+          helperText="Karar tarihi toplantı tarihidir."
         />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {isSuspension && (
           <TextField
             label="Uzaklaştırma günü (1-5)"
@@ -1086,7 +1220,7 @@ function AddDecisionForm({
         <Button type="button" variant="text" onClick={onCancel}>
           Vazgeç
         </Button>
-        <Button icon="check" onClick={submit} disabled={busy || !studentId}>
+        <Button icon="check" onClick={submit} disabled={busy || !studentId || !selectedMeeting}>
           {busy ? "Kaydediliyor…" : "Kararı kaydet"}
         </Button>
       </div>
@@ -1095,23 +1229,34 @@ function AddDecisionForm({
 }
 
 // Beklemedeki kararı düzenle (çekirdek alanlar; yalnız PENDING — backend korur). Tur 153, Faz 4b.
-// Öğrenci/olay/toplantı bağı değişmez; ceza türü değişince davranış puanı + onay mercii backend'de
-// yeniden türetilir.
+// Öğrenci/olay bağı değişmez; ceza türü değişince davranış puanı + onay mercii backend'de
+// yeniden türetilir. S8: toplantıya bağlı kararda tarih toplantı tarihidir — yalnız başka
+// toplantıya bağlanarak değişir (md. 197 iadesinden sonraki ikinci görüşme böyle kaydedilir);
+// bağ kaldırılamaz. Toplantısız girilmiş ESKİ kararda tarih eskisi gibi düzenlenir, toplantıya
+// bağlama isteğe bağlıdır.
 function EditDecisionForm({
   caseObj,
   decision: d,
+  meetings,
   md166Prior,
   onCancel,
   onSaved,
 }: {
   caseObj: DisciplineCase;
   decision: DisciplineDecision;
+  meetings: DisciplineMeeting[];
   md166Prior?: Md166Prior;
   onCancel: () => void;
   onSaved: () => void;
 }) {
   const [penaltyType, setPenaltyType] = useState<PenaltyType>(d.penalty_type);
   const [decisionDate, setDecisionDate] = useState(d.decision_date);
+  const isBound = d.meeting !== null;
+  const [meetingId, setMeetingId] = useState<string>(isBound ? String(d.meeting) : "");
+  // Seçenekler: yeter sayılı toplantılar + kararın BAĞLI olduğu toplantı (yeter sayısı
+  // sonradan yetersiz görünse de mevcut bağ seçenek olarak kalır).
+  const meetingOptions = meetings.filter((m) => m.quorum?.ok !== false || m.id === d.meeting);
+  const selectedMeeting = meetingOptions.find((m) => String(m.id) === meetingId);
   const [suspensionDays, setSuspensionDays] = useState(String(d.suspension_days ?? 1));
   const [enforcementStart, setEnforcementStart] = useState(d.enforcement_start_date ?? "");
   const [statuteRef, setStatuteRef] = useState(d.statute_ref);
@@ -1134,7 +1279,6 @@ function EditDecisionForm({
       const md166 = md166ReasonOrThrow(md166Needed, md166Reason);
       const body: DecisionEditBody = {
         penalty_type: penaltyType,
-        decision_date: decisionDate,
         statute_ref: statuteRef.trim(),
         decision_no: decisionNo.trim(),
         penalty_detail: penaltyDetail.trim(),
@@ -1145,6 +1289,10 @@ function EditDecisionForm({
         body.suspension_days = Number(suspensionDays);
         body.enforcement_start_date = enforcementStart || null;
       }
+      // S8: yeni toplantı seçildiyse karar ona bağlanır (tarih toplantı tarihine geçer);
+      // tarih yalnız toplantısız (eski) kararda ve toplantı seçilmediyse gönderilir.
+      if (selectedMeeting && selectedMeeting.id !== d.meeting) body.meeting = selectedMeeting.id;
+      else if (!isBound) body.decision_date = decisionDate;
       await disiplinApi.updateDecision(caseObj.id, d.id, body);
       snackbar.success("Karar güncellendi.");
       onSaved();
@@ -1171,13 +1319,48 @@ function EditDecisionForm({
           )}
           helperText="Md. 163 — kanunla sabit; davranış puanı indirimi otomatik."
         />
-        <TextField
-          label="Karar tarihi"
-          type="date"
-          required
-          value={decisionDate}
-          onChange={(e) => setDecisionDate(e.target.value)}
-        />
+        {meetingOptions.length > 0 && (
+          <Select
+            label="Kurul toplantısı"
+            required={isBound}
+            placeholder={isBound ? undefined : "Toplantıya bağlama (toplantı kaydı yok)"}
+            value={meetingId}
+            onChange={(e) => setMeetingId(e.target.value)}
+            options={meetingOptions.map((m) => ({ value: String(m.id), label: meetingLabel(m) }))}
+            helperText={
+              isBound
+                ? "Başka toplantı seçilirse karar o toplantıya bağlanır; karar tarihi toplantı tarihine geçer."
+                : "İsteğe bağlı: karar toplantı zorunluluğundan önce girildi. Toplantı seçilirse karar tarihi toplantı tarihine geçer."
+            }
+          />
+        )}
+        {selectedMeeting ? (
+          <TextField
+            label="Karar tarihi"
+            type="date"
+            readOnly
+            value={selectedMeeting.meeting_date}
+            helperText="Karar tarihi toplantı tarihidir."
+          />
+        ) : isBound ? (
+          // Bağlı kararda tarih HER durumda salt-okunurdur — toplantı listesi yüklenmemiş /
+          // yüklenememiş olsa da (yoksa değişiklik sessizce atılırdı: gövdeye tarih girmez).
+          <TextField
+            label="Karar tarihi"
+            type="date"
+            readOnly
+            value={d.meeting_date ?? d.decision_date}
+            helperText="Karar tarihi toplantı tarihidir."
+          />
+        ) : (
+          <TextField
+            label="Karar tarihi"
+            type="date"
+            required
+            value={decisionDate}
+            onChange={(e) => setDecisionDate(e.target.value)}
+          />
+        )}
       </div>
       {md166Needed && md166Prior && (
         <Md166ReasonField prior={md166Prior} value={md166Reason} onChange={setMd166Reason} />
@@ -1260,6 +1443,67 @@ function EditDecisionForm({
         </Button>
       </div>
     </div>
+  );
+}
+
+// S8: düzenlemeye kapalı kararı (ya da toplantısız girilmiş eski kararı) AYNI tarihli bir
+// toplantı kaydına bağlar — karar tarihi değişmez; onay / tebliğ / itiraz zinciri etkilenmez.
+// Yanlış kaydedilmiş toplantıya karar bağlıysa toplantı silinemez: doğru kayıt aynı tarihle
+// girilir, karar buradan ona taşınır, eski kayıt sonra silinir (§7.6 çıkışı).
+function RebindMeetingForm({
+  caseId,
+  decision: d,
+  candidates,
+  onCancel,
+  onDone,
+}: {
+  caseId: number;
+  decision: DisciplineDecision;
+  candidates: DisciplineMeeting[];
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const [meetingId, setMeetingId] = useState<string>(
+    candidates.length === 1 ? String(candidates[0].id) : "",
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const snackbar = useSnackbar();
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (!meetingId) throw new Error("Bir toplantı seçilmelidir.");
+      await disiplinApi.rebindDecisionMeeting(caseId, d.id, Number(meetingId));
+      snackbar.success("Karar toplantıya bağlandı.");
+      onDone();
+    } catch (err) {
+      setError(asMessage(err, "Karar toplantıya bağlanamadı."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PanelShell
+      title={d.meeting === null ? "Toplantıya bağla" : "Toplantıyı değiştir"}
+      icon="event"
+    >
+      <p className="text-body-small text-on-surface-variant">
+        Karar tarihi ({formatDate(d.decision_date)}) değişmez; karar yalnız aynı tarihli bir
+        toplantı kaydına bağlanabilir. EK-1 imza heyeti bağlı toplantıdan basılır.
+      </p>
+      <Select
+        label="Kurul toplantısı"
+        required
+        placeholder="Seçiniz…"
+        value={meetingId}
+        onChange={(e) => setMeetingId(e.target.value)}
+        options={candidates.map((m) => ({ value: String(m.id), label: meetingLabel(m) }))}
+      />
+      <FormError error={error} />
+      <PanelActions busy={busy} onCancel={onCancel} onSubmit={submit} submitLabel="Bağla" />
+    </PanelShell>
   );
 }
 

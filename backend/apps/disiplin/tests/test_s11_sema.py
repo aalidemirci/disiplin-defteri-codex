@@ -37,9 +37,11 @@ from apps.disiplin.models import (
 from apps.disiplin.serializers import DecisionSerializer
 from apps.disiplin.services import purge as purge_service
 from apps.disiplin.tests.factories import (
-    PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
+    committee_attendees,
+    committee_for,
+    decide,
 )
 from apps.okul.models import SchoolYear
 from apps.okul.services import school_year as school_year_service
@@ -189,7 +191,7 @@ def _committee_case(student: Any) -> DisciplineCase:
 
 
 def _suspension(case: DisciplineCase, student: Any, days: int = 5) -> DisciplineDecision:
-    return services.record_decision(
+    return decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -242,7 +244,7 @@ def test_s11b_md197_onayinda_degisen_cezada_ozgun_ceza_saklanir() -> None:
 def test_s11b_ilce_onayinda_degisen_okul_degistirmede_ozgun_ceza_saklanir() -> None:
     student = StudentFactory()
     case = _committee_case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -333,7 +335,7 @@ def _school_change_modified_then_pending() -> DisciplineDecision:
     """Okul değiştirme → ilçe onayı yanlışlıkla "değiştirildi: kınama" → onay geri alındı."""
     student = StudentFactory()
     case = _committee_case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -386,7 +388,7 @@ def test_s11b_onay_geri_alindiktan_sonra_aynen_onay_degisiklik_notu_tasimaz(
     services.set_decision_approval(
         decision, approval_status="APPROVED", approved_on=date(2026, 3, 20)
     )
-    services.create_committee(school_year_id=SchoolYearFactory().pk, chair_id=PersonnelFactory().pk)
+    committee_for(SchoolYearFactory())
     _generate(case, DocumentType.COMMITTEE_DECISION, student_id=student.pk)
     assert ctx["board_penalty_display"] == f"{_SUSPENSION} — 5 gün"
     assert ctx["current_penalty_display"] == f"{_SUSPENSION} — 5 gün"
@@ -504,7 +506,7 @@ def test_s11b_zincir_ek1_ve_form18_kurulun_verdigi_cezayi_basar(ctx: dict[str, A
     """Eski kusur: alan boşalınca belge TAHMİNE düşüp "kurulun verdiği 5 gün" basıyordu;
     kurul 5 günü hiç vermedi (o, ilçenin onayda bağladığı cezaydı)."""
     case, student, _decision = _changed_then_back()
-    services.create_committee(school_year_id=SchoolYearFactory().pk, chair_id=PersonnelFactory().pk)
+    committee_for(SchoolYearFactory())
     for document_type in (DocumentType.COMMITTEE_DECISION, DocumentType.APPEAL_LETTER):
         _generate(case, document_type, student_id=student.pk)
         assert ctx["decision"].penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
@@ -521,7 +523,7 @@ def test_s11b_zincir_karar_defteri_kurulun_verdigi_cezayi_basar() -> None:
         school_year_id=SchoolYearFactory().pk,
         council_type="DISCIPLINE",
         meeting_date=date(2026, 3, 10),
-        attendees=[{"person_name": "BAŞKAN", "attendee_role": "VOTING_MEMBER", "is_chair": True}],
+        attendees=committee_attendees(),
         minutes_type="CASE_REVIEW",
         discipline_case_id=case.pk,
     )
@@ -621,7 +623,7 @@ def _generate(case: DisciplineCase, document_type: str, **kwargs: Any) -> None:
 def test_s11b_md197_ek1_kurulun_verdigi_cezayi_basar(ctx: dict[str, Any]) -> None:
     """Eski SINIR: md. 197 ile ilçeye giden kararda özgün ceza tahmin edilemiyordu."""
     case, student, _decision = _md197_modified()
-    services.create_committee(school_year_id=SchoolYearFactory().pk, chair_id=PersonnelFactory().pk)
+    committee_for(SchoolYearFactory())
     _generate(case, DocumentType.COMMITTEE_DECISION, student_id=student.pk)
     assert ctx["decision"].penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
     assert ctx["decision"].suspension_days == 5
@@ -637,7 +639,7 @@ def test_s11b_md197_karar_defteri_kurulun_verdigi_cezayi_basar() -> None:
         school_year_id=SchoolYearFactory().pk,
         council_type="DISCIPLINE",
         meeting_date=date(2026, 3, 10),
-        attendees=[{"person_name": "BAŞKAN", "attendee_role": "VOTING_MEMBER", "is_chair": True}],
+        attendees=committee_attendees(),
         minutes_type="CASE_REVIEW",
         discipline_case_id=case.pk,
     )
@@ -650,7 +652,7 @@ def test_s11b_onaya_sevk_yazisi_ozgun_cezayi_gun_sayisiyla_basar(ctx: dict[str, 
     kınamaya indirir. Onaya sevk yazısı kurulun VERDİĞİ cezayı (okul değiştirme) basar."""
     student = StudentFactory()
     case = _committee_case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -683,7 +685,7 @@ def test_s11b_ozgun_ceza_bos_eski_kayitta_tahmine_geri_donulur(ctx: dict[str, An
     """Göçten önce değişmiş kararda alan boştur: onay merciinden tahmin sürer."""
     student = StudentFactory()
     case = _committee_case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -903,7 +905,7 @@ def test_s11b_goc_oncesi_onayda_degismis_kararda_ozgun_ceza_merciden_okunur() ->
     boştur ve ceza zaten üst kurulun cezasıdır. Göçten sonraki ilk değişiklik o cezayı
     "kurulun verdiği ceza" diye yazmamalı; özgün ceza onay merciinden okunur."""
     student = StudentFactory()
-    decision = services.record_decision(
+    decision = decide(
         _committee_case(student),
         student_id=student.pk,
         penalty_type=PenaltyType.EXPULSION,

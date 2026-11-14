@@ -7,6 +7,7 @@ yerine `Personnel`; Student düzleştirilmiş modeldir (Enrollment yok).
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import factory
 
@@ -16,8 +17,10 @@ from apps.disiplin.models import (
     CouncilMeeting,
     DisciplineCase,
     DisciplineCommittee,
+    DisciplineCommitteeMember,
     DisciplineDecision,
     DisciplineDecisionType,
+    DisciplineMeeting,
     HonorBoard,
     HonorCertificate,
     PetitionerRole,
@@ -95,6 +98,135 @@ def approve(decision: DisciplineDecision) -> DisciplineDecision:
     return services.set_decision_approval(
         decision, approval_status="APPROVED", approved_on=decision.decision_date
     )
+
+
+# ---------------------------------------------------------------------------
+# TOPLANTI ZORUNLU (S8, 14.11.2026): disiplin kararı yalnız kayıtlı, yeter sayılı dosya
+# toplantısına bağlı girilir; karar tarihi = toplantı tarihi. Testler gerçek yoldan geçer:
+# `decide` önce toplantıyı `services.record_meeting` ile kaydeder, sonra kararı ona bağlar.
+# ---------------------------------------------------------------------------
+def ensure_meeting(case: DisciplineCase, on: date) -> DisciplineMeeting:
+    """Dosyanın `on` tarihli kurul toplantısı; yoksa gerçek servisle kaydedilir.
+
+    Katılanlar: aktif kurulun (yoksa kurulur) dosyada engelli OLMAYAN (md. 191/2) bütün
+    üyeleri. Başkan dosyada şikâyetçi / zarar gören ise toplantı vekâletli kaydedilir
+    (`chair_absent` + ilk uygun asıl öğretmen üye — md. 188). Kurulda hiç üye yoksa iki
+    öğretmen asıl üye eklenir (yeter sayı en az bir katılımcı satırı ister).
+    """
+    from apps.disiplin import selectors, services
+    from apps.disiplin.services.committee import (
+        acting_chair_candidates,
+        chair_conflicted,
+        conflicted_ids,
+    )
+
+    existing: DisciplineMeeting | None = case.meetings.filter(meeting_date=on).first()
+    if existing is not None:
+        return existing
+    committee = selectors.get_active_committee()
+    if committee is None:
+        year = SchoolYear.objects.filter(is_active=True).first()
+        if year is None:
+            raise ValueError("Aktif ders yılı yok; toplantı kaydedilemez.")
+        committee = committee_for(year)
+    # Üyeler tazeden sorgulanır: `get_active_committee` önbelleği eklenen üyeyi göstermez.
+    members_qs = DisciplineCommitteeMember.objects.filter(committee=committee)
+    if not members_qs.exists():
+        for _ in range(2):
+            services.add_committee_member(
+                committee, member_type="TEACHER", person_id=PersonnelFactory().pk
+            )
+    users, students = conflicted_ids(case)
+    attendee_ids = [
+        m.pk
+        for m in members_qs
+        if not (
+            (m.member_user_id is not None and m.member_user_id in users)
+            or (m.member_student_id is not None and m.member_student_id in students)
+        )
+    ]
+    absent = chair_conflicted(case, committee)
+    acting_id: int | None = None
+    if absent:
+        candidates = acting_chair_candidates(committee, case)
+        acting_id = candidates[0].pk if candidates else None
+    meeting: DisciplineMeeting = services.record_meeting(
+        case,
+        meeting_date=on,
+        attendee_member_ids=attendee_ids,
+        chair_absent=absent,
+        acting_chair_member_id=acting_id,
+    )
+    return meeting
+
+
+def orm_meeting(
+    case: DisciplineCase, on: date, *, attendees: int | None = None
+) -> DisciplineMeeting:
+    """Servis denetimlerinden GEÇMEDEN (doğrudan ORM) kaydedilmiş toplantı taklidi.
+
+    `record_meeting` sevk tarihini ve yeter sayıyı kayıt anında denetler; eski sürümde
+    kaydedilmiş (yeter sayısız / sevk yeniden yapıldığı için sevk öncesinde kalmış) toplantı
+    satırı ancak böyle kurulur. `attendees`: katılımcı satırı sayısı (varsayılan: bütün üyeler).
+    """
+    year = SchoolYear.objects.filter(is_active=True).first() or SchoolYearFactory()
+    committee = committee_for(year)
+    members = list(DisciplineCommitteeMember.objects.filter(committee=committee))
+    meeting: DisciplineMeeting = DisciplineMeeting.objects.create(case=case, meeting_date=on)
+    meeting.attendees.set(members if attendees is None else members[:attendees])
+    return meeting
+
+
+def committee_attendees(year: SchoolYear | None = None) -> list[dict[str, object]]:
+    """Karar defteri (CouncilMeeting) katılımcıları: yılın kurulunun başkanı + asıl üyeleri."""
+    committee = committee_for(year or SchoolYearFactory())
+    people = [(committee.chair.full_name, committee.chair_id)] + [
+        (m.member_name, m.member_user_id)
+        for m in DisciplineCommitteeMember.objects.filter(committee=committee, is_substitute=False)
+    ]
+    return [
+        {
+            "person_name": name,
+            "attendee_role": "VOTING_MEMBER",
+            "is_chair": index == 0,
+            "member_user_id": user_id,
+        }
+        for index, (name, user_id) in enumerate(people)
+    ]
+
+
+def decide(
+    case: DisciplineCase,
+    *,
+    decision_date: date,
+    meeting: DisciplineMeeting | None = None,
+    **kwargs: Any,
+) -> DisciplineDecision:
+    """Kararı GERÇEK yoldan girer: o tarihli toplantı (yoksa kaydedilir) + `record_decision`.
+
+    Toplantı kaydedilemiyorsa (kapalı / sevksiz dosya, sevk öncesi tarih…) toplantısız
+    çağrıya düşülür: servisin KENDİ reddi (kapalı dosya, sevk yok, toplantı yok) döner.
+    """
+    from apps.disiplin import services
+
+    if meeting is None:
+        try:
+            meeting = ensure_meeting(case, decision_date)
+        except ValueError:
+            return services.record_decision(case, decision_date=decision_date, **kwargs)
+    return services.record_decision(case, meeting=meeting, decision_date=decision_date, **kwargs)
+
+
+def legacy_decision(
+    case: DisciplineCase, *, decision_date: date, **kwargs: Any
+) -> DisciplineDecision:
+    """S8 ÖNCESİ kayıt taklidi: toplantıya bağlı OLMAYAN karar (`meeting IS NULL`).
+
+    Yalnız "toplantısız girilmiş eski karar" durumunu sınayan testlerde kullanılır.
+    """
+    from apps.disiplin.services.decisions import _create_decision
+
+    return _create_decision(case, decision_date=decision_date, meeting=None, **kwargs)
 
 
 # ---------------------------------------------------------------------------

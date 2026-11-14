@@ -29,6 +29,9 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     approve,
+    decide,
+    ensure_meeting,
+    orm_meeting,
 )
 from apps.okul.models import Holiday, HolidayKind, SchoolYear
 from apps.okul.services import persons
@@ -66,7 +69,7 @@ def _final_decision(
     penalty: str = PenaltyType.REPRIMAND, **kwargs: object
 ) -> tuple[DisciplineCase, DisciplineDecision]:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=penalty,
@@ -84,7 +87,7 @@ def _final_decision(
 def test_kurula_sevksiz_dosyaya_ceza_girilemez() -> None:
     case, sid = _case(refer=False)
     with pytest.raises(ValueError, match="md. 163/2"):
-        services.record_decision(
+        decide(
             case,
             student_id=sid,
             penalty_type=PenaltyType.REPRIMAND,
@@ -105,7 +108,7 @@ def test_kapali_dosyaya_ceza_girilemez() -> None:
     case.refresh_from_db()
     assert case.current_stage == CaseStage.CLOSED
     with pytest.raises(ValueError, match="kapatılmış"):
-        services.record_decision(
+        decide(
             case,
             student_id=sid,
             penalty_type=PenaltyType.REPRIMAND,
@@ -114,13 +117,13 @@ def test_kapali_dosyaya_ceza_girilemez() -> None:
 
 
 def test_karar_tarihi_sevkten_once_olamaz() -> None:
+    # S8: karar tarihi = toplantı tarihi. `record_meeting` sevk öncesi tarihi zaten reddeder;
+    # sevk öncesinde kalmış toplantı (sevk yeniden yapılmış / eski kayıt) ORM ile taklit edilir.
     case, sid = _case()
+    meeting = orm_meeting(case, date(2026, 5, 18))
     with pytest.raises(ValueError, match="sevk tarihinden önce"):
         services.record_decision(
-            case,
-            student_id=sid,
-            penalty_type=PenaltyType.REPRIMAND,
-            decision_date=date(2026, 5, 18),
+            case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, meeting=meeting
         )
 
 
@@ -129,7 +132,7 @@ def test_karar_tarihi_sevkten_once_olamaz() -> None:
 # ---------------------------------------------------------------------------
 def test_onaysiz_karar_teblig_edilemez_ve_kesinlesmez() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -146,7 +149,7 @@ def test_onaysiz_karar_teblig_edilemez_ve_kesinlesmez() -> None:
 
 def test_teblig_tarihi_onaydan_once_olamaz() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     services.set_decision_approval(d, approval_status="APPROVED", approved_on=date(2026, 5, 22))
@@ -222,7 +225,7 @@ def test_itirazda_degistirilen_ceza_puani_gunceller() -> None:
 
 def test_ilce_onayinda_okul_degistirme_degistirilebilir() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -247,7 +250,7 @@ def test_ilce_onayinda_okul_degistirme_degistirilebilir() -> None:
 
 def test_mudur_okul_kurulu_kararini_degistiremez() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     with pytest.raises(ValueError, match="md. 197"):
@@ -273,7 +276,7 @@ def test_bozulan_karar_yeniden_onaylanamaz() -> None:
 # ---------------------------------------------------------------------------
 def test_md197_bir_defa_iade() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     services.record_principal_review(d, action="RETURN", reason="a", decided_on=date(2026, 5, 21))
@@ -287,7 +290,7 @@ def test_md197_bir_defa_iade() -> None:
 
 def test_md197_ilce_sevkinde_itiraz_il_kurulunda() -> None:
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     services.record_principal_review(d, action="RETURN", reason="a", decided_on=date(2026, 5, 21))
@@ -312,7 +315,7 @@ def test_bozulan_ve_cezasiz_karar_onceki_ceza_ve_triajda_sayilmaz() -> None:
     SchoolYearFactory()
     sid = StudentFactory().pk
     case1, _ = _case(student_ids=[sid])
-    d1 = services.record_decision(
+    d1 = decide(
         case1, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d1)
@@ -321,7 +324,7 @@ def test_bozulan_ve_cezasiz_karar_onceki_ceza_ve_triajda_sayilmaz() -> None:
     services.resolve_appeal(ap, result=AppealResult.OVERTURNED, resulted_on=date(2026, 6, 1))
     case2, _ = _case(student_ids=[sid])
     approve(
-        services.record_decision(
+        decide(
             case2,
             student_id=sid,
             penalty_type=PenaltyType.NO_PENALTY,
@@ -331,7 +334,7 @@ def test_bozulan_ve_cezasiz_karar_onceki_ceza_ve_triajda_sayilmaz() -> None:
     history = selectors.student_discipline_history(sid)
     assert history.penalty_count == 0
     case3, _ = _case(student_ids=[sid])
-    d3 = services.record_decision(
+    d3 = decide(
         case3, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 3)
     )
     assert d3.prior_penalties_summary == ""
@@ -357,7 +360,7 @@ def test_md171_ceza_kaldirma_puan_iadesi_ve_geri_alma() -> None:
 # ---------------------------------------------------------------------------
 def test_kapatildi_olayi_uygunluk_denetimini_atlayamaz() -> None:
     case, sid = _case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     services.add_event(
@@ -498,7 +501,7 @@ def test_ara_tatil_is_gunu_ama_okul_kapali() -> None:
 def test_uzaklastirma_hafta_sonu_baslayamaz() -> None:
     case, sid = _case()
     with pytest.raises(ValueError, match="md. 172/1-a"):
-        services.record_decision(
+        decide(
             case,
             student_id=sid,
             penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -601,7 +604,7 @@ def test_yanlis_uyari_duzeltilince_dal_b_olur() -> None:
 def test_eski_surumde_onaysiz_teblig_edilmis_karar_sonradan_onaylanabilir() -> None:
     """Geçiş: eski sürüm onaysız tebliğe izin veriyordu — onay sonradan girilebilmeli."""
     case, sid = _case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     DisciplineDecision.objects.filter(pk=d.pk).update(
@@ -623,7 +626,7 @@ def _second_case(sid: int) -> DisciplineCase:
 
 def _approved_penalty(sid: int, penalty: str, on: date) -> DisciplineDecision:
     case = _second_case(sid)
-    d = services.record_decision(case, student_id=sid, penalty_type=penalty, decision_date=on)
+    d = decide(case, student_id=sid, penalty_type=penalty, decision_date=on)
     approve(d)
     return d
 
@@ -634,10 +637,10 @@ def test_md166_ayni_yilda_ayni_ceza_gerekcesiz_girilemez() -> None:
     _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
     case = _second_case(sid)
     with pytest.raises(ValueError, match="md. 166"):
-        services.record_decision(
+        decide(
             case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 1)
         )
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
@@ -651,7 +654,7 @@ def test_md166_bir_derece_agir_ceza_ve_cezasiz_karar_serbest() -> None:
     SchoolYearFactory()
     sid = StudentFactory().pk
     _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
-    heavier = services.record_decision(
+    heavier = decide(
         _second_case(sid),
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -659,7 +662,7 @@ def test_md166_bir_derece_agir_ceza_ve_cezasiz_karar_serbest() -> None:
         decision_date=date(2026, 6, 1),
     )
     assert heavier.md166_override_reason == ""
-    services.record_decision(
+    decide(
         _second_case(sid),
         student_id=sid,
         penalty_type=PenaltyType.NO_PENALTY,
@@ -676,13 +679,13 @@ def test_md166_onaysiz_bozulan_ve_gecen_yil_cezasi_sayilmaz() -> None:
     old = _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
     DisciplineDecision.objects.filter(pk=old.pk).update(decision_date=date(2025, 3, 3))
     pending_case = _second_case(sid)
-    services.record_decision(
+    decide(
         pending_case,
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
         decision_date=date(2026, 5, 21),
     )  # onaysız → ceza değil
-    services.record_decision(
+    decide(
         _second_case(sid),
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
@@ -694,7 +697,7 @@ def test_md166_duzenlemede_hafiflestirme_gerekce_ister() -> None:
     SchoolYearFactory()
     sid = StudentFactory().pk
     _approved_penalty(sid, PenaltyType.REPRIMAND, date(2026, 5, 20))
-    d = services.record_decision(
+    d = decide(
         _second_case(sid),
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -734,7 +737,8 @@ def test_md166_api_on_bilgi_ve_400() -> None:
         data = client.get(url).json()
     assert data["md166_priors"][str(sid)]["penalty_type"] == PenaltyType.REPRIMAND
     assert data["md166_priors"][str(sid)]["decision_no"] == prior.decision_no
-    body = {"student": sid, "penalty_type": "REPRIMAND", "decision_date": "2026-06-01"}
+    meeting = ensure_meeting(case, date(2026, 6, 1))
+    body = {"student": sid, "penalty_type": "REPRIMAND", "meeting": meeting.pk}
     resp = client.post(url, body, format="json")
     assert resp.status_code == 400
     assert "md. 166" in str(resp.json())

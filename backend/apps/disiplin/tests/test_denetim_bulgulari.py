@@ -21,7 +21,14 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import (
+    SchoolYearFactory,
+    StudentFactory,
+    approve,
+    decide,
+    ensure_meeting,
+    legacy_decision,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -55,7 +62,7 @@ def client() -> APIClient:
 # --- D-S1: tebliğ/itiraz sonrası ceza onay ucundan değişmez (md. 169/4) -----------
 def test_ds1_itiraz_sonucu_kesinlesen_ceza_onay_ucundan_degismez() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -82,7 +89,7 @@ def test_ds1_itiraz_sonucu_kesinlesen_ceza_onay_ucundan_degismez() -> None:
 
 def test_ds1_tebligden_sonra_ceza_onay_ucundan_degismez() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -102,7 +109,7 @@ def test_ds1_tebligden_sonra_ceza_onay_ucundan_degismez() -> None:
 # --- D-S2: onay tarihi tebliğ tarihinin ötesine taşınamaz (md. 163/2) ------------
 def test_ds2_teblig_sonrasi_onay_tarihi_teblig_sonrasina_tasinamaz() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)
@@ -113,8 +120,9 @@ def test_ds2_teblig_sonrasi_onay_tarihi_teblig_sonrasina_tasinamaz() -> None:
 
 # --- D-S3: karar düzenlemesi de sevk tarihinden önceki tarihi reddeder ------------
 def test_ds3_update_decision_sevkten_onceki_tarihi_reddeder() -> None:
+    # Tarih yalnız toplantısız girilmiş ESKİ kararda elle düzenlenir (S8).
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = legacy_decision(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     with pytest.raises(ValueError, match="sevk"):
@@ -272,6 +280,8 @@ def test_dk1_tutanak_sonrasi_eklenen_ogrenci_imha_kapsamini_bozar() -> None:
 # --- Karar 1 (27.09.2026): yeniden sevkte kurul süresi SON sevkten işler (md. 192/3)
 def test_karar1_yeniden_sevkte_son_sevk_esas() -> None:
     case, sid = _committee_case()  # ilk sevk 19.05
+    # İlk sevk döneminde kaydedilmiş toplantı (S8): yeniden sevkten sonra sevk ÖNCESİNDE kalır.
+    ensure_meeting(case, date(2026, 5, 25))
     services.revert_stage(case, target_stage=CaseStage.PETITION, reason="rehberliğe dönüldü")
     services.add_event(
         case,
@@ -283,7 +293,7 @@ def test_karar1_yeniden_sevkte_son_sevk_esas() -> None:
     )
     assert selectors.committee_referred_on(case) == date(2026, 6, 1)
     with pytest.raises(ValueError, match="sevk"):
-        services.record_decision(
+        decide(
             case,
             student_id=sid,
             penalty_type=PenaltyType.REPRIMAND,
@@ -308,7 +318,7 @@ def test_karar1_sevk_geri_alinip_uyariya_donerse_sevk_yok() -> None:
 # --- Karar 2 (27.09.2026): okul değiştirmede süresinde itiraz → uygulama bekler (md. 172/2-ç)
 def _okul_degistirme_teblig() -> DisciplineDecision:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -357,7 +367,7 @@ def _kapali_dosyada_teblig_edilmis_karar() -> DisciplineDecision:
     from django.utils import timezone
 
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)

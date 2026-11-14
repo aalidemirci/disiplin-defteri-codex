@@ -21,6 +21,8 @@ from apps.disiplin.tests.factories import (
     PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
+    committee_attendees,
+    decide,
 )
 from apps.okul.services.terms import configure_terms
 
@@ -226,14 +228,14 @@ def test_dosya_gorusme_tutanagi_kurallari() -> None:
             minutes_type=CouncilMinutesType.CASE_REVIEW,
             discipline_case_id=case.pk,
         )
-    services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
+    # Karar (S8) dosya toplantısına bağlı girildi → artık kurul tanımlı; karar defteri
+    # katılımcıları kurul üyeleri olmalı (md. 191/1).
     meeting = services.create_council_meeting(
         school_year_id=year.pk,
         council_type=CouncilType.DISCIPLINE,
         meeting_date=date(2026, 5, 25),
-        attendees=_attendees(),
+        attendees=committee_attendees(year),
         minutes_type=CouncilMinutesType.CASE_REVIEW,
         discipline_case_id=case.pk,
     )

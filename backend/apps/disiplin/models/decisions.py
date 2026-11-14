@@ -98,6 +98,12 @@ class DisciplineDecision(BaseModel):
         related_name="decisions",
         verbose_name="ilgili kurul kararı olayı",
     )
+    # TOPLANTI ZORUNLU (kullanıcı kararı, 14.11.2026 — S8): yeni karar yalnız kayıtlı, yeter
+    # sayılı dosya toplantısına bağlı girilir ve karar tarihi toplantı tarihidir
+    # (`services.decisions.record_decision`). BOŞ = S8 öncesi toplantısız girilmiş karar:
+    # geçerlidir, kendiliğinden DEĞİŞTİRİLMEZ. Kurallar serviste: canlı kararı bağlı toplantı
+    # silinemez, bağ kaldırılamaz (yalnız başka toplantıya taşınır). Toplantı hiçbir serviste
+    # hard-delete edilmediğinden SET_NULL fiilen yalnız dosya CASCADE'inde çalışır.
     meeting = models.ForeignKey(
         DisciplineMeeting,
         on_delete=models.SET_NULL,

@@ -36,7 +36,13 @@ from apps.disiplin.models import (
 )
 from apps.disiplin.serializers import DecisionSerializer
 from apps.disiplin.services.decisions import ensure_decision_no, update_decision_narrative
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import (
+    SchoolYearFactory,
+    StudentFactory,
+    approve,
+    decide,
+    ensure_meeting,
+)
 from apps.okul.services import app_password
 from apps.okul.tests._fixtures import TCKN_OGRENCI_1
 from shared import crypto
@@ -67,7 +73,7 @@ def _prior_penalty(
     student_id: int, penalty: str = PenaltyType.REPRIMAND, **kwargs: Any
 ) -> DisciplineDecision:
     """Önceki dosya: 22.05.2026'da verilmiş, onaylı ve tebliğli ceza."""
-    d = services.record_decision(
+    d = decide(
         _case(student_id),
         student_id=student_id,
         penalty_type=penalty,
@@ -81,7 +87,7 @@ def _prior_penalty(
 
 def _later_decision(student_id: int) -> DisciplineDecision:
     """Sonraki dosya: 03.06.2026 tarihli (onay bekleyen) karar — EK-1 özeti derlenir."""
-    return services.record_decision(
+    return decide(
         _case(student_id),
         student_id=student_id,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -164,7 +170,7 @@ def test_s11c_sonradan_onaylanan_onceki_ceza_bayatlatir() -> None:
     """Onay değişikliği: kopya derlenirken onaysız olan önceki karar sonradan onaylanır."""
     SchoolYearFactory()
     sid = StudentFactory().pk
-    prior = services.record_decision(
+    prior = decide(
         _case(sid),
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
@@ -221,7 +227,7 @@ def _same_day_pair() -> tuple[DisciplineDecision, DisciplineDecision]:
     SchoolYearFactory()
     sid = StudentFactory().pk
     first, second = (
-        services.record_decision(
+        decide(
             _case(sid),
             student_id=sid,
             penalty_type=PenaltyType.REPRIMAND,
@@ -258,14 +264,14 @@ def test_s11c_ayni_gun_onceden_onayli_karar_yeni_kayitta_onceki_ceza_sayilir() -
     """Kayıt anında aynı günün ONAYLI kararı zaten varsa yeni kararın özetine girer."""
     SchoolYearFactory()
     sid = StudentFactory().pk
-    first = services.record_decision(
+    first = decide(
         _case(sid),
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
         decision_date=date(2026, 6, 3),
     )
     approve(first)
-    second = services.record_decision(
+    second = decide(
         _case(sid),
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -316,7 +322,8 @@ def test_s11c_karar_tarihi_duzenlenirse_iz_korunur_ozet_kendiliginden_degismez()
             later,
             penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
             suspension_days=2,
-            decision_date=on,
+            # S8: karar tarihi toplantı tarihidir — tarih, başka toplantıya bağlanarak değişir.
+            meeting=ensure_meeting(later.case, on),
         )
         later.refresh_from_db()
 
@@ -598,6 +605,11 @@ def test_s11c_goc_sonrasi_eski_kayitta_bayatlik_gercek_servisle_dogru_hesaplanir
     # Eski sürüm → yeni sürüm: sütunu düşürüp göçü yeniden uygula.
     _migrate(_BEFORE)
     _migrate(_AFTER)
+    # Şemayı uca geri getir: `_BEFORE` 0017'yi de geri alır, `_AFTER` 0016'da bırakır. Sonraki
+    # testler güncel şemayı (toplantı vekâlet alanları) bekler — S8'den beri karar toplantıya
+    # bağlı girildiği için bu sızıntı görünür oldu.
+    leaf_executor = MigrationExecutor(connection)
+    leaf_executor.migrate(leaf_executor.loader.graph.leaf_nodes())
 
     later_a.refresh_from_db()
     later_b.refresh_from_db()

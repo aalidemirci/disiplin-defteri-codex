@@ -234,15 +234,31 @@ describe("disiplinApi — katılımcı + uyarı + triaj uçları", () => {
 
 describe("disiplinApi — karar + itiraz + anlatı uçları", () => {
   it("createDecision → student_id teli 'student' olur", () => {
+    // S8: karar toplantıya bağlı girilir; gövdede karar tarihi YOK (toplantı tarihidir).
     disiplinApi.createDecision(8, {
       student_id: 12,
       penalty_type: "REPRIMAND",
-      decision_date: "2026-05-30",
+      meeting: 61,
     });
     expect(apiMock.post).toHaveBeenCalledWith("/discipline/cases/8/decisions/", {
       student: 12,
       penalty_type: "REPRIMAND",
-      decision_date: "2026-05-30",
+      meeting: 61,
+    });
+  });
+
+  it("rebindDecisionMeeting → POST /discipline/cases/<id>/decisions/<did>/meeting/ (S8)", () => {
+    disiplinApi.rebindDecisionMeeting(8, 3, 62);
+    expect(apiMock.post).toHaveBeenCalledWith("/discipline/cases/8/decisions/3/meeting/", {
+      meeting: 62,
+    });
+  });
+
+  it("updateDecision → başka toplantıya bağlama gövdesi `meeting` taşır (S8)", () => {
+    disiplinApi.updateDecision(8, 3, { penalty_type: "REPRIMAND", meeting: 62 });
+    expect(apiMock.patch).toHaveBeenCalledWith("/discipline/cases/8/decisions/3/", {
+      penalty_type: "REPRIMAND",
+      meeting: 62,
     });
   });
 

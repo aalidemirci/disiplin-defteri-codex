@@ -180,6 +180,19 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
 
         return selectors.prior_penalties_summary_is_stale(obj)
 
+    # S8: kararın bağlı olduğu kurul toplantısının tarihi. `meeting` boşsa karar toplantı
+    # zorunluluğundan ÖNCE girilmiştir ("toplantı kaydı yok" bilgisi bundan türer); bağlı
+    # toplantı silinmişse (yalnız çöp kutusundaki kararda olur) tarih de boş döner.
+    meeting_date = serializers.SerializerMethodField()
+
+    def get_meeting_date(self, obj: DisciplineDecision) -> str | None:
+        if obj.meeting_id is None:
+            return None
+        meeting = obj.meeting
+        if meeting is None or meeting.deleted_at is not None:
+            return None
+        return meeting.meeting_date.isoformat()
+
     def get_is_final(self, obj: DisciplineDecision) -> bool:
         from apps.disiplin import selectors
 
@@ -196,6 +209,7 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "student_birth_date",
             "event",
             "meeting",
+            "meeting_date",
             "penalty_type",
             "penalty_type_display",
             "statute_ref",
@@ -269,6 +283,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "penalty_removal_note",
             "deleted_at",
         ]
+        # S8: karar tarihi toplantı tarihidir — istekte gönderilmesi gerekmez (gönderilirse
+        # servis toplantı tarihine eşitliğini denetler).
+        extra_kwargs = {"decision_date": {"required": False}}
 
 
 class ExtensionSerializer(serializers.ModelSerializer[DisciplineDeadlineExtension]):
@@ -329,6 +346,28 @@ class MeetingSerializer(serializers.ModelSerializer[DisciplineMeeting]):
     attendee_names = serializers.SerializerMethodField()
     acting_chair_name = serializers.SerializerMethodField()
     chair_warnings = serializers.SerializerMethodField()
+    # S8: karar bu toplantıya bağlanabilir mi (yeter sayı, md. 191/1) + bağlı CANLI kararlar
+    # (karar bağlı toplantı silinemez).
+    quorum = serializers.SerializerMethodField()
+    decisions = serializers.SerializerMethodField()
+
+    def get_quorum(self, obj: DisciplineMeeting) -> dict[str, Any]:
+        from apps.disiplin.services.committee import case_meeting_quorum
+
+        return case_meeting_quorum(obj)
+
+    def get_decisions(self, obj: DisciplineMeeting) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": d.pk,
+                "student": d.student_id,
+                "student_name": d.student.full_name,
+                "decision_no": d.decision_no,
+            }
+            for d in DisciplineDecision.objects.filter(meeting=obj)
+            .select_related("student")
+            .order_by("decision_no")
+        ]
 
     class Meta:
         model = DisciplineMeeting
@@ -343,11 +382,16 @@ class MeetingSerializer(serializers.ModelSerializer[DisciplineMeeting]):
             "acting_chair",
             "acting_chair_name",
             "chair_warnings",
+            "quorum",
+            "decisions",
         ]
         read_only_fields = ["attendees", "chair_absent", "acting_chair"]
 
     def get_attendee_names(self, obj: DisciplineMeeting) -> list[str]:
-        return [a.member_name or str(a.pk) for a in obj.attendees.all()]
+        # Sonradan kuruldan çıkarılan üye de listelenir (yeter sayı `present` ile aynı küme).
+        from apps.disiplin.services.committee import meeting_attendees
+
+        return [a.member_name or str(a.pk) for a in meeting_attendees(obj)]
 
     def get_acting_chair_name(self, obj: DisciplineMeeting) -> str:
         """VEKÂLET KAYDI (S7): başkan katılmadıysa kurula başkanlık eden üyenin adı (md. 188)."""

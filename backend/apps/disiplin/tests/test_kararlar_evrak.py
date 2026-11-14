@@ -40,7 +40,9 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     approve,
+    committee_attendees,
     committee_for,
+    decide,
     ensure_terms,
 )
 from apps.okul.services import setup as okul_setup
@@ -105,7 +107,7 @@ def _case_review_meeting(case: DisciplineCase, year: Any) -> Any:
         school_year_id=year.pk,
         council_type="DISCIPLINE",
         meeting_date=date(2026, 5, 22),
-        attendees=[{"person_name": "BAŞKAN", "attendee_role": "VOTING_MEMBER", "is_chair": True}],
+        attendees=committee_attendees(),
         minutes_type="CASE_REVIEW",
         discipline_case_id=case.pk,
     )
@@ -123,10 +125,10 @@ def test_s1_karar_defterinde_uzaklastirma_gun_sayisi_basilir() -> None:
     """md. 164/2: uzaklaştırma 1-5 gündür; karar defteri kaç gün verildiğini de yazar."""
     a, b = StudentFactory(), StudentFactory()
     case = _case(a, b)
-    services.record_decision(
+    decide(
         case, student_id=a.pk, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
-    services.record_decision(
+    decide(
         case,
         student_id=b.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -144,14 +146,14 @@ def test_s1_karar_defteri_pdfinde_gun_sayisi_ve_sira() -> None:
     year = SchoolYearFactory()
     a, b = StudentFactory(last_name="BİRİNCİ"), StudentFactory(last_name="İKİNCİ")
     case = _case(a, b)
-    first = services.record_decision(
+    first = decide(
         case,
         student_id=a.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
         suspension_days=3,
         decision_date=date(2026, 5, 22),
     )
-    second = services.record_decision(
+    second = decide(
         case, student_id=b.pk, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     text = _pdf_text(doc_engine.render_council_meeting_minutes(_case_review_meeting(case, year)))
@@ -166,7 +168,7 @@ def test_s1_kararlar_karar_numarasi_sirasiyla_dizilir() -> None:
     students = [StudentFactory() for _ in range(4)]
     case = _case(*students)
     for student in students:
-        services.record_decision(
+        decide(
             case,
             student_id=student.pk,
             penalty_type=PenaltyType.REPRIMAND,
@@ -191,7 +193,7 @@ def test_s1_ayni_gun_verilen_kararlar_verilis_sirasiyla() -> None:
     students = [StudentFactory() for _ in range(3)]
     case = _case(*students)
     decisions = [
-        services.record_decision(
+        decide(
             case,
             student_id=student.pk,
             penalty_type=PenaltyType.REPRIMAND,
@@ -209,7 +211,7 @@ def test_s1_degisen_cezada_kurulun_verdigi_ceza_gun_sayisiyla() -> None:
     çevrilse de satır kurulun verdiği "… — 5 gün" cezasıdır."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -307,7 +309,7 @@ _FORM14_NO_PENALTY_ACK = (
 def _decided_case(penalty_type: str, **kwargs: Any) -> tuple[DisciplineCase, Any]:
     student = StudentFactory(guardian_name="Veli Örnek")
     case = _case(student)
-    services.record_decision(
+    decide(
         case,
         student_id=student.pk,
         penalty_type=penalty_type,
