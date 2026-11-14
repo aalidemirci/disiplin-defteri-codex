@@ -14,7 +14,8 @@ tutanağı, karar defteri), yeter sayı, API ve 0017 göçü. Onur Kurulu (md. 1
 
 Ek kararlar (kullanıcı, 14.11.2026): K1 başkan hanesi etiketi üç şablonda bağlamdan; K2 aday
 yokken ileti; K3 şikâyetçi / zarar gören başkan dosyanın bütün kurul evrakından çıkar; K4 eski
-kayıtta boş hane + kalıcı uyarı. Dosyanın sonundaki bölüm.
+kayıtta boş hane + kalıcı uyarı. Dosyanın sonundaki bölüm. Etiket kararı ("Evet, değişsin"):
+Form-3, 4-6, 7-8, 9, 10, 12, 13'te sabit başkan etiketi de bağlamdan (`test_etiket_…`).
 """
 
 from __future__ import annotations
@@ -988,12 +989,16 @@ def _template_source(name: str) -> str:
     return str(get_template(name).template.source)  # type: ignore[attr-defined]
 
 
-def _render_pre_s7(name: str, context: dict[str, Any]) -> str:
-    """Şablonun S7 öncesi hâliyle (K1 parçaları geri çevrilmiş) HAM çıktısı."""
+def _render_pre_s7(
+    name: str,
+    context: dict[str, Any],
+    fragments: dict[str, list[tuple[str, str]]] | None = None,
+) -> str:
+    """Şablonun S7 öncesi hâliyle (K1 / etiket parçaları geri çevrilmiş) HAM çıktısı."""
     from django.template import engines
 
     source = _template_source(name)
-    for new, old in _K1_FRAGMENTS[name]:
+    for new, old in (fragments or _K1_FRAGMENTS)[name]:
         assert source.count(new) == 1, f"{name}: K1 parçası bulunamadı: {new!r}"
         source = source.replace(new, old)
     return str(engines["django"].from_string(source).render(context))
@@ -1235,7 +1240,11 @@ def test_k3_sikayetci_baskan_vekaletli_dosyada_butun_kurul_evrakinda_basilmaz(
             assert ctx["compiler_name"] == kurul.t1.member_name
             assert ctx["compiler_role"] == f"Düzenleyen / {_ROLE}"
         else:
-            assert f"{kurul.t1.member_name} — {_ROLE}" in html, key
+            # Etiket kararı (14.11.2026): md. 188 ifadesi hane ETİKETİNDE, ad satırı yalın.
+            assert _ROLE in html, key
+            assert kurul.t1.member_name in html, key
+            assert f"{kurul.t1.member_name} —" not in html, key
+            assert "Disiplin Kurulu Başkanı" not in html, key
         if key == "form12":
             # Başkanlık eden üye ızgarada bir kez imzalar (başkan hanesi), üye hanesinde değil.
             assert html.count(f'<div class="name">{kurul.t1.member_name}') == 1
@@ -1326,6 +1335,297 @@ def test_k3_gercek_uretim_form10_ve_form12_pdf(kurul: _Kurul) -> None:
                 assert "md. 188" not in text, document_type
     for document_type in ("MEETING_CALL", "DEADLINE_EXTENSION"):
         assert pages[("acting", document_type)] == pages[("plain", document_type)]
+
+
+# --- Etiket kararı (kullanıcı, 14.11.2026 — "Evet, değişsin"): Form-3, 4-6, 7-8, 9, 10, 12,
+# 13'te sabit başkan etiketi de vekâlete göre değişir; Form-12/13 gövdesi; Form-10 tablosu ---
+_FORM3 = "disiplin/documents/statement_call.html"
+_FORM4 = "disiplin/documents/statement_record.html"
+_FORM7 = "disiplin/documents/info_gathering.html"
+_FORM9 = "disiplin/documents/defense_call.html"
+_LABEL_KEYS = ("form10", "form12", "form13", "form3", "form4", "form7", "form9")
+
+_LBL_LONG = (
+    "<div class=\"role\">{{ chair_role|default:'Disiplin Kurulu Başkanı (Müdür Yrd.)' }}</div>",
+    '<div class="role">Disiplin Kurulu Başkanı (Müdür Yrd.)</div>',
+)
+_LBL_SHORT = (
+    "<div class=\"role\">{{ chair_role|default:'Disiplin Kurulu Başkanı' }}</div>",
+    '<div class="role">Disiplin Kurulu Başkanı</div>',
+)
+_LBL_CELL = (
+    "      {{ chair_role|default:'Disiplin Kurulu Başkanı' }}\n    </td>",
+    "      Disiplin Kurulu Başkanı\n    </td>",
+)
+# (yeni, bu karardan önceki) — yedi şablonda değişen bütün parçalar.
+_LABEL_FRAGMENTS: dict[str, list[tuple[str, str]]] = {
+    _FORM10: [_LBL_LONG],
+    _FORM12: [
+        _LBL_LONG,
+        (
+            "  tarihinde {{ chair_presiding|default:'Disiplin Kurulu Başkanı' }}\n",
+            "  tarihinde Disiplin Kurulu Başkanı\n",
+        ),
+    ],
+    _FORM13: [
+        _LBL_LONG,
+        (
+            "başlatılan ve {{ chair_office|default:'Disiplin Kurulu Başkanlığım' }} tarafından",
+            "başlatılan ve Disiplin Kurulu Başkanlığım tarafından",
+        ),
+    ],
+    _FORM3: [_LBL_CELL],
+    _FORM9: [_LBL_CELL],
+    _FORM4: [_LBL_SHORT],
+    _FORM7: [_LBL_SHORT],
+}
+_LABEL_CONTEXT_KEYS = ("chair_role", "chair_presiding", "chair_office")
+
+
+def _label_documents(case: DisciplineCase) -> list[tuple[str, str, dict[str, Any]]]:
+    return [doc for doc in _k3_documents(case) if doc[0] in _LABEL_KEYS]
+
+
+def _sikayetci_vekaletli(kurul: _Kurul) -> DisciplineCase:
+    case = _case_with_decision(kurul, petitioner_user_id=kurul.chair.pk)
+    services.record_meeting(
+        case,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    return case
+
+
+def test_etiket_vekaletli_dosyada_yedi_sablonda_md188_ad_satiri_yalin(kurul: _Kurul) -> None:
+    case = _sikayetci_vekaletli(kurul)
+    docs = _label_documents(case)
+    assert sorted(key for key, _t, _c in docs) == sorted(_LABEL_KEYS)
+    name = kurul.t1.member_name
+    for key, template, ctx in docs:
+        assert ctx["chair_role"] == _ROLE, key
+        html = _html(template, ctx)
+        assert html.count(_ROLE) == 1, key
+        # Eski sabit etiket ve satır içi ek YOK; katılmayan başkan YOK.
+        assert "Disiplin Kurulu Başkanı" not in html, key
+        assert "Müdür Yrd." not in html, key
+        assert f"{name} —" not in html, key
+        assert kurul.chair.full_name not in html, key
+        if key in ("form3", "form9"):
+            assert f"<strong>{name}</strong><br> {_ROLE} </td>" in html, key
+        else:
+            assert f'<div class="name">{name}</div> <div class="role">{_ROLE}</div>' in html, key
+    # Tek sabit: etiket `documents.ACTING_CHAIR_ROLE`; satır içi ek kalktı.
+    import inspect
+
+    assert "role_inline" not in inspect.getsource(doc_engine)
+
+
+def test_etiket_form12_ve_form13_govde_cumlesi_vekalete_gore(kurul: _Kurul) -> None:
+    case = _sikayetci_vekaletli(kurul)
+    docs = {key: (template, ctx) for key, template, ctx in _label_documents(case)}
+    name = kurul.t1.member_name
+    form12 = _html(*docs["form12"])
+    assert (
+        "tarihinde md. 188 gereğince kurula başkanlık eden öğretmen üye "
+        f"<strong>{name}</strong> başkanlığında toplanarak" in form12
+    )
+    form13 = _html(*docs["form13"])
+    assert (
+        "başlatılan ve md. 188 uyarınca başkanlık ettiğim Disiplin Kurulu tarafından yürütülen "
+        "disiplin soruşturması" in form13
+    )
+    assert "Başkanlığım" not in form13
+
+    # Başkan şikâyetçi değilse gövde eski metindir.
+    plain = _case_with_decision(kurul, petitioner_user_id=None)
+    plain_docs = {key: (template, ctx) for key, template, ctx in _label_documents(plain)}
+    assert (
+        f"tarihinde Disiplin Kurulu Başkanı <strong>{kurul.chair.full_name}</strong> "
+        "başkanlığında toplanarak" in _html(*plain_docs["form12"])
+    )
+    assert "Disiplin Kurulu Başkanlığım tarafından yürütülen" in _html(*plain_docs["form13"])
+
+
+def test_etiket_form10_baskanlik_eden_uye_cagrilanlar_tablosunda_ikinci_kez_yok(
+    kurul: _Kurul,
+) -> None:
+    """Çağrıyı imzalayan kişi kendini çağırmaz (Form-12'deki çift basmama ile aynı kural)."""
+    case = _sikayetci_vekaletli(kurul)
+    ctx = doc_engine._meeting_call_context(case, {})
+    assert kurul.t1.pk not in [m.pk for m in ctx["members"]]
+    html = _html(_FORM10, ctx)
+    assert html.count(kurul.t1.member_name) == 1  # yalnız imza bloğu
+    assert f"<td>{kurul.t1.member_name}</td>" not in html
+    assert f"<td>{kurul.t2.member_name}</td>" in html
+    assert f"<td>{kurul.parent.member_name}</td>" in html
+    # Form-12 ızgarası da tek imza.
+    form12 = _html(_FORM12, doc_engine._deadline_extension_context(case, {}))
+    assert form12.count(f'<div class="name">{kurul.t1.member_name}</div>') == 1
+    # Kurul kaydı değişmez.
+    assert kurul.committee.members.filter(pk=kurul.t1.pk).exists()
+
+
+def test_etiket_form10_vekaletli_dosyada_katilan_yedek_uye_cagrilanlar_tablosunda(
+    kurul: _Kurul,
+) -> None:
+    """md. 188/1 "Üyenin başkanlık yaptığı durumlarda yedek üye toplantıya katılır", md. 191/2
+    "yerine yedek üye toplantıya çağrılır": başkanlık eden üye tablodan çıkınca toplantı
+    kaydında KATILAN yedek üye çağrılanlar arasında basılır (yalnız bağlam — AYNEN şablon
+    yedekleri `is_substitute` ile gizler)."""
+    case = _sikayetci_vekaletli(kurul)
+    ctx = doc_engine._meeting_call_context(case, {})
+    assert [m.pk for m in ctx["members"]] == [kurul.t2.pk, kurul.parent.pk, kurul.sub.pk]
+    html = _html(_FORM10, ctx)
+    sub = kurul.sub.member_name
+    assert html.count(f"<td>{sub}</td>") == 1
+    assert f"<td>3</td> <td>{sub}</td>" in html  # sıra numarası boşluksuz sürer
+    # Form-12 ızgarası bu kuraldan etkilenmez (kurulun kendi listesi; yedek gizli).
+    form12 = _html(_FORM12, doc_engine._deadline_extension_context(case, {}))
+    assert sub not in form12
+    # Kurul kaydı değişmez: üye hâlâ yedek.
+    kurul.sub.refresh_from_db()
+    assert kurul.sub.is_substitute is True
+
+    # Toplantıya yedek üye katılmadıysa tabloya ad uydurulmaz.
+    without = _case_with_decision(kurul, petitioner_user_id=kurul.chair.pk)
+    services.record_meeting(
+        without,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    assert sub not in _html(_FORM10, doc_engine._meeting_call_context(without, {}))
+
+    # Başkan şikâyetçi değilse (izinli başkan, vekâletli toplantı) tablo AYNEN: yedek yok.
+    plain = _case_with_decision(kurul, petitioner_user_id=None)
+    services.record_meeting(
+        plain,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    assert sub not in _html(_FORM10, doc_engine._meeting_call_context(plain, {}))
+
+
+@pytest.mark.parametrize(
+    "durum", ["vekaletsiz", "izinli_baskan_vekaletli", "sikayetci_kayitsiz", "eski_toplanti"]
+)
+def test_etiket_vekaletli_olmayan_ciktida_yedi_sablon_bayt_bayt_ayni(
+    kurul: _Kurul, durum: str
+) -> None:
+    """Etiket izni yalnız "şikâyetçi / zarar gören başkan + vekâletli toplantı kaydı" çıktısını
+    değiştirir. Başkan şikâyetçi değilse (vekâletsiz ya da izinli başkan) ve vekâlet kaydı yokken
+    (boş hane, eski sabit etiket) yedi şablonun HAM çıktısı karar öncesi şablonla bayt bayt aynı."""
+    conflicted = durum in ("sikayetci_kayitsiz", "eski_toplanti")
+    case = _case_with_decision(kurul, petitioner_user_id=kurul.chair.pk if conflicted else None)
+    if durum == "izinli_baskan_vekaletli":
+        services.record_meeting(
+            case,
+            meeting_date=_ON,
+            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+            chair_absent=True,
+            acting_chair_member_id=kurul.t1.pk,
+        )
+    elif durum == "eski_toplanti":
+        _eski_toplanti(case, [kurul.t1, kurul.t2, kurul.parent])
+    for key, template, ctx in _label_documents(case):
+        for context_key in _LABEL_CONTEXT_KEYS:
+            assert context_key not in ctx, (key, context_key)
+        # Üye listesi kurulun kendi listesi (kimse çıkarılmaz).
+        assert [m.pk for m in ctx["members"]] == [m.pk for m in kurul.committee.members.all()]
+        now = render_to_string(template, ctx)
+        assert now == _render_pre_s7(template, ctx, _LABEL_FRAGMENTS), key
+        assert "md. 188" not in now, key
+        # Kurul tanımlı değilken de aynı.
+        empty = {**ctx, "committee": None, "members": []}
+        assert render_to_string(template, empty) == _render_pre_s7(
+            template, empty, _LABEL_FRAGMENTS
+        ), key
+        if conflicted:
+            assert _BLANK in now, key
+            assert kurul.chair.full_name not in now, key
+        else:
+            assert kurul.chair.full_name in now, key
+    # Form-7/8'in öğretmen sürümü de aynı.
+    witness = case.participants.get(role=ParticipantRole.WITNESS)
+    teacher = doc_engine._info_gathering_context(case, witness, {"variant": "teacher"})
+    assert render_to_string(_FORM7, teacher) == _render_pre_s7(_FORM7, teacher, _LABEL_FRAGMENTS)
+    # Değişikliğin yanında karar notu durur (CLAUDE.md §1/3).
+    for template in _LABEL_FRAGMENTS:
+        assert "kullanıcı kararı, 14.11.2026 — S7" in _template_source(template)
+        assert "text-transform" not in _template_source(template)
+
+
+def test_etiket_ceza_tebliglerinde_tebligeden_hanesi_degismez(kurul: _Kurul) -> None:
+    """Kapsam dışı: ceza tebliğlerinde ("Tebliğ Eden — Müdür Yardımcısı") hane boş kalır."""
+    case = _sikayetci_vekaletli(kurul)
+    for key, template, ctx in _k3_documents(case):
+        if key not in _K3_NOTICES:
+            continue
+        assert "chair_role" not in ctx, key
+        html = _html(template, ctx)
+        assert _BLANK in html, key
+        assert "md. 188" not in html, key
+        assert kurul.t1.member_name not in html, key
+
+
+def test_etiket_gercek_uretim_yedi_belgede_sayfa_sayisi_degismez(kurul: _Kurul) -> None:
+    """Gerçek üretim (WeasyPrint): uzun adlı başkanlık eden üyeyle vekâletli dosyada yedi
+    belgenin sayfa sayısı, başkanı şikâyetçi olmayan aynı dosyanın çıktısıyla aynıdır."""
+    long_name = kurul._teacher("ABDURRAHMAN GAZİOSMANPAŞA", "KARAOSMANOĞULLARI YILDIRIMTÜRK")
+    jobs: list[tuple[str, dict[str, Any]]] = [
+        ("MEETING_CALL", {}),
+        ("DEADLINE_EXTENSION", {"variant": doc_engine.VARIANT_RECORD}),
+        ("DEADLINE_EXTENSION", {"variant": doc_engine.VARIANT_PETITION}),
+        ("STATEMENT_CALL", {"participant": True}),
+        ("STATEMENT_RECORD", {"participant": True}),
+        ("INFO_GATHERING", {"participant": True, "variant": "student"}),
+        ("INFO_GATHERING", {"participant": True, "variant": "teacher"}),
+        ("DEFENSE_CALL", {"participant": True}),
+    ]
+    pages: dict[tuple[str, int], int] = {}
+    for key, petitioner in (("plain", None), ("acting", kurul.chair.pk)):
+        case = _case_with_decision(kurul, petitioner_user_id=petitioner)
+        services.record_meeting(
+            case,
+            meeting_date=_ON,
+            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk, kurul.sub.pk],
+            chair_absent=True,
+            acting_chair_member_id=long_name.pk,
+        )
+        services.create_extension(
+            case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
+        )
+        accused = case.participants.get(role=ParticipantRole.ACCUSED)
+        for index, (document_type, options) in enumerate(jobs):
+            kwargs: dict[str, Any] = {"variant": options.get("variant", "")}
+            if options.get("participant"):
+                kwargs["participant_id"] = accused.pk
+            pdf, _doc = doc_engine.generate_document(
+                case,
+                document_type=document_type,
+                generated_on=date(2026, 5, 20),
+                log=False,
+                **kwargs,
+            )
+            pages[(key, index)] = len(_pdf_pages(pdf))
+            text = _pdf_text(pdf)
+            if key == "acting":
+                assert kurul.chair.full_name not in text, document_type
+                assert long_name.member_name in text, document_type
+                assert "Kurula Başkanlık Eden" in text, document_type
+                assert "(md. 188)" in text, document_type
+                assert "Disiplin Kurulu Başkanı" not in text, document_type
+            else:
+                assert kurul.chair.full_name in text, document_type
+                assert "Disiplin Kurulu Başkanı" in text, document_type
+                assert "md. 188" not in text, document_type
+    for index, (document_type, _options) in enumerate(jobs):
+        assert pages[("acting", index)] == pages[("plain", index)], (document_type, index)
 
 
 # --- K4 — eski kayıtta boş hane + kalıcı uyarı ------------------------------------

@@ -7,7 +7,12 @@ uzatma ara kararı; üye + başkan imzalı (EK-1 deseni). Veri DisciplineDeadlin
 GEÇİCİ alan `vote_basis`, DB'ye yazılmaz). Varsayılan oy birliği.
 Saha denetimi 14.11.2026: uzatma dosya genelidir (md. 192/3) — çok öğrencili dosyada
 bütün öğrenciler `students` listesinden çoğul kalıpla yazılır; tek öğrencili dosyada
-gündem cümlesi eskisiyle aynıdır.{% endcomment %}
+gündem cümlesi eskisiyle aynıdır.
+Başkan etiketi (kullanıcı kararı, 14.11.2026 — S7): başkan dosyada şikâyetçi / zarar gören
+ve dosyada vekâletli toplantı kaydı varsa etiket bağlamdan (`chair_role`) gelir — "Kurula
+Başkanlık Eden Öğretmen Üye (md. 188)"; verilmezse eski sabit metin basılır, öteki bütün
+durumlarda çıktı bayt bayt aynıdır. Ad satırı yalnız adı taşır. Giriş cümlesindeki
+"Disiplin Kurulu Başkanı" ifadesi de bağlamdan (`chair_presiding`) gelir.{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN KURULU SÜRE UZATMA KARAR TUTANAĞI</div>
 <div class="doc-subtitle">Form-12 · MEB Ortaöğretim Kurumları Yönetmeliği md. 192/3</div>
@@ -23,7 +28,7 @@ gündem cümlesi eskisiyle aynıdır.{% endcomment %}
 <p class="para" style="margin-top: 12pt;">
   Okulumuz Öğrenci Ödül ve Disiplin Kurulu,
   {% if extension.decided_on %}{{ extension.decided_on|date:'d.m.Y' }}{% else %}…/…/202…{% endif %}
-  tarihinde Disiplin Kurulu Başkanı
+  tarihinde {{ chair_presiding|default:'Disiplin Kurulu Başkanı' }}
   <strong>{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</strong>
   başkanlığında toplanarak aşağıdaki gündem maddesini görüşmüştür.
 </p>
@@ -72,7 +77,7 @@ gündem cümlesi eskisiyle aynıdır.{% endcomment %}
     {% endif %}{% endfor %}
     <td>
       <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
-      <div class="role">Disiplin Kurulu Başkanı (Müdür Yrd.)</div>
+      <div class="role">{{ chair_role|default:'Disiplin Kurulu Başkanı (Müdür Yrd.)' }}</div>
     </td>
   </tr>
 </table>

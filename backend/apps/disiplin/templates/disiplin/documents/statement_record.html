@@ -6,7 +6,11 @@ ROLÜ (Mağdur/Hakkında İşlem Yapılan/Tanık) başlığı belirler. Künye k
 ön-doldurulur; ifade gövdesi elle yazılır (içerik DB'de saklanmaz). Kanonik metin
 öğrenciye yazılmıştır; personel/dış kişi katılımcıda (Tur 216) başlık "KİŞİNİN" olur,
 sınıf/numara yerine görev/sıfat satırı basılır (kanonik dışı türetme). Antet shared;
-unit = kurul.{% endcomment %}
+unit = kurul.
+Başkan etiketi (kullanıcı kararı, 14.11.2026 — S7): başkan dosyada şikâyetçi / zarar gören
+ve dosyada vekâletli toplantı kaydı varsa etiket bağlamdan (`chair_role`) gelir — "Kurula
+Başkanlık Eden Öğretmen Üye (md. 188)"; verilmezse eski sabit metin basılır, öteki bütün
+durumlarda çıktı bayt bayt aynıdır. Ad satırı yalnız adı taşır.{% endcomment %}
 {% block content %}
 <div class="doc-title">İFADE TUTANAĞI</div>
 <div class="doc-subtitle">Form-4/5/6 · MEB Ortaöğretim Kurumları Yönetmeliği md. 193 · {{ participant.role_display }}</div>
@@ -33,7 +37,7 @@ unit = kurul.{% endcomment %}
   <div class="date">…/…/202…</div>
   <div class="sig-line"></div>
   <div class="name">{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</div>
-  <div class="role">Disiplin Kurulu Başkanı</div>
+  <div class="role">{{ chair_role|default:'Disiplin Kurulu Başkanı' }}</div>
 </div>
 
 <div class="section flow" style="margin-top: 18pt;">

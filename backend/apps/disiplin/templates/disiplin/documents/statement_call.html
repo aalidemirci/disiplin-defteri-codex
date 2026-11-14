@@ -5,7 +5,11 @@ Katılımcıdan ön-doldurulur (ad + sınıf/no); ifadenin alınacağı tarih/sa
 arayüzden GEÇİCİ olarak gelir (DB'ye yazılmaz). Tebliğ-tebellüğ imza bloğu içerir.
 Kanonik metin öğrenciye yazılmıştır; personel/dış kişi katılımcıda (Tur 216) hitap
 ve gövde kişi tipine göre uyarlanır (kanonik dışı türetme). Antet shared;
-unit = kurul (varsayılan).{% endcomment %}
+unit = kurul (varsayılan).
+Başkan etiketi (kullanıcı kararı, 14.11.2026 — S7): başkan dosyada şikâyetçi / zarar gören
+ve dosyada vekâletli toplantı kaydı varsa etiket bağlamdan (`chair_role`) gelir — "Kurula
+Başkanlık Eden Öğretmen Üye (md. 188)"; verilmezse eski sabit metin basılır, öteki bütün
+durumlarda çıktı bayt bayt aynıdır. Ad satırı yalnız adı taşır.{% endcomment %}
 {% block content %}
 <div class="doc-title">İFADEYE ÇAĞRI PUSULASI</div>
 <div class="doc-subtitle">Form-3 · MEB Ortaöğretim Kurumları Yönetmeliği md. 193-195</div>
@@ -52,7 +56,7 @@ unit = kurul (varsayılan).{% endcomment %}
     <td>
       …/…/202…<br>
       <strong>{% if committee.chair %}{{ committee.chair.get_full_name|default:committee.chair.username }}{% else %}…………………………{% endif %}</strong><br>
-      Disiplin Kurulu Başkanı
+      {{ chair_role|default:'Disiplin Kurulu Başkanı' }}
     </td>
   </tr>
   <tr>
