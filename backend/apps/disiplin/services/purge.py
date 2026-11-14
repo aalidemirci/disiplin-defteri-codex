@@ -27,10 +27,14 @@ PROTECT'tir ve ASLA silinmez.
 
 from __future__ import annotations
 
+import os
+import time
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import Any
 
+from django.conf import settings
 from django.core import signing
 from django.db import transaction
 from django.utils import timezone
@@ -59,6 +63,12 @@ PURGE_AFTER_TRANSFER_WORKING_DAYS = 5
 # ikinci onayın "tutanaktan sonra" geldiğinin kanıtı budur.
 _SIGNING_NAMESPACE = "disiplin.purge.record"
 TOKEN_MAX_AGE_SECONDS = 3600
+
+# Tutanak BİRİNCİ onayda diske yazılır (önce iz, sonra silme — tasarım §4.6) ama
+# ikinci onaya kadar bu alt klasörde BEKLER; imha uygulanınca kalıcı klasöre taşınır.
+# İkinci onay verilmezse jetonla birlikte eskir ve temizlenir — "imha edilmiştir"
+# diyen, gerçekleşmemiş imhaya ait tutanak kalıcı klasörde birikmez.
+PENDING_RECORD_SUBDIR = "bekleyen"
 
 SCOPE_ALL = "TOPLU"
 SCOPE_STUDENT = "OGRENCI"
@@ -194,6 +204,9 @@ def preview_student(
 
     warnings = purge_selectors.student_warning_items(student_id)
     whole_case_ids = sorted({w.case_id for w in warnings if w.whole_case_purgeable})
+    # Belge sayısı SİLİNECEK olanla aynı kaynaktan: bütünüyle silinen dosyada dosyanın
+    # tüm kütük satırları, ayakta kalan dosyada bu öğrencinin uyarı belgeleri (bir kez).
+    scope = _student_scope(student_id, warnings, transfer_date)
 
     deadline: date | None = None
     days_left: int | None = None
@@ -211,8 +224,8 @@ def preview_student(
         warnings=warnings,
         whole_case_ids=whole_case_ids,
         totals={
-            "warnings": len(warnings),
-            "documents": sum(w.warning_letter_count for w in warnings),
+            "warnings": sum(1 for w in warnings if w.warning_id is not None),
+            "documents": _scope_totals(scope)["documents"],
             "cases": len(whole_case_ids),
         },
         transfer_date=transfer_date,
@@ -267,18 +280,18 @@ def _resolve_case_scope(case_ids: list[int]) -> _Scope:
     return _Scope(kind=SCOPE_ALL, case_ids=unique, warning_ids=[], document_ids=[])
 
 
-def _resolve_student_scope(student_id: int, transfer_date: date | None) -> _Scope:
-    """Tekil (nakil) kapsam: tek öğrencili Dal A dosyaları + kalan uyarı izleri."""
-    preview = preview_student(student_id, transfer_date=transfer_date)
-    if not preview.warnings:
-        raise ValueError("Bu öğrenci için imha edilecek uyarı kaydı yok.")
-    if preview.timing_blocker:
-        raise ValueError(preview.timing_blocker)
-
-    whole = set(preview.whole_case_ids)
-    warning_ids = sorted(w.warning_id for w in preview.warnings if w.case_id not in whole)
+def _student_scope(
+    student_id: int,
+    items: list[purge_selectors.PurgeWarningItem],
+    transfer_date: date | None,
+) -> _Scope:
+    """Uyarı izlerinden tekil (nakil) kapsamı kurar — önizleme ve silme AYNI kümeyi kullanır."""
+    whole = {w.case_id for w in items if w.whole_case_purgeable}
+    warning_ids = sorted(
+        w.warning_id for w in items if w.warning_id is not None and w.case_id not in whole
+    )
     document_ids: list[int] = []
-    for item in preview.warnings:
+    for item in items:
         if item.case_id in whole:
             continue
         document_ids.extend(
@@ -287,6 +300,26 @@ def _resolve_student_scope(student_id: int, transfer_date: date | None) -> _Scop
                 case_id=item.case_id, student_id=student_id
             )
         )
+    return _scope_of(student_id, whole, warning_ids, document_ids, transfer_date)
+
+
+def _resolve_student_scope(student_id: int, transfer_date: date | None) -> _Scope:
+    """Tekil (nakil) kapsam: tek öğrencili Dal A dosyaları + kalan uyarı izleri."""
+    preview = preview_student(student_id, transfer_date=transfer_date)
+    if not preview.warnings:
+        raise ValueError("Bu öğrenci için imha edilecek uyarı kaydı yok.")
+    if preview.timing_blocker:
+        raise ValueError(preview.timing_blocker)
+    return _student_scope(student_id, preview.warnings, transfer_date)
+
+
+def _scope_of(
+    student_id: int,
+    whole: set[int],
+    warning_ids: list[int],
+    document_ids: list[int],
+    transfer_date: date | None,
+) -> _Scope:
     return _Scope(
         kind=SCOPE_STUDENT,
         case_ids=sorted(whole),
@@ -311,9 +344,15 @@ def _revalidate(scope: _Scope) -> None:
                 "case_id", flat=True
             )
         )
+        involved += _document_case_ids(scope)
         timing = purge_selectors.student_timing_blocker(scope.student_id, involved)
         if timing:
             raise ValueError(f"İmha kapsamı değişti — {timing}")
+    # Uyarı kaydı olmayan (yalnız belgesi silinecek) dosyalar da Dal A kalmış olmalı.
+    for case in DisciplineCase.objects.filter(pk__in=_document_case_ids(scope)):
+        blockers = purge_selectors.case_purge_blockers(case)
+        if blockers:
+            raise ValueError(f"İmha kapsamı değişti — {case.case_no}: {blockers[0]}")
     for case_id in scope.case_ids:
         case = DisciplineCase.objects.filter(pk=case_id).first()
         if case is None:
@@ -335,6 +374,19 @@ def _revalidate(scope: _Scope) -> None:
         blockers = purge_selectors.case_purge_blockers(warning.case)
         if blockers:
             raise ValueError(f"İmha kapsamı değişti — {warning.case.case_no}: {blockers[0]}")
+
+
+def _document_case_ids(scope: _Scope) -> list[int]:
+    """Tekil silinecek kütük satırlarının dosyaları (dosyası ayakta kalan izler)."""
+    if not scope.document_ids:
+        return []
+    return sorted(
+        set(
+            GeneratedDocument.all_objects.filter(pk__in=scope.document_ids).values_list(
+                "case_id", flat=True
+            )
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +453,11 @@ def _case_rows(case_ids: list[int]) -> list[PurgeRecordRow]:
                 PurgeRecordRow(
                     student_name=link.student.full_name or f"#{link.student_id}",
                     case_no=case.case_no,
-                    record_date=first.warning_date if first is not None else case.petition_date,
+                    record_date=(
+                        first.warning_date
+                        if first is not None
+                        else purge_selectors.warning_decision_date(case)
+                    ),
                     detail=" · ".join(details),
                 )
             )
@@ -429,6 +485,22 @@ def _warning_rows(warning_ids: list[int]) -> list[PurgeRecordRow]:
             )
         )
     return rows
+
+
+def _unrecorded_rows(
+    items: list[purge_selectors.PurgeWarningItem], whole: set[int]
+) -> list[PurgeRecordRow]:
+    """Uyarı kaydı açılmamış, dosyası ayakta kalan izler (yalnız uyarı belgeleri silinir)."""
+    return [
+        PurgeRecordRow(
+            student_name=item.student_name,
+            case_no=item.case_no,
+            record_date=item.warning_date,
+            detail=f"uyarı kaydı açılmamış · {item.warning_letter_count} uyarı yazısı kütük satırı",
+        )
+        for item in items
+        if item.warning_id is None and item.case_id not in whole
+    ]
 
 
 def _scope_totals(scope: _Scope) -> dict[str, int]:
@@ -469,6 +541,8 @@ def issue_record(
         deadline = None
 
     rows = _case_rows(scope.case_ids) + _warning_rows(scope.warning_ids)
+    if student_id is not None:
+        rows += _unrecorded_rows(preview.warnings, set(scope.case_ids))
     on = purge_date or timezone.localdate()
     pdf_bytes = purge_documents.render_purge_record(
         rows=rows,
@@ -479,7 +553,7 @@ def issue_record(
         purge_deadline=deadline,
     )
     filename = purge_documents.record_filename(on)
-    stored_path = purge_documents.store_purge_record(pdf_bytes, filename=filename)
+    stored_path = _store_pending_record(pdf_bytes, filename)
     return PurgeRecord(
         pdf_bytes=pdf_bytes,
         filename=filename,
@@ -487,6 +561,63 @@ def issue_record(
         token=_dump_token(scope, record_path=stored_path),
         scope_label=scope_label,
     )
+
+
+def _record_root() -> Path:
+    return Path(settings.MEDIA_ROOT) / purge_documents.PURGE_RECORD_DIR
+
+
+def _cleanup_stale_pending_records() -> None:
+    """Jetonunun süresi dolmuş (ikinci onayı hiç verilmemiş) bekleyen tutanakları siler."""
+    pending = _record_root() / PENDING_RECORD_SUBDIR
+    if not pending.is_dir():
+        return
+    cutoff = time.time() - TOKEN_MAX_AGE_SECONDS
+    for path in pending.glob("*.pdf"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue  # kilitli/erişilemez dosya bir sonraki turda temizlenir
+
+
+def _store_pending_record(pdf_bytes: bytes, filename: str) -> str:
+    """Tutanağı `imha/bekleyen/` altına yazar; MEDIA_ROOT'a göreli yolu döner."""
+    _cleanup_stale_pending_records()
+    (_record_root() / PENDING_RECORD_SUBDIR).mkdir(parents=True, exist_ok=True)
+    return purge_documents.store_purge_record(
+        pdf_bytes, filename=f"{PENDING_RECORD_SUBDIR}/{filename}"
+    )
+
+
+def _finalize_record(record_path: str) -> str:
+    """Bekleyen tutanağı kalıcı klasöre taşır; kalıcı (MEDIA_ROOT'a göreli) yolu döner.
+
+    Silmeden ÖNCE çağrılır: tutanak yerinde değilse imha yapılmaz ("önce iz, sonra
+    silme"). Bekleyen klasörde olmayan (eski sürüm jetonu) yol aynen döner.
+    """
+    relative = Path(record_path)
+    if not record_path or relative.parent.name != PENDING_RECORD_SUBDIR:
+        return record_path
+    source = Path(settings.MEDIA_ROOT) / relative
+    if not source.is_file():
+        raise ValueError(
+            "İmha tutanağı veri klasöründe bulunamadı; imha yapılmadı. Tutanağı yeniden "
+            "üretip indirin, sonra ikinci onayı verin."
+        )
+    target = _record_root() / relative.name
+    os.replace(source, target)
+    return str(Path(purge_documents.PURGE_RECORD_DIR) / relative.name)
+
+
+def _restore_pending_record(final_path: str, pending_path: str) -> None:
+    """Silme başarısız olursa tutanağı bekleyen klasöre geri koyar (imha yapılmadı)."""
+    if final_path == pending_path:
+        return
+    try:
+        os.replace(Path(settings.MEDIA_ROOT) / final_path, Path(settings.MEDIA_ROOT) / pending_path)
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -551,17 +682,28 @@ def _purge_case(case: DisciplineCase, result: dict[str, int]) -> None:
     result["cases"] += 1
 
 
-@transaction.atomic
 def execute(*, token: str, confirmed: bool = False) -> PurgeResult:
     """İKİNCİ onay: jetonu doğrular, kapsamı yeniden doğrular ve kayıtları SİLER.
 
     Geri alınamaz — `hard_delete()` soft-delete kuralının md. 157/7 istisnasıdır.
-    Silinen kayıtların tek izi, jetonun işaret ettiği imha tutanağıdır.
+    Silinen kayıtların tek izi, jetonun işaret ettiği imha tutanağıdır: tutanak
+    silmeden ÖNCE kalıcı klasöre alınır; silme başarısız olursa geri konur.
     """
-    scope, record_path = _load_token(token)
+    scope, pending_path = _load_token(token)
     if not confirmed:
         raise ValueError("İmha ikinci onay olmadan uygulanamaz.")
     _revalidate(scope)
+    record_path = _finalize_record(pending_path)
+    try:
+        return _execute_scope(scope, record_path)
+    except BaseException:
+        _restore_pending_record(record_path, pending_path)
+        raise
+
+
+@transaction.atomic
+def _execute_scope(scope: _Scope, record_path: str) -> PurgeResult:
+    """Doğrulanmış kapsamı tek transaction'da siler."""
 
     counters = {
         "cases": 0,

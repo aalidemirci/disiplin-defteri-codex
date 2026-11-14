@@ -18,8 +18,22 @@ from apps.disiplin.models import (
     DisciplinePrecaution,
     PrecautionStatus,
 )
-from apps.disiplin.services.common import case_has_student
+from apps.disiplin.services.common import assert_not_future, case_has_student
 from apps.okul.services.calendar import is_working_day
+
+
+def _assert_case_open(case: DisciplineCase, what: str) -> None:
+    """Kapalı dosyada tedbir ve kurul süre uzatması işlemi yapılmaz.
+
+    Tedbir (md. 175) "kovuşturmanın tamamlanmasını beklemeden" alınan acele bir
+    önlemdir; kurul süre uzatması (md. 192/3) karar bekleyen dosya içindir — ikisi de
+    kapanmış dosyada anlamsızdır ve süre panelinde yanlış alarm üretir. Yürürlükte
+    kalmış tedbirin SONLANDIRILMASI (`lift_precaution`) bu kilide tabi değildir.
+    """
+    if case.closed_at is not None:
+        raise ValueError(
+            f"Dosya kapalı: {what}. Gerekiyorsa önce dosyayı yeniden açın (aşama geri alma)."
+        )
 
 
 @transaction.atomic
@@ -41,8 +55,10 @@ def create_extension(
     """
     from apps.disiplin import selectors
 
+    _assert_case_open(case, "kurul süre uzatması eklenemez")
     if requested_days < 1:
         raise ValueError("Uzatma süresi en az 1 iş günü olmalıdır.")
+    assert_not_future(decided_on, "Ara karar tarihi")
     if not (reason or "").strip():
         raise ValueError("Uzatma gerekçesi (reason) zorunludur (md. 192/3 ara karar).")
 
@@ -77,11 +93,42 @@ def create_extension(
 def approve_extension(
     extension: DisciplineDeadlineExtension, *, approved_on: date
 ) -> DisciplineDeadlineExtension:
-    """Süre uzatmasını müdür onayına bağlar (md. 192/3 — okul müdürünün onayı/Form-13)."""
+    """Süre uzatmasını müdür onayına bağlar (md. 192/3 — okul müdürünün onayı/Form-13).
+
+    Onay ara karardan SONRA gelir (md. 192/3 "alınacak ara karar ve okul müdürünün
+    onayıyla"); onaylanmış kayıt yeniden onaylanamaz (ikinci çağrı onay tarihini
+    sessizce değiştiriyordu).
+    """
+    _assert_case_open(extension.case, "süre uzatması onaylanamaz")
+    if extension.approved_by_principal:
+        raise ValueError("Bu süre uzatması zaten onaylanmış; onay tarihi değiştirilemez.")
+    assert_not_future(approved_on, "Onay tarihi")
+    if approved_on < extension.decided_on:
+        raise ValueError(
+            "Müdür onayı ara karar tarihinden önce olamaz "
+            f"(ara karar {extension.decided_on:%d.%m.%Y})."
+        )
     extension.approved_by_principal = True
     extension.approved_on = approved_on
     extension.save(update_fields=["approved_by_principal", "approved_on", "updated_at"])
     return extension
+
+
+@transaction.atomic
+def delete_extension(extension: DisciplineDeadlineExtension) -> None:
+    """Yanlış girilen ya da müdürün onaylamadığı süre uzatmasını siler (soft delete).
+
+    Yalnız ONAYSIZ kayıt silinebilir: onaysız uzatma son günü değiştirmez (md. 192/3
+    müdür onayı şarttır), dolayısıyla silinmesi hiçbir süreyi etkilemez. Onaylanmış
+    uzatma kurul karar süresini fiilen uzatmıştır — silinemez. "Ancak bir kez" kuralı
+    canlı kayda bakar; silinen kaydın yerine doğrusu girilebilir (§7.6 tek yönlü kapan).
+    """
+    if extension.approved_by_principal:
+        raise ValueError(
+            "Müdürün onayladığı süre uzatması silinemez: kurul karar süresi bu onayla "
+            "uzamıştır (md. 192/3). Yalnız onaylanmamış kayıt silinebilir."
+        )
+    extension.delete()  # soft delete
 
 
 @transaction.atomic
@@ -103,8 +150,16 @@ def create_precaution(
     zaten yürürlükte tedbir varsa ValueError. Uzaklaştırma devamsızlıktan
     sayılmaz (md. 175/1).
     """
+    _assert_case_open(case, "tedbir eklenemez")
     if not case_has_student(case, student_id):
         raise ValueError("Öğrenci bu disiplin dosyasına dahil değil.")
+    # Başlangıç tarihi TATİL GÜNÜ olabilir (reddedilmez): modelde ayrı bir "karar tarihi"
+    # yoktur, başlangıç = tedbir kararının alındığı gündür ve md. 175/2 "tedbir kararının
+    # alınmasını izleyen en geç üç iş günü" bu günden sayılır. Karar hafta sonu/tatilde
+    # alınabilir (ör. pansiyonlu okul); ilk iş gününe ötelemek 175/2 son gününü bir gün
+    # geç hesaplatırdı. Bilinen açık konu (kullanıcı kararı bekliyor): tatil günü
+    # başlangıcında `discipline_periods.precaution_end_date` (AYNEN) o günü tedbirin
+    # 1. iş günü sayar.
     if _active_precaution_exists(case, student_id):
         raise ValueError("Bu öğrenci için dosyada zaten yürürlükte bir tedbir var (md. 175).")
 
@@ -148,6 +203,11 @@ def lift_precaution(
     """
     if precaution.status != PrecautionStatus.ACTIVE:
         raise ValueError("Yalnızca yürürlükteki bir tedbir sonlandırılabilir.")
+    if lifted_on < precaution.start_date:
+        raise ValueError(
+            "Sonlanma tarihi tedbirin başlangıcından önce olamaz "
+            f"(başlangıç {precaution.start_date:%d.%m.%Y})."
+        )
     precaution.status = PrecautionStatus.EXPIRED if expired else PrecautionStatus.LIFTED
     precaution.lifted_on = lifted_on
     precaution.save(update_fields=["status", "lifted_on", "updated_at"])
@@ -168,6 +228,7 @@ def extend_precaution(
     başlar. Haklı ve zorlayıcı sebeplerin devamı + Millî Eğitim Müdürünün onayı
     şarttır (`mne_notified=True` bu uçta onayın alındığını kaydeder).
     """
+    _assert_case_open(precaution.case, "tedbir uzatılamaz")
     if precaution.status != PrecautionStatus.ACTIVE:
         raise ValueError("Yalnızca yürürlükteki bir tedbir uzatılabilir.")
     if not (1 <= additional_days <= discipline_periods.PRECAUTION_MAX_WORKING_DAYS):

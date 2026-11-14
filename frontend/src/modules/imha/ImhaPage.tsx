@@ -527,7 +527,10 @@ function NakilPanel({
                   </thead>
                   <tbody>
                     {detail.warnings.map((w) => (
-                      <tr key={w.warning_id} className="border-t border-outline-variant/50">
+                      <tr
+                        key={`${w.case_id}-${w.warning_id ?? "kayitsiz"}`}
+                        className="border-t border-outline-variant/50"
+                      >
                         <td className="p-3 text-on-surface">{w.case_no}</td>
                         <td className="p-3">{formatDate(w.warning_date)}</td>
                         <td className="p-3">{w.warning_letter_count} kütük satırı</td>

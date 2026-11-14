@@ -460,6 +460,15 @@ def test_sikayetci_uye_kurula_katilamaz() -> None:
     m2 = services.add_committee_member(
         committee, member_type="TEACHER", person_id=PersonnelFactory().pk
     )
+    # Toplantı yalnız kurula sevkli dosyada kaydedilir (saha bulgusu 8/13) — önce sevk.
+    services.add_event(
+        case,
+        CaseStage.DECIDED,
+        date(2026, 5, 19),
+        override=True,
+        override_reason="atla",
+        principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
+    )
     with pytest.raises(ValueError, match="md. 191/2"):
         services.record_meeting(
             case, meeting_date=date(2026, 5, 20), attendee_member_ids=[m1.pk, m2.pk]

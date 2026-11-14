@@ -45,7 +45,8 @@ export interface PurgePreview {
 }
 
 export interface PurgeWarningItem {
-  warning_id: number;
+  // null: dosya yazılı uyarıyla kapanmış ama uyarı kaydı ayrıca açılmamış (md. 157/7-d).
+  warning_id: number | null;
   case_id: number;
   case_no: string;
   student_id: number;

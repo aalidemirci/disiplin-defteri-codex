@@ -11,9 +11,11 @@ from apps.disiplin.selectors.cases import (
     case_student_ids,
     cases_for_student,
     decision_types,
+    decisions_in_md197_review,
     get_attachment,
     get_case,
     get_decision_type,
+    latest_principal_decision_event,
     open_cases_for_close_scan,
 )
 from apps.disiplin.selectors.committee import (
@@ -98,6 +100,7 @@ __all__ = [
     "accused_student_ids",
     "active_precaution",
     "all_cases",
+    "decisions_in_md197_review",
     "appeals_awaiting_forward",
     "appeals_for_decision",
     "behavior_point_for_student",
@@ -157,6 +160,7 @@ __all__ = [
     "honor_general_assembly_members",
     "honor_list_for_year",
     "is_eligible_for_honor",
+    "latest_principal_decision_event",
     "latest_resolved_appeal",
     "list_council_meetings",
     "meetings_for_case",

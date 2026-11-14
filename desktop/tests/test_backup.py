@@ -13,6 +13,7 @@ from desktop import backup as backup_mod
 from desktop.backup import (
     daily_backup,
     encrypt_legacy_backups,
+    list_backups,
     pre_migrate_backup,
     rotate_backups,
 )
@@ -26,9 +27,16 @@ from desktop.backup_crypto import (
 _TEST_KEY = b"k" * 32
 
 
-def _db_olustur(path: Path, satir_sayisi: int = 3) -> None:
+def _db_olustur(path: Path, satir_sayisi: int = 3, *, parola: bool = True) -> None:
+    """Deneme veritabanı.
+
+    `parola=True` uygulama parolası kurulu kurulumu taklit eder (`guvenlik.json` +
+    açık yedek anahtarı); False varsayılan, parolasız kurulumdur.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    ensure_public_config(path.parent, _TEST_KEY)
+    if parola:
+        ensure_public_config(path.parent, _TEST_KEY)
+        (path.parent / "guvenlik.json").write_text("{}", encoding="utf-8")
     conn = sqlite3.connect(path)
     try:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -250,10 +258,11 @@ def test_rotasyon_yabanci_dosyalara_dokunmaz(tmp_path: Path) -> None:
 def test_eski_duz_yedek_sifrelenir_ve_duz_kopya_silinir(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     ensure_public_config(data_dir, _TEST_KEY)
+    (data_dir / "guvenlik.json").write_text("{}", encoding="utf-8")
     yedekler = tmp_path / "backups"
     yedekler.mkdir()
     legacy = yedekler / "gunluk-2026-07-20.sqlite3"
-    _db_olustur(legacy)
+    _db_olustur(legacy, parola=False)
 
     encrypted = encrypt_legacy_backups(yedekler, data_dir)
 
@@ -332,3 +341,200 @@ def test_yedek_dizini_yoksa_olusturulur(tmp_path: Path) -> None:
 
 def test_varsayilan_saklama_suresi_14_gun(tmp_path: Path) -> None:
     assert backup_mod.DEFAULT_KEEP_DAYS == 14
+
+
+# ------------------------------------------------- parolasız (varsayılan) kurulum
+
+
+def test_parolasiz_kurulumda_gunluk_yedek_duz_sqlite_olarak_alinir(tmp_path: Path) -> None:
+    """13.11.2026 denetimi: parola kurulmamışken yedek sessizce ATLANIYORDU."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+    yedekler = tmp_path / "backups"
+
+    sonuc = daily_backup(db, yedekler, today=date(2026, 11, 13))
+
+    assert sonuc == yedekler / "gunluk-2026-11-13.sqlite3"
+    assert sonuc is not None and sonuc.read_bytes().startswith(b"SQLite format 3")
+    assert _satir_sayisi(sonuc) == 3
+    assert list(yedekler.glob("*.tmp")) == []
+
+
+def test_parolasiz_kurulumda_goc_oncesi_yedek_de_alinir(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+
+    sonuc = pre_migrate_backup(
+        db, tmp_path / "backups", "2026.10.0-beta.2", today=date(2026, 11, 13)
+    )
+
+    assert sonuc is not None
+    assert sonuc.name == "pre-migrate-2026.10.0-beta.2-2026-11-13.sqlite3"
+    assert _satir_sayisi(sonuc) == 3
+
+
+def test_parolasiz_yedek_wal_bekleyen_sayfalari_da_icerir(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+    acik = sqlite3.connect(db)
+    try:
+        acik.execute("INSERT INTO ogrenci (ad) VALUES (?)", ("wal",))
+        acik.commit()
+        sonuc = daily_backup(db, tmp_path / "backups", today=date(2026, 11, 13))
+    finally:
+        acik.close()
+
+    assert sonuc is not None and _satir_sayisi(sonuc) == 4
+
+
+def test_parola_kurulu_ama_anahtar_hazir_degilse_duz_yedek_yazilmaz(tmp_path: Path) -> None:
+    """Şifreli alanları olan veri düz yazılmaz; bir açılış beklenir (dosya başlığı)."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+    (tmp_path / "guvenlik.json").write_text("{}", encoding="utf-8")
+    yedekler = tmp_path / "backups"
+
+    assert daily_backup(db, yedekler, today=date(2026, 11, 13)) is None
+    assert not yedekler.exists() or list(yedekler.iterdir()) == []
+
+
+def test_parola_kaldirildiktan_sonra_yedek_eski_anahtarla_sifrelenmez(tmp_path: Path) -> None:
+    """Parola kaldırılınca yedekleme.json diskte kalır; yeni yedekler yine de düzdür."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=True)
+    (tmp_path / "guvenlik.json").unlink()  # disable(): dosya arşive taşınır
+    yedekler = tmp_path / "backups"
+
+    sonuc = daily_backup(db, yedekler, today=date(2026, 11, 13))
+
+    assert sonuc is not None and sonuc.suffix == ".sqlite3"
+    assert encrypt_legacy_backups(yedekler, tmp_path) == []
+    assert sonuc.is_file()
+
+
+def test_ayni_gun_duz_yedek_varken_sifreli_ikinci_yedek_uretilmez(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+    yedekler = tmp_path / "backups"
+    ilk = daily_backup(db, yedekler, today=date(2026, 11, 13))
+    ensure_public_config(tmp_path, _TEST_KEY)
+    (tmp_path / "guvenlik.json").write_text("{}", encoding="utf-8")
+
+    ikinci = daily_backup(db, yedekler, today=date(2026, 11, 13))
+
+    assert ikinci == ilk
+    assert [p.name for p in yedekler.iterdir()] == ["gunluk-2026-11-13.sqlite3"]
+
+
+def test_parola_kurulunca_duz_yedekler_sifrelenir(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+    yedekler = tmp_path / "backups"
+    daily_backup(db, yedekler, today=date(2026, 11, 13))
+    ensure_public_config(tmp_path, _TEST_KEY)
+    (tmp_path / "guvenlik.json").write_text("{}", encoding="utf-8")
+
+    cevrilen = encrypt_legacy_backups(yedekler, tmp_path)
+
+    assert [p.name for p in cevrilen] == ["gunluk-2026-11-13.ddbak"]
+    assert [p.name for p in yedekler.iterdir()] == ["gunluk-2026-11-13.ddbak"]
+    assert _satir_sayisi(cevrilen[0]) == 3
+
+
+def test_rotasyon_duz_yedekleri_de_kapsar(tmp_path: Path) -> None:
+    yedekler = tmp_path / "backups"
+    yedekler.mkdir()
+    eski = yedekler / "gunluk-2026-10-01.sqlite3"
+    yeni = yedekler / "gunluk-2026-11-12.sqlite3"
+    for dosya in (eski, yeni):
+        dosya.write_bytes(b"x")
+    for gun in range(1, 8):
+        (yedekler / f"pre-migrate-1.0-2026-09-0{gun}.sqlite3").write_bytes(b"x")
+
+    silinen = rotate_backups(yedekler, today=date(2026, 11, 13))
+
+    assert eski in silinen and not eski.exists()
+    assert yeni.exists()
+    assert len(list(yedekler.glob("pre-migrate-*.sqlite3"))) == 5
+
+
+def test_yedek_listesi_en_yeniden_eskiye_ve_turuyle_doner(tmp_path: Path) -> None:
+    yedekler = tmp_path / "backups"
+    yedekler.mkdir()
+    (yedekler / "gunluk-2026-11-12.sqlite3").write_bytes(b"12345")
+    (yedekler / "gunluk-2026-11-13.ddbak").write_bytes(b"1")
+    (yedekler / "pre-migrate-2026.10.0-2026-11-01.ddbak").write_bytes(b"1")
+    (yedekler / "elle-kopya.sqlite3").write_bytes(b"1")
+
+    liste = list_backups(yedekler)
+
+    assert [(b.name, b.kind, b.encrypted) for b in liste] == [
+        ("gunluk-2026-11-13.ddbak", "daily", True),
+        ("gunluk-2026-11-12.sqlite3", "daily", False),
+        ("pre-migrate-2026.10.0-2026-11-01.ddbak", "pre_migrate", True),
+    ]
+    assert liste[1].size == 5 and liste[1].taken_on == date(2026, 11, 12)
+    assert list_backups(tmp_path / "yok") == []
+
+
+# ------------------------------------------------ yazma hatası ve artık temizliği
+
+
+def test_gunluk_yedek_yazilamazsa_acilis_durmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Disk dolu / klasör yazılamıyor: günlük yedek atlanır, istisna yayılmaz."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+
+    def dolu(self: Path, data: bytes) -> int:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", dolu)
+
+    assert daily_backup(db, tmp_path / "backups", today=date(2026, 11, 13)) is None
+
+
+def test_goc_oncesi_yedek_yazilamazsa_hata_yayilir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Yedeği alınamayan veri göç ettirilmez: çağıran (main) açılışı durdurur."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, parola=False)
+
+    def dolu(self: Path, data: bytes) -> int:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", dolu)
+
+    with pytest.raises(OSError, match="No space"):
+        pre_migrate_backup(db, tmp_path / "backups", "1.0", today=date(2026, 11, 13))
+
+
+def test_rotasyon_yarim_kalan_tmp_artiklarini_siler(tmp_path: Path) -> None:
+    yedekler = tmp_path / "backups"
+    yedekler.mkdir()
+    artik = yedekler / "gunluk-2026-11-12.sqlite3.tmp"
+    yabanci = yedekler / "notlarim.tmp"
+    artik.write_bytes(b"x")
+    yabanci.write_bytes(b"x")
+
+    rotate_backups(yedekler, today=date(2026, 11, 13))
+
+    assert not artik.exists()
+    assert yabanci.exists()
+
+
+def test_rotasyon_eski_geri_yukleme_oncesi_klasorlerini_siler(tmp_path: Path) -> None:
+    """İçlerinde veritabanının ham kopyası durur; günlük yedeklerle aynı sürede silinir."""
+    yedekler = tmp_path / "backups"
+    eski = yedekler / "geri-yukleme-oncesi-2026-10-01-093000"
+    yeni = yedekler / "geri-yukleme-oncesi-2026-11-10-093000"
+    for klasor in (eski, yeni):
+        klasor.mkdir(parents=True)
+        (klasor / "db.sqlite3").write_bytes(b"x")
+
+    silinen = rotate_backups(yedekler, today=date(2026, 11, 13))
+
+    assert eski in silinen and not eski.exists()
+    assert (yeni / "db.sqlite3").exists()

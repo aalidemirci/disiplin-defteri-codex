@@ -7,9 +7,11 @@ YALINLAŞTIRILDI: rol/yetki fonksiyonları (`can_manage_council_meeting`,
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import Exists, OuterRef, Q, QuerySet
+from django.utils import timezone
 
 from apps.disiplin.discipline_periods import BEHAVIOR_POINT_START
 from apps.disiplin.models import (
@@ -171,6 +173,31 @@ def get_honor_board_member(board: HonorBoard, member_id: int) -> HonorBoardMembe
     return HonorBoardMember.objects.filter(board=board, pk=member_id).first()
 
 
+def assembly_members_in_office(
+    qs: QuerySet[HonorGeneralAssemblyMember], on: date | None = None
+) -> QuerySet[HonorGeneralAssemblyMember]:
+    """Verilen gün (varsayılan bugün) GÖREVDE olan temsilciler (md. 178/1).
+
+    Görevde = görev başlamış ve bitmemiş. "Bitiş tarihi boş" ölçütü yetmez: ileri
+    tarihli temsilci değişikliğinde eski temsilcinin bitişi önceden yazılır ama dönem
+    başına dek görevdedir; yeni temsilcinin bitişi boştur ama henüz göreve başlamamıştır.
+    """
+    day = on or timezone.localdate()
+    return qs.filter(effective_from__lte=day).filter(
+        Q(effective_until__isnull=True) | Q(effective_until__gte=day)
+    )
+
+
+def is_assembly_member_in_office(
+    member: HonorGeneralAssemblyMember, on: date | None = None
+) -> bool:
+    """Temsilci verilen gün (varsayılan bugün) görevde mi — `assembly_members_in_office` eşi."""
+    day = on or timezone.localdate()
+    return member.effective_from <= day and (
+        member.effective_until is None or member.effective_until >= day
+    )
+
+
 def honor_general_assembly_members(
     *, school_year_id: int, active_only: bool = False
 ) -> QuerySet[HonorGeneralAssemblyMember]:
@@ -178,7 +205,7 @@ def honor_general_assembly_members(
         "member_student", "school_year", "replaced_member"
     ).filter(school_year_id=school_year_id)
     if active_only:
-        qs = qs.filter(effective_until__isnull=True)
+        qs = assembly_members_in_office(qs)
     return qs
 
 
@@ -190,8 +217,6 @@ def get_honor_general_assembly_member(
 
 def honor_compliance_status(school_year_id: int) -> dict[str, object]:
     """Dönemlik genel kurul ve aylık Onur Kurulu toplantı uygunluğu."""
-
-    from datetime import date
 
     from apps.okul.models import SchoolTerm
 

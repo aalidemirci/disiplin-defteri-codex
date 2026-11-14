@@ -12,7 +12,13 @@ function hataMesaji(error: unknown): string {
 }
 
 function yedekDosyaAdi(): string {
-  const timestamp = new Date().toISOString().replace("T", "-").slice(0, 19).replace(/:/g, "");
+  // Yerel saat: `toISOString()` UTC verir, gece 00:00-02:59 arasında dosya adı bir
+  // gün geriye kayardı (CLAUDE.md §7.1).
+  const d = new Date();
+  const iki = (n: number) => String(n).padStart(2, "0");
+  const timestamp =
+    `${d.getFullYear()}-${iki(d.getMonth() + 1)}-${iki(d.getDate())}-` +
+    `${iki(d.getHours())}${iki(d.getMinutes())}${iki(d.getSeconds())}`;
   return `disiplin-defteri-yedek-${timestamp}.ddbak`;
 }
 

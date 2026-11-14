@@ -3,7 +3,10 @@
 MEB örneği yoktur; md. 169/1 ("onay yetkisi okul müdüründe bulunanların dışındaki disiplin
 cezalarının onaylanmasıyla ... ilgili dosya ve yazılar millî eğitim müdürlükleri aracılığıyla
 ilgili disiplin kurullarına gönderilir") ve 169/2-b/c metninden türetildi. Onay mercii
-karardan (approval_authority): okul değiştirme → ilçe, örgün eğitim dışı → il kurulu.{% endcomment %}
+karardan (approval_authority): okul değiştirme → ilçe, örgün eğitim dışı → il kurulu.
+Saha denetimi 14.11.2026: gerekçe (`penalty_detail`) boşsa köşeli yer tutucu değil noktalı
+satır basılır, elle doldurulur (çok cümleli dosya özeti cümle ortasına gömülmez);
+muhatap satırı ilçe adı kayıtlıysa Türkçe büyük harfle dolar (`district_upper`).{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN CEZASININ ONAYA SUNULMASI</div>
 <div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 169/1-2</div>
@@ -22,14 +25,14 @@ karardan (approval_authority): okul değiştirme → ilçe, örgün eğitim dı�
 </table>
 
 <p class="para" style="margin-top: 14pt; text-align: center;">
-  <strong>……………… İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
+  <strong>{{ district_upper|default:'………………' }} İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong><br>
   <span class="muted" style="font-style: normal;">({% if to_provincial %}İl Öğrenci Disiplin Kuruluna iletilmek üzere{% else %}İlçe Öğrenci Disiplin Kurulu{% endif %})</span>
 </p>
 
 <p class="para">
   Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
   <strong>{{ student.full_name }}</strong> hakkında,
-  <em>{{ decision.penalty_detail|default:'[disipline konu olan olayın kısa özeti]' }}</em>
+  <em>{{ decision.penalty_detail|default:'……………………………………' }}</em>
   nedeniyle Okul Öğrenci Ödül ve Disiplin Kurulunca İlgi karar ile
   "<strong>{{ decision.get_penalty_type_display }}</strong>" cezası ({{ statute_label }}) verilmiştir.
 </p>

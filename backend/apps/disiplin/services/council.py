@@ -15,6 +15,7 @@ from datetime import date
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.disiplin.models import (
     AgendaItemOutcome,
@@ -28,11 +29,16 @@ from apps.disiplin.models import (
     CouncilType,
     DisciplineCase,
     DisciplineCommittee,
+    DisciplineCommitteeMember,
+    HonorBoard,
     HonorCertificate,
     HonorCertificateStatus,
     HonorMeetingKind,
 )
+from apps.disiplin.services.common import assert_not_future
 from apps.okul import selectors as okul_selectors
+from apps.okul.models import SchoolYear
+from apps.okul.normalize import _ascii_upper
 
 
 def _resolve_case_for_minutes(discipline_case_id: int) -> DisciplineCase:
@@ -53,8 +59,86 @@ def _resolve_case_for_minutes(discipline_case_id: int) -> DisciplineCase:
     return case
 
 
-def _validate_attendees(attendees: list[dict[str, Any]]) -> None:
-    """Katılımcı listesini doğrular: ≥1 oy hakkı olan üye + tam 1 başkan (md. 188/191)."""
+def _name_key(name: object) -> str:
+    """Ad eşleştirme anahtarı: boşluk + Türkçe harf farkına duyarsız (§7.2 — yalnız eşleştirme)."""
+    return _ascii_upper(" ".join(str(name or "").split()))
+
+
+# Başkan atfı kurula göre: ÖDK başkanı md. 188, Onur Kurulu başkanı md. 182.
+_CHAIR_ARTICLE: dict[str, str] = {CouncilType.DISCIPLINE: "md. 188", CouncilType.HONOR: "md. 182"}
+
+_Roster = list[tuple[int | None, int | None, str]]
+
+
+def _committee_roster(committee: DisciplineCommittee, *, as_of: date | None = None) -> _Roster:
+    """Kurulun oy hakkı olabilecek kişileri: başkan + asıl + yedek üyeler.
+
+    Her satır (personel id, öğrenci id, ad anahtarı). Yedek üye arayüzde elle
+    (FK'sız) yazıldığı için eşleştirme ada da bakar.
+
+    `as_of` (toplantı tarihi) verilirse kuruldan SONRADAN çıkarılmış (soft-delete)
+    üyeler de listeye girer: toplantı günü üye olan kişi sonradan çıkarılsa bile o
+    toplantıda oy hakkı vardı (md. 191/1) — yoksa üyelik değişince geçmiş toplantı
+    yeter sayısız görünürdü. Toplantı tarihinden ÖNCE çıkarılmış üye sayılmaz.
+    `as_of=None`: yalnız canlı üyeler (yeni toplantı kaydı).
+    """
+    roster: _Roster = [(committee.chair_id, None, _name_key(committee.chair.full_name))]
+    # Doğrudan sorgu: `committee.members.all()` prefetch önbelleğinden bayat liste verebilir
+    # (§7.5 — üye çıkarıldıktan sonra aynı nesneyle sorulduğunda).
+    members = list(DisciplineCommitteeMember.objects.filter(committee=committee))
+    if as_of is not None:
+        # Canlı üyeler önce: aynı kişi çıkarılıp yeniden eklendiyse canlı satırla eşleşir.
+        members += [
+            removed
+            for removed in DisciplineCommitteeMember.all_objects.filter(
+                committee=committee, deleted_at__isnull=False
+            ).order_by("deleted_at", "id")
+            if timezone.localtime(removed.deleted_at).date() >= as_of
+        ]
+    for member in members:
+        roster.append(
+            (member.member_user_id, member.member_student_id, _name_key(member.member_name))
+        )
+    return roster
+
+
+def _roster_index(
+    roster: _Roster, *, user_id: int | None, student_id: int | None, name: object
+) -> int | None:
+    """Katılımcının kurul listesindeki sırası — kurul üyesi değilse None."""
+    for index, (r_user, r_student, _r_name) in enumerate(roster):
+        if user_id is not None and r_user == user_id:
+            return index
+        if student_id is not None and r_student == student_id:
+            return index
+    key = _name_key(name)
+    for index, (_r_user, _r_student, r_name) in enumerate(roster):
+        if key and r_name == key:
+            return index
+    return None
+
+
+def _validate_attendees(
+    attendees: list[dict[str, Any]],
+    *,
+    council_type: str = CouncilType.DISCIPLINE,
+    committee: DisciplineCommittee | None = None,
+    as_of: date | None = None,
+    legacy_names: frozenset[str] = frozenset(),
+) -> None:
+    """Katılımcı listesini doğrular: ≥1 oy hakkı olan üye + tam 1 başkan + tekillik.
+
+    `as_of` / `legacy_names` yalnız mevcut toplantının DÜZELTİLMESİNDE verilir: üyelik
+    toplantı tarihindeki listeye göre aranır (`_committee_roster`), ve denetim gelmeden
+    önce kaydedilmiş, kurul listesiyle adı eşleşmeyen oy hakkı satırı (ör. unvanlı
+    yazım) aynen korunuyorsa düzeltmeyi ENGELLEMEZ — o satır yeter sayıya zaten girmez
+    (`meeting_quorum`). Yeni yazılan kurul dışı ad her durumda reddedilir.
+
+    Ödül ve Disiplin Kurulunda (kurul tanımlıysa) oy hakkı olan her katılımcı kurulun
+    başkanı, asıl ya da yedek üyesi olmalıdır: md. 191/1 "üyelerin dışında toplantıya
+    çağrılanlar oy kullanamazlar". Oy hakkı olan katılımcı sayısı kurul tam sayısını
+    aşamaz (yedek yalnız katılamayan asıl üyenin yerine çağrılır — md. 186, 191/2).
+    """
     if not attendees:
         raise ValueError("En az bir katılımcı eklenmelidir.")
     voting = [a for a in attendees if a.get("attendee_role") == CouncilAttendeeRole.VOTING_MEMBER]
@@ -62,12 +146,108 @@ def _validate_attendees(attendees: list[dict[str, Any]]) -> None:
         raise ValueError("En az bir oy hakkı olan üye eklenmelidir (md. 191).")
     chairs = [a for a in attendees if a.get("is_chair")]
     if len(chairs) != 1:
-        raise ValueError("Tam olarak bir başkan işaretlenmelidir (md. 188).")
+        article = _CHAIR_ARTICLE.get(council_type, "md. 188")
+        raise ValueError(f"Tam olarak bir başkan işaretlenmelidir ({article}).")
     if chairs[0].get("attendee_role") != CouncilAttendeeRole.VOTING_MEMBER:
         raise ValueError("Başkan oy hakkı olan üye olmalıdır.")
     for a in attendees:
         if not str(a.get("person_name", "")).strip():
             raise ValueError("Her katılımcının ad-soyadı zorunludur (tutanak bütünlüğü).")
+
+    # Aynı kişi iki satır olamaz (yinelenen satır eksik yeter sayıyı gizler).
+    # Kayıt bağı (FK) olan iki ayrı kişi adaş olabilir; ad çakışması yalnız en az biri
+    # elle yazılmışsa yineleme sayılır.
+    seen_ids: set[tuple[str, object]] = set()
+    seen_names: dict[str, bool] = {}
+    for a in attendees:
+        name = str(a["person_name"]).strip()
+        ids: list[tuple[str, object]] = []
+        if a.get("member_user_id") is not None:
+            ids.append(("personel", a["member_user_id"]))
+        if a.get("member_student_id") is not None:
+            ids.append(("ogrenci", a["member_student_id"]))
+        key = _name_key(name)
+        same_name = key in seen_names and not (ids and seen_names[key])
+        if same_name or any(i in seen_ids for i in ids):
+            raise ValueError(
+                f"{name} katılımcı listesinde birden çok kez yazılmış; her kişi bir kez yazılır."
+            )
+        seen_ids.update(ids)
+        seen_names[key] = bool(ids) and seen_names.get(key, True)
+
+    if council_type != CouncilType.DISCIPLINE or committee is None:
+        return
+    roster = _committee_roster(committee, as_of=as_of)
+    matched: set[int] = set()
+    for a in voting:
+        name = str(a["person_name"]).strip()
+        index = _roster_index(
+            roster,
+            user_id=a.get("member_user_id"),
+            student_id=a.get("member_student_id"),
+            name=name,
+        )
+        if index is None and _name_key(name) in legacy_names:
+            continue  # eski kayıttan korunan satır: reddedilmez, yeter sayıya da girmez
+        if index is None:
+            raise ValueError(
+                f"{name} kurul üyesi değil; oy hakkı olan üye olarak yazılamaz (md. 191/1). "
+                "Görüşüne başvurulan kişiyse rolünü 'davetli' seçin; yedek üyeyse önce "
+                "Ödül ve Disiplin Kuruluna yedek üye olarak kaydedin."
+            )
+        if index in matched:
+            raise ValueError(
+                f"{name} katılımcı listesinde birden çok kez yazılmış; her kişi bir kez yazılır."
+            )
+        matched.add(index)
+    full = 1 + committee.members.filter(is_substitute=False).count()
+    if len(matched) > full:
+        raise ValueError(
+            f"Oy hakkı olan katılımcı sayısı ({len(matched)}) kurulun üye tam sayısını "
+            f"({full}) aşamaz; yedek üye yalnız katılamayan asıl üyenin yerine çağrılır "
+            "(md. 186, 191/2)."
+        )
+
+
+def _validate_meeting_date(
+    *, council_type: str, minutes_type: str, year: Any, meeting_date: date
+) -> None:
+    """Ödül ve Disiplin Kurulu toplantı tarihi toplantının ders yılına SAYILAN pencerededir.
+
+    Pencere `selectors.decisions_in_school_year` ile aynıdır: yıl başlangıcı ≤ tarih <
+    bir sonraki ders yılının başlangıcı (sonraki yıl yoksa üst sınır yok). Ders yılı
+    BİTİŞİ üst sınır DEĞİLDİR: haziran sonu / yaz / eylül başında toplanan kurulun
+    kararı biten yıla sayılır (md. 166, 170) ve karar defterine yazılabilmelidir.
+
+    (Onur Kurulu toplantısı zaten dönem tarihine bağlanır.) Dosya görüşme tutanağı
+    alınmış kararları yazar; ileri tarihli olamaz. Genel toplantı ileri tarihe
+    planlanabilir — kararı toplantı günü gelmeden verilemez (`decide_agenda_item`).
+    """
+    if council_type != CouncilType.DISCIPLINE:
+        return
+    if meeting_date < year.start_date:
+        raise ValueError(
+            f"Toplantı tarihi {year.name} ders yılının başlangıcından "
+            f"({year.start_date:%d.%m.%Y}) önce olamaz; tarihi ya da ders yılını düzeltin."
+        )
+    following = (
+        SchoolYear.objects.filter(start_date__gt=year.start_date).order_by("start_date").first()
+    )
+    if following is not None and meeting_date >= following.start_date:
+        raise ValueError(
+            f"Toplantı tarihi {following.name} ders yılına düşüyor "
+            f"({following.start_date:%d.%m.%Y} ve sonrası); {year.name} ders yılı toplantısı "
+            "olarak kaydedilemez — tarihi ya da ders yılını düzeltin."
+        )
+    if minutes_type == CouncilMinutesType.CASE_REVIEW:
+        assert_not_future(
+            meeting_date,
+            "Toplantı tarihi",
+            message=(
+                "Dosya görüşme tutanağı ileri bir tarihle düzenlenemez; toplantının yapıldığı "
+                "tarihi girin."
+            ),
+        )
 
 
 def _create_attendees(meeting: CouncilMeeting, attendees: list[dict[str, Any]]) -> None:
@@ -149,7 +329,11 @@ def create_council_meeting(
         from apps.okul.services.terms import require_term_for_date
 
         school_term = require_term_for_date(year, meeting_date)
-    _validate_attendees(attendees)
+    _validate_meeting_date(
+        council_type=council_type, minutes_type=minutes_type, year=year, meeting_date=meeting_date
+    )
+    discipline_committee, honor_board = _resolve_source(council_type, honor_meeting_kind)
+    _validate_attendees(attendees, council_type=council_type, committee=discipline_committee)
 
     # Defter sırası: (yıl, tür) için en büyük no + 1 (silinmiş dahil; tekrar etmesin).
     last = (
@@ -159,8 +343,6 @@ def create_council_meeting(
         .first()
     )
     next_no = (last.meeting_no + 1) if last else 1
-
-    discipline_committee, honor_board = _resolve_source(council_type, honor_meeting_kind)
 
     meeting: CouncilMeeting = CouncilMeeting.objects.create(
         school_year=year,
@@ -212,6 +394,13 @@ def update_council_meeting(
             "Karara bağlanmış gündem maddesi olan toplantının tarihi değiştirilemez; önce "
             "kararları geri alın."
         )
+    if meeting_date is not None and meeting_date != meeting.meeting_date:
+        _validate_meeting_date(
+            council_type=meeting.council_type,
+            minutes_type=meeting.minutes_type,
+            year=meeting.school_year,
+            meeting_date=meeting_date,
+        )
     if meeting_date is not None:
         if meeting.council_type == CouncilType.HONOR:
             from apps.okul.services.terms import require_term_for_date
@@ -239,7 +428,18 @@ def update_council_meeting(
         meeting.save(update_fields=fields)
 
     if attendees is not None:
-        _validate_attendees(attendees)
+        _validate_attendees(
+            attendees,
+            council_type=meeting.council_type,
+            committee=meeting_committee(meeting),
+            as_of=meeting.meeting_date,
+            legacy_names=frozenset(
+                _name_key(name)
+                for name in meeting.attendees.filter(
+                    attendee_role=CouncilAttendeeRole.VOTING_MEMBER
+                ).values_list("person_name", flat=True)
+            ),
+        )
         for old in meeting.attendees.all():
             old.delete()
         _create_attendees(meeting, attendees)
@@ -309,8 +509,15 @@ def meeting_committee(meeting: CouncilMeeting) -> DisciplineCommittee | None:
 def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
     """Ödül ve Disiplin Kurulu toplantısının yeter sayı durumu (md. 191/1).
 
-    Oy hakkı olan katılımcılar sayılır (başkan ve yerine çağrılan yedekler dahil;
-    md. 185/6 davetlileri hariç). Onur Kurulu için yönetmelikte yeter sayı yoktur → None.
+    Oy hakkı olan katılımcılardan yalnız KURUL ÜYESİ olanlar (başkan, asıl ve yerine
+    çağrılan yedekler) ve her kişi bir kez sayılır: md. 191/1 "üyelerin salt çoğunluğu";
+    üye dışı çağrılanlar oy kullanamaz. md. 185/6 davetlileri hariç. Onur Kurulu için
+    yönetmelikte yeter sayı yoktur → None.
+
+    Üyelik TOPLANTI TARİHİNDEKİ listeye göre aranır: toplantıdan sonra kuruldan çıkarılan
+    üye o toplantıda sayılmaya devam eder (üyelik değişince geçmiş toplantının yeter
+    sayısı değişmez). Bilinen sınır: BAŞKAN değişikliğinin geçmişi tutulmaz (şema);
+    eski başkan kurul üyesi olarak kalmadıysa geçmiş toplantıda sayılmaz.
     """
     from apps.disiplin.services.committee import committee_quorum
 
@@ -318,8 +525,18 @@ def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
     if committee is None:
         return None
     # `.filter()` önbelleği (prefetch) atlar — katılımcı değişikliğinden hemen sonra da doğru.
-    present = meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER).count()
-    return committee_quorum(committee, present)
+    roster = _committee_roster(committee, as_of=meeting.meeting_date)
+    matched: set[int] = set()
+    for attendee in meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER):
+        index = _roster_index(
+            roster,
+            user_id=attendee.member_user_id,
+            student_id=attendee.member_student_id,
+            name=attendee.person_name,
+        )
+        if index is not None:
+            matched.add(index)
+    return committee_quorum(committee, len(matched))
 
 
 def _require_quorum(meeting: CouncilMeeting) -> None:
@@ -332,8 +549,19 @@ def _require_quorum(meeting: CouncilMeeting) -> None:
     if not quorum["ok"]:
         raise ValueError(
             f"Toplantı yeter sayısı yok: kurul {quorum['full']} kişi, en az "
-            f"{quorum['required']} oy hakkı olan üye katılmalı; bu toplantıda "
+            f"{quorum['required']} oy hakkı olan kurul üyesi katılmalı; bu toplantıda "
             f"{quorum['present']} (md. 191/1)."
+        )
+
+
+def _require_honor_board(meeting: CouncilMeeting) -> None:
+    """Onur Kurulu kararı için o ders yılının Onur Kurulu tanımlı olmalıdır (md. 180, 183/b)."""
+    if meeting.honor_board_id is not None:
+        return
+    if not HonorBoard.objects.filter(school_year_id=meeting.school_year_id).exists():
+        raise ValueError(
+            "Bu ders yılı için Onur Kurulu tanımlı değil; uygun görüş kararı verilemez. Önce "
+            "Onur Kurulu sayfasından kurulu (başkan ve üyeler) oluşturun (md. 180, 182)."
         )
 
 
@@ -425,7 +653,8 @@ def decide_agenda_item(
     Onur Kurulu: olumlu = uygun görüş (md. 183/b), olumsuz = uygun görmeme.
     Ödül ve Disiplin Kurulu: olumlu = kabul (md. 161/1), olumsuz = ret; toplantı
     yeter sayısı (md. 191/1) yoksa karar verilemez. Olumsuz kararda gerekçe
-    zorunludur (md. 196/1, 206/2). Karar tarihi toplantı tarihidir.
+    zorunludur (md. 196/1, 206/2). Karar tarihi toplantı tarihidir; tarihi gelmemiş
+    (ileri tarihe planlanmış) toplantıda karar verilemez.
     """
     from apps.disiplin.services.honors import (
         apply_committee_decision,
@@ -444,12 +673,22 @@ def decide_agenda_item(
     if certificate is None:
         raise ValueError("Gündem maddesine bağlı teklif bulunamadı.")
     meeting = item.meeting
+    assert_not_future(
+        meeting.meeting_date,
+        "Toplantı tarihi",
+        message=(
+            f"Toplantı tarihi ({meeting.meeting_date:%d.%m.%Y}) henüz gelmedi; yapılmamış "
+            "toplantının kararı kaydedilemez. Toplantı yapıldıysa önce toplantı tarihini "
+            "düzeltin."
+        ),
+    )
     favorable = outcome == AgendaItemOutcome.FAVORABLE
     reason = decision_text.strip()
     if _agenda_stage(meeting) == _STAGE_COMMITTEE:
         _require_quorum(meeting)
         apply_committee_decision(certificate, meeting=meeting, favorable=favorable, reason=reason)
     else:
+        _require_honor_board(meeting)
         apply_honor_board_decision(certificate, meeting=meeting, favorable=favorable, reason=reason)
     item.outcome = outcome
     item.decision_text = reason

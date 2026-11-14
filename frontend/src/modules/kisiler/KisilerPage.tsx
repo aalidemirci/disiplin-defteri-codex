@@ -411,7 +411,12 @@ function OgrenciFormDialog({
   const remove = async () => {
     if (!student) return;
     const ok = await confirm({
-      message: `'${student.full_name}' sicilden silinsin mi? Kayıt geri alınabilir biçimde (soft delete) saklanır.`,
+      // Silinen kayıt listelerden kalkar ve programdan GERİ GETİRİLEMEZ (geri yükleme
+      // ekranı yok). Disiplin kaydı olan öğrenciyi sunucu reddeder ("Ayrıldı/Mezun" yapın).
+      message:
+        `'${student.full_name}' sicilden silinsin mi? Silinen öğrenci listelerden kalkar ve ` +
+        "programdan geri getirilemez. Okuldan ayrılan öğrenciyi silmeyin; durumunu " +
+        '"Ayrıldı" ya da "Mezun" yapın. Disiplin kaydı olan öğrenci silinemez.',
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -758,7 +763,9 @@ function PersonelFormDialog({
   const remove = async () => {
     if (!personnel) return;
     const ok = await confirm({
-      message: `'${personnel.full_name}' sicilden silinsin mi? Kayıt geri alınabilir biçimde (soft delete) saklanır.`,
+      message:
+        `'${personnel.full_name}' sicilden silinsin mi? Silinen personel listelerden kalkar ` +
+        "ve programdan geri getirilemez.",
       confirmLabel: "Sil",
     });
     if (!ok) return;

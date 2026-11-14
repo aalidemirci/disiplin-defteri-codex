@@ -25,6 +25,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Stepper from "../../ui/Stepper";
 import type { StepperItem } from "../../ui/Stepper";
 import TextField from "../../ui/TextField";
+import YedektenGeriYuklemeAcilir from "../guvenlik/YedektenGeriYuklemeAcilir";
 import { okulApi } from "../okul/api";
 import type { HolidaySeedResult, SchoolYear, SetupStatus } from "../okul/api";
 
@@ -230,6 +231,12 @@ export default function KurulumPage() {
             Kurulum daha önce tamamlanmıştı. Bilgileri buradan gözden geçirip güncelleyebilirsiniz.
           </span>
         </div>
+      )}
+
+      {/* Boş kurulum / yeni bilgisayar: sihirbazı doldurmak yerine yedekten dönülebilir.
+          Bozuk veritabanı iletisi (desktop/integrity.py) kullanıcıyı buraya yönlendirir. */}
+      {status && !status.setup_completed && (
+        <YedektenGeriYuklemeAcilir etiket="Elinizde yedek mi var? Yedekten geri yükleyin" />
       )}
 
       <Stepper items={stepperItems} ariaLabel="Kurulum adımları" />

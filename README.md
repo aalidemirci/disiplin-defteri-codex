@@ -68,8 +68,13 @@ kullanılmadan önce uygulama parolası kurulmalı ve uygulamanın kilidi açık
 
 Program herhangi bir bulut hesabına bağlanmaz ve otomatik yükleme yapmaz.
 Kullanıcı indirdiği dosyayı USB belleğe, NAS'a veya tercih ettiği bulut klasörüne
-kendi yerel imkânlarıyla kopyalar. Uygulamanın kurtarma amaçlı yerel günlük ve
-güncelleme öncesi yedekleri de aynı şifreli `.ddbak` biçimindedir.
+kendi yerel imkânlarıyla kopyalar.
+
+Programın kendi aldığı yerel yedekler (her açılışta günlük, güncellemeden önce
+ayrıca) uygulama parolası kuruluysa aynı şifreli `.ddbak` biçimindedir; parola
+kurulu değilse veritabanının kendisi gibi düz `.sqlite3` dosyasıdır. Yedekten geri
+yükleme Ayarlar → Güvenlik ekranından (boş kurulumda kurulum sihirbazından)
+yapılır; ayrıntı `docs/kurulum.md` §5.1.
 
 ## Durum
 

@@ -247,12 +247,20 @@ def test_dk1_tutanak_sonrasi_eklenen_ogrenci_imha_kapsamini_bozar() -> None:
         record = purge_service.issue_record(
             student_id=giden.pk, transfer_date=date(2026, 3, 30), confirmed=True
         )
+        # Saha testi 14.11.2026: kapalı dosyada taraf listesi serviste kilitli. Jetonun
+        # öğrenci kümesi denetimi son savunma hattıdır; değişiklik (dosya yeniden açılıp
+        # kapatılmış gibi) dosya geçici olarak açılarak kurulur.
+        closed_at = case.closed_at
+        DisciplineCase.objects.filter(pk=case.pk).update(closed_at=None)
+        case.refresh_from_db()
         services.add_participant(
             case,
             role=ParticipantRole.ACCUSED,
             person_type=ParticipantPersonType.STUDENT,
             person_id=kalan.pk,
         )
+        DisciplineCase.objects.filter(pk=case.pk).update(closed_at=closed_at)
+        case.refresh_from_db()
         services.issue_warning(
             case, student_id=kalan.pk, warning_date=date(2026, 3, 31), summary="Dikkat."
         )

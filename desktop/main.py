@@ -3,9 +3,11 @@
     1. Veri dizinleri (exe DIŞINDA) + günlük yapılandırması
     2. Tek-instance kilidi ................. ikinci kopya pencere AÇMAZ
     3. Oturum belirteci ..................... ayarlar okunmadan ÖNCE üretilir
-    4. Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
+    4. Bekleyen geri yükleme ................ arayüzden seçilen yedek yerine konur
+       Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
     5. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
-    6. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`
+    6. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; parola kuruluysa
+       şifreli `.ddbak`, değilse düz `.sqlite3` (desktop/backup.py)
     7. Göç öncesi yedek + `migrate --no-input`
     8. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
     9. Pencere (pywebview) — `--autotest` kipinde AÇILMAZ
@@ -39,7 +41,13 @@ from desktop.django_bootstrap import (
     prepare_django,
     run_migrations,
 )
-from desktop.errors import EXIT_OK, EXIT_UNEXPECTED, StartupError
+from desktop.errors import (
+    EXIT_OK,
+    EXIT_UNEXPECTED,
+    MigrationError,
+    RestoreFailedError,
+    StartupError,
+)
 from desktop.integrity import check_database_integrity
 from desktop.lock import SingleInstanceLock
 from desktop.logging_setup import configure_logging
@@ -50,6 +58,7 @@ from desktop.paths import (
     resolve_app_paths,
     resolve_backend_dir,
 )
+from desktop.restore import PENDING_DB_NAME, apply_pending_restore
 from desktop.server import BackgroundServer, check_health
 from desktop.session_guard import ENV_TOKEN, generate_session_token, window_url
 from desktop.version import (
@@ -95,7 +104,24 @@ def resolve_paths(args: argparse.Namespace) -> AppPaths:
 
 
 def prepare_data(paths: AppPaths, app_version: str) -> None:
-    """Veriyi açılışa hazırlar: sürüm → bütünlük → yedek → göç → damga."""
+    """Veriyi açılışa hazırlar: geri yükleme → sürüm → bütünlük → yedek → göç → damga."""
+    # Arayüzden bekletilen yedek, hiçbir bağlantı açılmadan ÖNCE yerine konur
+    # (desktop/restore.py); sonraki adımlar geri yüklenen veriyi denetler ve göç ettirir.
+    try:
+        apply_pending_restore(paths.db_path, paths.backups)
+    except OSError as exc:
+        # Dosya kilitli/taşınamıyor: veri eski hâliyle yerinde (restore.py geri sarar).
+        logger.error("Bekleyen geri yükleme uygulanamadı (%s).", exc.__class__.__name__)
+        raise RestoreFailedError(
+            "Hazırlanan yedek yerine konamadı; kayıtlarınız değişmedi.",
+            hint=(
+                "Programı birkaç saniye sonra yeniden açmayı deneyin (bir dosya başka bir "
+                "program tarafından kullanılıyor olabilir). Sorun sürerse ve geri yüklemeden "
+                f"vazgeçmek isterseniz veri klasöründeki '{PENDING_DB_NAME}' dosyasını silin; "
+                "program o zaman şu anki kayıtlarla açılır.\n"
+                f"Veri klasörü: {paths.data}"
+            ),
+        ) from exc
     ensure_stamp_compatible(paths.version_stamp_path, app_version)
     check_database_integrity(paths.db_path, backup_dir=paths.backups)
 
@@ -105,7 +131,18 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
 
     prepare_django(resolve_backend_dir(), paths.data)
     if has_pending_migrations():
-        pre_migrate_backup(paths.db_path, paths.backups, app_version)
+        try:
+            pre_migrate_backup(paths.db_path, paths.backups, app_version)
+        except OSError as exc:
+            # Yedeği alınamayan veriyi göç ettirmek geri dönüşsüzdür; açılış durur.
+            logger.error("Güncelleme öncesi yedek yazılamadı (%s).", exc.__class__.__name__)
+            raise MigrationError(
+                "Güncelleme öncesi yedek alınamadığı için veritabanı güncellenmedi.",
+                hint=(
+                    "Disk dolu olabilir ya da yedekler klasörüne yazılamıyor. Yer açıp "
+                    f"programı yeniden açın.\nYedekler klasörü: {paths.backups}"
+                ),
+            ) from exc
     run_migrations()
     write_version_stamp(paths.version_stamp_path, app_version)
 

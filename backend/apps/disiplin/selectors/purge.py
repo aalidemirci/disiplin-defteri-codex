@@ -77,9 +77,14 @@ class PurgeCaseItem:
 
 @dataclass(frozen=True)
 class PurgeWarningItem:
-    """Tekil (nakil) imhada bir müdür uyarısı satırı."""
+    """Tekil (nakil) imhada bir müdür uyarısı izi.
 
-    warning_id: int
+    `warning_id` None ise dosya yazılı uyarıyla kapanmış ama uyarı KAYDI ayrıca
+    açılmamıştır (kayıt isteğe bağlı bir adımdır); iz yine md. 157/7-d kapsamındadır.
+    O durumda `warning_date` müdürün yazılı uyarı kararının tarihidir.
+    """
+
+    warning_id: int | None
     case_id: int
     case_no: str
     student_id: int
@@ -289,8 +294,47 @@ def warning_letter_documents(
     return list(qs)
 
 
+def warning_decision_date(case: DisciplineCase) -> date:
+    """Dosyanın (son) müdür kararı tarihi — uyarı kaydı açılmamış dosyada kayıt tarihi."""
+    event = (
+        DisciplineEvent.all_objects.filter(case_id=case.pk, stage=CaseStage.DECIDED)
+        .order_by("-event_date", "-recorded_at")
+        .first()
+    )
+    return event.event_date if event is not None else case.petition_date
+
+
+def _unrecorded_warning_cases(student_id: int) -> list[tuple[DisciplineCase, bool, int]]:
+    """Öğrencinin, uyarı KAYDI açılmadan yazılı uyarıyla kapanmış imha kapsamındaki dosyaları.
+
+    Program bu dosyayı zaten "uyarı" sayar (`student_discipline_history`: yazılı
+    uyarıyla kapanan dosya uyarı kaydı açılmadan da md. 157/7-e sayılır); nakil imhası
+    da aynı ölçütü kullanır. (dosya, tek_öğrencili_mi, uyarı_belgesi_sayısı) döner.
+    Çok öğrencili dosyada bu öğrenciye ait uyarı belgesi de yoksa silinecek iz yoktur.
+    """
+    result: list[tuple[DisciplineCase, bool, int]] = []
+    cases = (
+        DisciplineCase.objects.filter(case_students__student_id=student_id)
+        .distinct()
+        .order_by("case_no")
+    )
+    for case in cases:
+        if DisciplineWarning.objects.filter(case_id=case.pk, student_id=student_id).exists():
+            continue  # uyarı kaydı var — kayıt satırı olarak listelenir
+        if not is_purgeable_case(case):
+            continue
+        only_student = list(case.case_students.values_list("student_id", flat=True)) == [student_id]
+        letters = len(warning_letter_documents(case_id=case.pk, student_id=student_id))
+        if only_student or letters:
+            result.append((case, only_student, letters))
+    return result
+
+
 def student_warning_items(student_id: int) -> list[PurgeWarningItem]:
     """Bir öğrencinin imha edilebilir müdür uyarısı izleri (nakil senaryosu).
+
+    İz = uyarı kayıtları ∪ uyarı kaydı açılmadan yazılı uyarıyla kapanmış dosyalar
+    (md. 157/7-d "diğer belgeler" uyarı kaydına bağlı değildir).
 
     Uyarı hangi dosyada olursa olsun listelenir; ANCAK dosyası Dal B ise (kurul
     kararlı) o dosyanın izlerine DOKUNULMAZ — bu yüzden Dal B uyarıları
@@ -322,6 +366,26 @@ def student_warning_items(student_id: int) -> list[PurgeWarningItem]:
                 whole_case_purgeable=only_student,
             )
         )
+    if items:
+        student_name = items[0].student_name
+    else:
+        from apps.okul.models import Student
+
+        student = Student.all_objects.filter(pk=student_id).first()
+        student_name = (student.full_name if student is not None else "") or f"#{student_id}"
+    for case, only_student, letters in _unrecorded_warning_cases(student_id):
+        items.append(
+            PurgeWarningItem(
+                warning_id=None,
+                case_id=case.pk,
+                case_no=case.case_no,
+                student_id=student_id,
+                student_name=student_name,
+                warning_date=warning_decision_date(case),
+                warning_letter_count=letters,
+                whole_case_purgeable=only_student,
+            )
+        )
     return items
 
 
@@ -343,5 +407,31 @@ def students_with_purgeable_warnings() -> list[PurgeStudentItem]:
             class_label=student.class_label,
             status=student.status,
             warning_count=(current.warning_count if current else 0) + 1,
+        )
+    # Uyarı kaydı açılmadan yazılı uyarıyla kapanmış dosyaların öğrencileri de listede
+    # olmalı — yoksa nakil eden öğrenci tekil imha ekranında hiç görünmez (md. 157/7-d).
+    from apps.disiplin.models import DisciplineCaseStudent
+
+    links = (
+        DisciplineCaseStudent.objects.filter(case_id__in=case_ids)
+        .select_related("student")
+        .order_by("student__first_name", "student__last_name")
+    )
+    seen: set[int] = set()
+    for link in links:
+        student = link.student
+        if student.pk in seen:
+            continue
+        seen.add(student.pk)
+        extra = len(_unrecorded_warning_cases(student.pk))
+        if not extra:
+            continue
+        current = counts.get(student.pk)
+        counts[student.pk] = PurgeStudentItem(
+            student_id=student.pk,
+            full_name=student.full_name or f"#{student.pk}",
+            class_label=student.class_label,
+            status=student.status,
+            warning_count=(current.warning_count if current else 0) + extra,
         )
     return list(counts.values())

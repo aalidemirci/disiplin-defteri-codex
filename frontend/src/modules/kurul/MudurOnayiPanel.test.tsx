@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import type { HonorCertificate } from "../odul/api";
 
 const odul = vi.hoisted(() => ({
@@ -47,13 +48,26 @@ const KABUL: HonorCertificate = {
 
 afterEach(() => vi.clearAllMocks());
 
+function panel() {
+  return render(
+    <ConfirmProvider>
+      <MudurOnayiPanel />
+    </ConfirmProvider>,
+  );
+}
+
+/** Onay diyaloğundaki düğme (satırdaki "Onayla" ile aynı adı taşır). */
+function dialogButton(dialog: HTMLElement, label: string): HTMLElement {
+  return Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === label)!;
+}
+
 describe("MudurOnayiPanel", () => {
   it("onaylamama gerekçe ister; onay tarihiyle gönderilir", async () => {
     const user = userEvent.setup();
     odul.listCertificates.mockImplementation((params: { status?: string }) =>
       Promise.resolve(params.status === "AWARDED" ? [KABUL] : []),
     );
-    render(<MudurOnayiPanel />);
+    panel();
 
     expect(await screen.findByText("Ali Veli")).toBeInTheDocument();
     expect(screen.getByText(/Kurul kabul kararı: 01.06.2026/)).toBeInTheDocument();
@@ -65,15 +79,58 @@ describe("MudurOnayiPanel", () => {
     await user.clear(tarih);
     await user.type(tarih, "2026-06-05");
     await user.click(screen.getByRole("button", { name: "Onayla" }));
+    // Müdür onayı geri alınamaz: tek tıkla gitmez, onay diyaloğu sorar.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/geri alınamaz/);
+    expect(odul.principalApproveCertificate).not.toHaveBeenCalled();
+    await user.click(dialogButton(dialog, "Onayla"));
     expect(odul.principalApproveCertificate).toHaveBeenCalledWith(3, {
       decided_on: "2026-06-05",
       explanation: "",
     });
   });
 
+  it("onay diyaloğunda vazgeçilirse onay gönderilmez", async () => {
+    const user = userEvent.setup();
+    odul.listCertificates.mockImplementation((params: { status?: string }) =>
+      Promise.resolve(params.status === "AWARDED" ? [KABUL] : []),
+    );
+    panel();
+    await screen.findByText("Ali Veli");
+    await user.click(screen.getByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(dialogButton(dialog, "Vazgeç"));
+    expect(odul.principalApproveCertificate).not.toHaveBeenCalled();
+  });
+
+  it("onay tarihi kurul kararından önce ya da ileri tarihli olamaz", async () => {
+    const user = userEvent.setup();
+    odul.listCertificates.mockImplementation((params: { status?: string }) =>
+      Promise.resolve(params.status === "AWARDED" ? [KABUL] : []),
+    );
+    panel();
+    await screen.findByText("Ali Veli");
+    const tarih = screen.getByLabelText("Onay tarihi");
+
+    await user.clear(tarih);
+    await user.type(tarih, "2026-05-31");
+    await user.click(screen.getByRole("button", { name: "Onayla" }));
+    expect(
+      screen.getByText(/kurul kabul kararından \(01\.06\.2026\) önce olamaz/),
+    ).toBeInTheDocument();
+
+    await user.clear(tarih);
+    await user.type(tarih, "2999-01-01");
+    await user.click(screen.getByRole("button", { name: "Onayla" }));
+    expect(screen.getByText(/ileri bir tarih olamaz/)).toBeInTheDocument();
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(odul.principalApproveCertificate).not.toHaveBeenCalled();
+  });
+
   it("bekleyen yoksa bilgi verir", async () => {
     odul.listCertificates.mockResolvedValue([]);
-    render(<MudurOnayiPanel />);
+    panel();
     expect(await screen.findByText(/Onay bekleyen kurul kararı yok/)).toBeInTheDocument();
   });
 });

@@ -248,6 +248,9 @@ def test_kurul_bekleyen_kararsiz_dosya_kapatilabilir_listelenmez() -> None:
 
 def test_uzun_tedbirde_iki_esik_ayri_listelenir() -> None:
     case, sid = _committee_case()
+    # Saha testi 14.11.2026: işleme-başlama eşiği yalnız işlem başlamamış (dilekçe
+    # aşamasındaki) dosyada listelenir (md. 175/2) — sevk geri alınarak kurulur.
+    services.revert_stage(case, target_stage=CaseStage.PETITION, reason="Test: sevksiz dosya.")
     services.create_precaution(
         case, student_id=sid, start_date=date(2026, 5, 20), requested_days=10
     )

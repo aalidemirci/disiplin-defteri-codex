@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import UpdateBanner from "./modules/guncelleme/UpdateBanner";
+import BekleyenGeriYuklemeBandi from "./modules/guvenlik/BekleyenGeriYuklemeBandi";
 import DensitySwitcher from "./ui/DensitySwitcher";
 import Icon from "./ui/Icon";
 import ThemeSwitcher from "./ui/ThemeSwitcher";
@@ -158,6 +159,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [search, setSearch] = useState("");
   const title = pageTitle(location.pathname);
 
+  // Sayfa değişince en üste dön: SPA'da tarayıcı kaydırmayı sıfırlamaz; uzun bir
+  // sayfanın ortasından Ayarlar/Kişiler'e geçince yeni sayfa ortasından açılıyordu.
+  // Yalnız yol değişiminde — aynı sayfadaki sorgu parametresi (arama, süzgeç)
+  // değişiminde konum korunur.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
   const toggleCollapsed = () => {
     setCollapsed((current) => {
       const next = !current;
@@ -248,6 +257,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div className="mx-auto w-full max-w-[100rem]">
+            <BekleyenGeriYuklemeBandi />
             <UpdateBanner />
             {children}
           </div>

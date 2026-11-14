@@ -12,7 +12,10 @@ MADDELERİ VE KARARLAR" bloğu OYS'de yoktur, YALNIZ EKLEMEDİR — gündem madd
 toplantıda çıktı değişmez. Madde başına karar, gerekçe, oy birliği/çoğunluğu ve
 karşı görüş (md. 196/2, 206/2) `agenda_items` bağlamından basılır. Gündemli toplantıda
 genel "KARAR" bölümü yalnız serbest karar metni varsa basılır (her maddenin karar esası
-kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın).{% endcomment %}
+kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın). Aynı gerekçeyle
+üst bilgideki "Karar Esası" satırı o durumda maddelere atıf yapar (saha denetimi 14.11.2026).
+İmza ızgarası `signer_rows` ile 5'erli satırlara bölünür (kalabalık Onur Genel Kurulunda tek
+satır sayfa dışına taşıyordu); 5 ve altı imzacıda çıktı eski tek satırlı ızgaradır.{% endcomment %}
 {% block content %}
 <div class="doc-title">{{ title }}</div>
 <div class="doc-subtitle">{{ articles.subtitle }}</div>
@@ -20,7 +23,7 @@ kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın)
 <table class="info">
   <tr><td class="label">Toplantı No</td><td>{{ meeting.meeting_no_display }}</td></tr>
   <tr><td class="label">Toplantı Tarihi</td><td>{{ meeting.meeting_date|date:'d.m.Y' }}</td></tr>
-  <tr><td class="label">Karar Esası</td><td>{{ meeting.get_decision_basis_display }}</td></tr>
+  <tr><td class="label">Karar Esası</td><td>{% if not agenda_items or meeting.decision_text %}{{ meeting.get_decision_basis_display }}{% else %}Her gündem maddesinin karar esası kendi satırında gösterilmiştir.{% endif %}</td></tr>
   {% if case %}<tr><td class="label">Görüşülen Dosya</td><td>{{ case.case_no }}</td></tr>{% endif %}
 </table>
 
@@ -153,25 +156,21 @@ ile alınmıştır ({{ articles.closing }}).</p>
 {% endif %}
 
 <table class="sig-grid">
+  {% for row in signer_rows %}
   <tr>
-    {% if chair %}
-    <td>
-      <div class="space"></div>
-      <div class="line"></div>
-      <div class="name">{{ chair.person_name }}</div>
-      <div class="role">{{ chair.title|default:'Başkan' }}</div>
-    </td>
-    {% endif %}
-    {% for a in voting_members %}
-    {% if not a.is_chair %}
-    <td>
+    {% for a in row %}
+    {% if a %}
+    <td{% if signer_rows|length > 1 %} style="width: 20%;{% if not forloop.parentloop.first %} padding-top: 14pt;{% endif %}"{% endif %}>
       <div class="space"></div>
       <div class="line"></div>
       <div class="name">{{ a.person_name }}</div>
-      <div class="role">{{ a.title|default:'Üye' }}</div>
+      <div class="role">{% if a.title %}{{ a.title }}{% elif a.is_chair %}Başkan{% else %}Üye{% endif %}</div>
     </td>
+    {% else %}
+    <td style="width: 20%;"></td>
     {% endif %}
     {% endfor %}
   </tr>
+  {% endfor %}
 </table>
 {% endblock %}

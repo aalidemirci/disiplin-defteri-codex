@@ -599,6 +599,29 @@ describe("disiplin — dizi pusulası kategori + kimden", () => {
     ).toBe("Disiplin Cezası Tebliği");
   });
 
+  it("documentDisplayName: katılımcı belgesi olmayan evrakta 'kimden' başlığı silmez", () => {
+    // Saha denetimi 14.11.2026: elle eklenen "Diğer Evrak"ta kimden girilince kullanıcının
+    // yazdığı başlık kayboluyordu (backend documents._keep_title_with_source ile birebir).
+    expect(
+      documentDisplayName(
+        doc({
+          document_type: "OTHER",
+          title: "Nöbetçi öğretmen olay tutanağı",
+          source_label: "Tanık",
+          source_name: "Çiğdem Özışık",
+        }),
+      ),
+    ).toBe("Nöbetçi öğretmen olay tutanağı — Tanık: Çiğdem Özışık");
+  });
+
+  it("md. 195 tespit tutanağı 'Savunmalar' altında değil, kendi kategorisinde listelenir", () => {
+    const groups = categorizeDocuments([
+      doc({ id: 1, document_type: "DEFENSE_RECORD" }),
+      doc({ id: 2, document_type: "NON_COMPLIANCE_RECORD" }),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["Savunmalar", "Tespit Tutanakları (md. 195)"]);
+  });
+
   it("INFO_GATHERING.sourceOptions — kaynak listesi", () => {
     const ig = GENERATABLE_DOCUMENT_TYPES.find((t) => t.value === "INFO_GATHERING");
     expect(ig?.sourceOptions).toEqual(INFO_GATHERING_SOURCES);

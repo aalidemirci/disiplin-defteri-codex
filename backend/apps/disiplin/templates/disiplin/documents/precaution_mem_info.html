@@ -2,7 +2,9 @@
 {% comment %}md. 175/1 tedbir — millî eğitim müdürünü bilgilendirme yazısı. M2 Grup 1 (kullanıcı
 kararı 27.09.2026). Resmî MEB örneği yoktur; md. 175/1 "on iş gününü geçmemek kaydıyla millî
 eğitim müdürünü bilgilendirerek ... geçici olarak okuldan uzaklaştırabilir" metninden ve
-DisciplinePrecaution kaydından türetildi.{% endcomment %}
+DisciplinePrecaution kaydından türetildi. Saha denetimi 14.11.2026: uzatılmış tedbirde
+toplam süre md. 175/1'e bağlanmaz ("on iş gününü geçmemek kaydıyla"); uzatma md. 175/2
+atfıyla ayrı yazılır. Muhatap ilçe adı kayıtlıysa dolar (`district_upper`).{% endcomment %}
 {% block content %}
 <div class="doc-title">GEÇİCİ UZAKLAŞTIRMA (TEDBİR) HAKKINDA</div>
 <div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 175/1</div>
@@ -17,7 +19,7 @@ DisciplinePrecaution kaydından türetildi.{% endcomment %}
 </table>
 
 <p class="para" style="margin-top: 14pt; text-align: center;">
-  <strong>……………… İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong>
+  <strong>{{ district_upper|default:'………………' }} İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE</strong>
 </p>
 
 <p class="para">
@@ -26,8 +28,12 @@ DisciplinePrecaution kaydından türetildi.{% endcomment %}
   kovuşturmanın tamamlanmasını ve sonucunu beklemeden acele bir tedbir olmak üzere Millî
   Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği'nin 175. maddesinin 1. fıkrası uyarınca
   öğrenci <strong>{{ precaution.start_date|date:'d.m.Y' }}</strong> tarihinden itibaren
-  <strong>{{ precaution.requested_days }} iş günü</strong> (son gün
-  {{ precaution.end_date|date:'d.m.Y' }}) süreyle geçici olarak okuldan uzaklaştırılmıştır.
+  {% if precaution.extension_count %}geçici olarak okuldan uzaklaştırılmış; tedbir kararı aynı
+  maddenin 2. fıkrası uyarınca Millî Eğitim Müdürünün onayıyla
+  {{ precaution.extension_count }} kez uzatılmıştır. Tedbir süresi uzatmalarla birlikte toplam
+  <strong>{{ precaution.requested_days }} iş günü</strong> olup son gün
+  {{ precaution.end_date|date:'d.m.Y' }} tarihidir.{% else %}<strong>{{ precaution.requested_days }} iş günü</strong> (son gün
+  {{ precaution.end_date|date:'d.m.Y' }}) süreyle geçici olarak okuldan uzaklaştırılmıştır.{% endif %}
 </p>
 
 {% if precaution.reason %}

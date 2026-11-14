@@ -4,7 +4,10 @@ data/sablonlar/disiplin-kurulu/form-12-sure-uzatma-ara-karar.md; md. 192/3. Kuru
 uzatma ara kararı; üye + başkan imzalı (EK-1 deseni). Veri DisciplineDeadlineExtension'dan
 (dosya başına tek). Öğrenci künyesi dosyanın ilk öğrencisinden. Antet shared; unit = kurul.
 26.09.2026 (kullanıcı kararı): "oy birliği / oy çoğunluğu" üretimde seçilir (md. 191/1;
-GEÇİCİ alan `vote_basis`, DB'ye yazılmaz). Varsayılan oy birliği.{% endcomment %}
+GEÇİCİ alan `vote_basis`, DB'ye yazılmaz). Varsayılan oy birliği.
+Saha denetimi 14.11.2026: uzatma dosya genelidir (md. 192/3) — çok öğrencili dosyada
+bütün öğrenciler `students` listesinden çoğul kalıpla yazılır; tek öğrencili dosyada
+gündem cümlesi eskisiyle aynıdır.{% endcomment %}
 {% block content %}
 <div class="doc-title">DİSİPLİN KURULU SÜRE UZATMA KARAR TUTANAĞI</div>
 <div class="doc-subtitle">Form-12 · MEB Ortaöğretim Kurumları Yönetmeliği md. 192/3</div>
@@ -28,9 +31,11 @@ GEÇİCİ alan `vote_basis`, DB'ye yazılmaz). Varsayılan oy birliği.{% endcom
 <div class="section">
   <div class="section-title">GÜNDEM</div>
   <div class="field-box" style="white-space: normal;">
-    {{ student.class_label|default:'……' }} sınıfı {{ student.student_number|default:'……' }} numaralı
+    {% if students|length > 1 %}{% for s in students %}{{ s.class_label|default:'……' }} sınıfı {{ s.student_number|default:'……' }} numaralı <strong>{{ s.full_name }}</strong>{% if not forloop.last %}{% if forloop.revcounter == 2 %} ve {% else %}, {% endif %}{% endif %}{% endfor %}
+    adlı öğrenciler hakkında yürütülmekte olan
+    {% else %}{{ student.class_label|default:'……' }} sınıfı {{ student.student_number|default:'……' }} numaralı
     öğrenci <strong>{{ student.full_name|default:'…………………………' }}</strong> hakkında yürütülmekte olan
-    disiplin soruşturmasında süre uzatımı talebinin görüşülmesi.
+    {% endif %}disiplin soruşturmasında süre uzatımı talebinin görüşülmesi.
   </div>
 </div>
 

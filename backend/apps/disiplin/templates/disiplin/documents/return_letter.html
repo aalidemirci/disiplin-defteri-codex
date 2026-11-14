@@ -1,14 +1,17 @@
 {% extends "documents/base.html" %}
 {% comment %}md. 197 kurula iade yazısı — M2 Grup 1 (kullanıcı kararı 27.09.2026). Resmî MEB
 örneği yoktur; içerik md. 197 metninden türetildi, karar kaydı + müdürün iade gerekçesi
-(DisciplineDecision.return_reason) dolu basılır. Müdürden kurul başkanlığına.{% endcomment %}
+(DisciplineDecision.return_reason) dolu basılır. Müdürden kurul başkanlığına.
+Gözden geçirme 14.11.2026: karar ilçeye sevk edildikten SONRA yeniden üretilen iade yazısında
+iade tarihi kayıtta kalmadığından (returned_at sevk tarihiyle güncellenir) tarih uydurulmaz;
+`return_date_unknown` ile noktalı basılır, elle yazılır.{% endcomment %}
 {% block content %}
 <div class="doc-title">KURUL KARARININ YENİDEN GÖRÜŞÜLMESİ</div>
 <div class="doc-subtitle">MEB Ortaöğretim Kurumları Yönetmeliği md. 197</div>
 
 <table class="info">
   <tr><td class="label">Sayı</td><td>{{ case.case_no }}</td></tr>
-  <tr><td class="label">Tarih</td><td>{% if decision.returned_at %}{{ decision.returned_at|date:'d.m.Y' }}{% else %}{{ generated_at|date:'d.m.Y' }}{% endif %}</td></tr>
+  <tr><td class="label">Tarih</td><td>{% if return_date_unknown %}…/…/202…{% elif decision.returned_at %}{{ decision.returned_at|date:'d.m.Y' }}{% else %}{{ generated_at|date:'d.m.Y' }}{% endif %}</td></tr>
   <tr>
     <td class="label">Konu</td>
     <td>Kurul kararının yeniden görüşülmesi ({{ student.full_name }})</td>

@@ -38,7 +38,10 @@
    döndürme"; gerekçe `docs/teknik-borc.md` "Kapanmış" tablosunda.
    `council_meeting_minutes` (karar defteri) 04.10.2026'dan beri yalnız EKLEME ile
    "GÜNDEM MADDELERİ VE KARARLAR" bloğu basar (kurul işleyişi Aşama 1); gündemsiz
-   toplantıda çıktı OYS ile aynıdır — bloğu kaldırma.
+   toplantıda çıktı OYS ile aynıdır — bloğu kaldırma. İkinci bilinçli sapma (kullanıcı
+   kararı, 14.11.2026): imza ızgarası 6 ve üzeri imzacıda 5'erli satırlara bölünür
+   (kalabalık kurulda imza haneleri sayfa dışına taşıyordu); 5 ve altında çıktı OYS ile
+   aynıdır — `_SIGNERS_PER_ROW` değerini düşürme.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek
    kusur bu iki sınıftan çıktı.
@@ -102,8 +105,9 @@ frontend/src/
                     sayfaları, gündem, toplantı ekranı, müdür onayı) odul/ (onur panelleri)
                     kisiler/ kurulum/ ayarlar/ panel/
                     imha/ yildevri/ guvenlik/ okul/
-desktop/            main.py (kilit→yedek→migrate→waitress thread→pencere), server.py,
-                    lock.py, backup.py, integrity.py, session_guard.py, paths.py, dialogs.py
+desktop/            main.py (kilit→geri yükleme→bütünlük→yedek→migrate→waitress thread→pencere),
+                    server.py, lock.py, backup.py, restore.py, integrity.py, session_guard.py,
+                    paths.py, dialogs.py
 packaging/          pyinstaller/ (ortak spec + rthook + fonts.conf), windows/ (build.ps1,
                     dll_kapanisi.py, .iss, NOTLAR.md), linux/ (build.sh, .deb, kurulum provası),
                     fontlar/ (DejaVu 4 kesim), ikonlar/
@@ -116,9 +120,13 @@ scripts/gates.sh    tek komutluk kapı koşusu
                     (Release'i "en son" yap) + pages.yml (yönlendirme stub'ları)
 ```
 
-**Açılış sırası (kritik, `desktop/main.py`):** tek-instance kilidi → günlük
-otomatik yedek (14 gün rotasyon + migrate öncesi ayrı kopya) → `migrate --no-input`
-→ `PRAGMA integrity_check` → `waitress` arka plan thread'i → `pywebview` penceresi.
+**Açılış sırası (kritik, `desktop/main.py`):** tek-instance kilidi → bekleyen
+geri yükleme (`desktop/restore.py`) → sürüm damgası → `PRAGMA integrity_check` →
+günlük otomatik yedek (14 gün rotasyon; parola kuruluysa şifreli `.ddbak`, değilse
+düz `.sqlite3`; `geri-yukleme-oncesi-*` klasörleri de 14 günde silinir) → migrate
+öncesi ayrı kopya + `migrate --no-input` → `waitress`
+arka plan thread'i → `pywebview` penceresi. Bütünlük denetimi bilinçli olarak
+yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
 Ölçek duygusu (F5 sonu itibarıyla, kaba): backend ~22.500 satır Python + 470 test ·

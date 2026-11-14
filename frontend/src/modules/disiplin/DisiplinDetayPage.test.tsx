@@ -8,14 +8,21 @@
 // sabitleri (STAGE_TR, PARTICIPANT_ROLE_TR…) gerçek kalır ki metin iddiaları
 // gerçek sözlükle eşleşsin.
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { DisciplineCase, DisciplineParticipant } from "./api";
+import { ApiError } from "../../lib/api";
+import type {
+  DisciplineCase,
+  DisciplineEvent,
+  DisciplineMeeting,
+  DisciplineParticipant,
+  DisciplineWarning,
+} from "./api";
 
 const dapi = vi.hoisted(() => ({
   getCase: vi.fn(),
@@ -29,7 +36,13 @@ const dapi = vi.hoisted(() => ({
   listMeetings: vi.fn(),
   getCommittee: vi.fn(),
   addEvent: vi.fn(),
+  deleteWarning: vi.fn(),
+  deleteMeeting: vi.fn(),
 }));
+// "Kurul & Karar" sekmesindeki komşu bölümler kendi testlerinde sınanır; burada
+// yalnız kaç kez (yeniden) bağlandıkları izlenir — toplantı silinince karar bölümü
+// verisinin tazelendiğini (§7.5) bununla doğrularız.
+const bolum = vi.hoisted(() => ({ decisionsMounted: vi.fn() }));
 
 const slookup = vi.hoisted(() => ({ search: vi.fn() }));
 const oapi = vi.hoisted(() => ({
@@ -50,6 +63,19 @@ vi.mock("./api", async (importOriginal) => {
 });
 
 vi.mock("../okul/api", () => ({ okulApi: oapi }));
+
+vi.mock("./DecisionsSection", async () => {
+  const { useEffect } = await import("react");
+  return {
+    default: function DecisionsStub() {
+      useEffect(() => {
+        bolum.decisionsMounted();
+      }, []);
+      return <div data-testid="kararlar-bolumu" />;
+    },
+  };
+});
+vi.mock("./PeriodsSection", () => ({ default: () => <div data-testid="sureler-bolumu" /> }));
 
 import DisiplinDetayPage from "./DisiplinDetayPage";
 
@@ -156,6 +182,95 @@ describe("DisiplinDetayPage — rehberliğe sevk", () => {
         }),
       ),
     );
+  });
+
+  it("yazarak arayıp listeden seçilen rehber kayda TAM adıyla geçer", async () => {
+    // Windows kullanım bulgusu: "Selin" yazıp seçenek etkinleştirildiğinde seçim
+    // tutulmadı, kayda yazılan metin ("Selin") geçti. Erişilebilirlik araçlarının
+    // "invoke" eylemi mousedown üretmez; seçim yalnız click ile de tamamlanmalı.
+    dapi.listParticipants.mockResolvedValue([]);
+    dapi.listWarnings.mockResolvedValue([]);
+    dapi.triageSuggestion.mockResolvedValue({ students: [], should_route_to_committee: false });
+    dapi.addEvent.mockResolvedValue({});
+    oapi.listClassResponsibilities.mockResolvedValue([]);
+    const SELIN = {
+      id: 7,
+      first_name: "Selin",
+      last_name: "Rehber",
+      full_name: "Selin Rehber",
+      title: "Rehber Öğretmen",
+      branch: "Rehberlik",
+    };
+    const KEMAL = {
+      id: 8,
+      first_name: "Kemal",
+      last_name: "Aksoy",
+      full_name: "Kemal Aksoy",
+      title: "Müdür Yardımcısı",
+      branch: "",
+    };
+    (oapi.listPersonnel as ReturnType<typeof vi.fn>).mockImplementation(
+      (params: { search?: string }) => {
+        const results = params.search ? [SELIN] : [KEMAL, SELIN];
+        return Promise.resolve({ count: results.length, next: null, previous: null, results });
+      },
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: "Rehberliğe sevk" }));
+    await user.type(await screen.findByLabelText(/Rehber öğretmen/), "Selin");
+
+    // Liste süzülür: yalnız eşleşen personel kalır.
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
+    expect(screen.queryByText("Kemal Aksoy")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: /Selin Rehber/ }));
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+
+    await waitFor(() =>
+      expect(dapi.addEvent).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({
+          stage: "GUIDANCE_REFERRED",
+          assigned_guidance_name: "Selin Rehber",
+        }),
+      ),
+    );
+  });
+});
+
+describe("DisiplinDetayPage — müdür değerlendirmesi seçenekleri erişilebilir", () => {
+  it("üç seçenek adlı bir radyo grubunda, her düğme kendi etiketiyle adlandırılır", async () => {
+    dapi.listParticipants.mockResolvedValue([]);
+    dapi.listWarnings.mockResolvedValue([]);
+    dapi.triageSuggestion.mockResolvedValue({ students: [], should_route_to_committee: false });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: /Override \(aşama atla\)/ }));
+
+    const grup = await screen.findByRole("radiogroup", {
+      name: /Müdür değerlendirmesi \/ sevk kararı/,
+    });
+    expect(grup).toHaveAccessibleDescription(/ya yazılı uyarı verir/i);
+    const dugmeler = within(grup).getAllByRole("radio");
+    expect(dugmeler).toHaveLength(3);
+    // Değer "on" (tarayıcı varsayılanı) kalmasın: erişilebilirlik ağacında üç düğme
+    // de "on" görünüyordu.
+    expect(dugmeler.map((d) => (d as HTMLInputElement).value)).toEqual([
+      "WRITTEN_WARNING",
+      "HONOR_COMMITTEE",
+      "DISCIPLINE_COMMITTEE",
+    ]);
+    for (const ad of ["Yazılı uyarı", "Onur Kuruluna sevk", "Disiplin Kuruluna sevk"]) {
+      const dugme = within(grup).getByRole("radio", { name: ad });
+      expect(dugme).toHaveAttribute("aria-labelledby");
+    }
+    await user.click(within(grup).getByText("Onur Kuruluna sevk"));
+    expect(within(grup).getByRole("radio", { name: "Onur Kuruluna sevk" })).toBeChecked();
   });
 });
 
@@ -295,5 +410,216 @@ describe("DisiplinDetayPage — künye düzenleme (bulgu #22)", () => {
 
     await screen.findByText("İlgili öğrenciler");
     expect(screen.queryByRole("button", { name: /Künye düzenle/ })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Saha gözden geçirmesi (kasım 2026): servis kilitleri ↔ arayüz hizası ve
+// tek yönlü kapanların (§7.6) çıkış yolları.
+// ---------------------------------------------------------------------------
+
+const SEVK_OLAYI: DisciplineEvent = {
+  id: 700,
+  stage: "DECIDED",
+  stage_display: "Müdür kararı",
+  event_date: "2026-05-20",
+  recorded_at: "2026-05-20T09:00:00Z",
+  notes: "",
+  assigned_guidance_name: "",
+  guidance_outcome: "",
+  principal_decisions: ["DISCIPLINE_COMMITTEE"],
+  committee_decision_type: null,
+  committee_decision_type_name: null,
+  committee_decision_text: "",
+  is_override: false,
+  override_reason: "",
+};
+
+const UYARI: DisciplineWarning = {
+  id: 31,
+  student: OGRENCI.id,
+  student_name: "Emre Can Yılmaz",
+  warning_date: "2026-05-19",
+  summary: "Derse geç kalma.",
+};
+
+const TOPLANTI: DisciplineMeeting = {
+  id: 61,
+  event: null,
+  meeting_date: "2026-05-22",
+  notes: "",
+  attendees: [1, 2],
+  attendee_names: ["Kemal Aksoy", "Selin Rehber"],
+};
+
+function bosListeler() {
+  dapi.listParticipants.mockResolvedValue([]);
+  dapi.listWarnings.mockResolvedValue([]);
+  dapi.listMeetings.mockResolvedValue([]);
+  dapi.triageSuggestion.mockResolvedValue({ students: [], should_route_to_committee: false });
+}
+
+describe("DisiplinDetayPage — müdür uyarısı silme (A1, tek yönlü kapan)", () => {
+  it("onaylı 'Sil' uyarıyı siler; uyarı listesi ve triaj önerisi tazelenir", async () => {
+    bosListeler();
+    dapi.listWarnings.mockResolvedValueOnce([UYARI]).mockResolvedValue([]);
+    dapi.deleteWarning.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await waitFor(() => expect(dapi.triageSuggestion).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    expect(await screen.findByText("Derse geç kalma.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sil" }));
+    // Onay verilmeden silinmez.
+    const dialog = await screen.findByRole("dialog");
+    expect(dapi.deleteWarning).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Sil" }));
+
+    await waitFor(() => expect(dapi.deleteWarning).toHaveBeenCalledWith(5, UYARI.id));
+    await waitFor(() => expect(dapi.listWarnings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Henüz müdür uyarısı kaydedilmedi/)).toBeInTheDocument();
+
+    // Uyarı kaydı triajda öğrenciyi "uyarılmış" saydırır — öneri yeniden çekilir.
+    await user.click(screen.getByRole("tab", { name: /Genel/ }));
+    await waitFor(() => expect(dapi.triageSuggestion).toHaveBeenCalledTimes(2));
+  });
+
+  it("onay reddedilirse silme çağrılmaz", async () => {
+    bosListeler();
+    dapi.listWarnings.mockResolvedValue([UYARI]);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    await user.click(await screen.findByRole("button", { name: "Sil" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Vazgeç" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(dapi.deleteWarning).not.toHaveBeenCalled();
+    expect(dapi.listWarnings).toHaveBeenCalledTimes(1);
+  });
+
+  it("kapalı dosyada da uyarı silinebilir (backend delete_warning kapalı dosyada siler)", async () => {
+    bosListeler();
+    dapi.listWarnings.mockResolvedValue([UYARI]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "CLOSED", closed_at: "2026-06-01T10:00:00Z" });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    expect(await screen.findByRole("button", { name: "Sil" })).toBeEnabled();
+  });
+
+  it("sunucu silmeyi reddederse ileti gösterilir, kayıt listede kalır", async () => {
+    bosListeler();
+    dapi.listWarnings.mockResolvedValue([UYARI]);
+    dapi.deleteWarning.mockRejectedValue(new ApiError(400, "invalid", "Uyarı silinemedi: örnek."));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    await user.click(await screen.findByRole("button", { name: "Sil" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sil" }));
+
+    expect(await screen.findByText("Uyarı silinemedi: örnek.")).toBeInTheDocument();
+    expect(screen.getByText("Derse geç kalma.")).toBeInTheDocument();
+  });
+});
+
+describe("DisiplinDetayPage — dosya toplantısı (A2)", () => {
+  it("kurula sevk edilmemiş dosyada 'Toplantı kaydet' sunulmaz", async () => {
+    bosListeler();
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [] });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(await screen.findByText(/Henüz kurul toplantısı kaydedilmedi/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Toplantı kaydet/ })).toBeNull();
+    expect(
+      screen.getByText(/yalnız disiplin kuruluna sevk edilen dosyada kaydedilir/),
+    ).toBeInTheDocument();
+  });
+
+  it("kapalı dosyada 'Toplantı kaydet' ve satırdaki 'Sil' sunulmaz", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([TOPLANTI]);
+    const user = userEvent.setup();
+    renderPage({
+      current_stage: "CLOSED",
+      closed_at: "2026-06-01T10:00:00Z",
+      events: [SEVK_OLAYI],
+    });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(await screen.findByText("Kemal Aksoy")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Toplantı kaydet/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sil" })).toBeNull();
+    expect(screen.getByText(/Dosya kapalı; kurul toplantısı kaydedilemez/)).toBeInTheDocument();
+  });
+
+  it("sevkli açık dosyada 'Toplantı kaydet' sunulur; onaylı 'Sil' toplantıyı siler, karar bölümü tazelenir", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValueOnce([TOPLANTI]).mockResolvedValue([]);
+    dapi.deleteMeeting.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(await screen.findByText("Kemal Aksoy")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Toplantı kaydet/ })).toBeInTheDocument();
+    expect(bolum.decisionsMounted).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Sil" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dapi.deleteMeeting).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Sil" }));
+
+    await waitFor(() => expect(dapi.deleteMeeting).toHaveBeenCalledWith(5, TOPLANTI.id));
+    // Toplantı listesi yeniden çekilir…
+    await waitFor(() => expect(dapi.listMeetings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Henüz kurul toplantısı kaydedilmedi/)).toBeInTheDocument();
+    // …EK-1/karar bölümü verisi (yeniden bağlanarak) ve dosya detayı da tazelenir.
+    await waitFor(() => expect(bolum.decisionsMounted).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(dapi.getCase).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("DisiplinDetayPage — kapalı dosyada taraflar kilitli (A3)", () => {
+  it("'Katılımcı ekle' ve 'Çıkar' gizlenir, bilgi satırı görünür", async () => {
+    bosListeler();
+    dapi.listParticipants.mockResolvedValue([ACCUSED]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "CLOSED", closed_at: "2026-06-01T10:00:00Z" });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    // Katılımcı satırı listelenir, ama eylem yok.
+    expect(await screen.findByText("Katılımcılar (1)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Katılımcı ekle/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Çıkar/ })).toBeNull();
+    expect(screen.getByText("Dosya kapalı; taraflar değiştirilemez.")).toBeInTheDocument();
+  });
+
+  it("açık dosyada bilgi satırı yoktur, eylemler sunulur", async () => {
+    bosListeler();
+    dapi.listParticipants.mockResolvedValue([ACCUSED]);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Taraflar/ }));
+    expect(await screen.findByRole("button", { name: /Çıkar/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Katılımcı ekle/ })).toBeInTheDocument();
+    expect(screen.queryByText("Dosya kapalı; taraflar değiştirilemez.")).toBeNull();
   });
 });

@@ -19,6 +19,7 @@ from apps.disiplin.services.cases import (
 from apps.disiplin.services.committee import (
     add_committee_member,
     create_committee,
+    delete_meeting,
     record_meeting,
     remove_committee_member,
     set_committee_chair,
@@ -59,6 +60,7 @@ from apps.disiplin.services.honors import (
     add_general_assembly_member,
     add_honor_board_member,
     approve_honor_proposal_by_principal,
+    cancel_planned_general_assembly_change,
     create_honor_board,
     end_general_assembly_membership,
     propose_honor_certificate,
@@ -70,6 +72,7 @@ from apps.disiplin.services.honors import (
 )
 from apps.disiplin.services.participants import (
     add_participant,
+    delete_warning,
     issue_warning,
     remove_participant,
 )
@@ -77,6 +80,7 @@ from apps.disiplin.services.precautions import (
     approve_extension,
     create_extension,
     create_precaution,
+    delete_extension,
     extend_precaution,
     lift_precaution,
 )
@@ -91,6 +95,7 @@ __all__ = [
     "add_participant",
     "approve_extension",
     "approve_honor_proposal_by_principal",
+    "cancel_planned_general_assembly_change",
     "close_case",
     "confirm_e_school_entry",
     "create_case",
@@ -102,7 +107,10 @@ __all__ = [
     "decide_agenda_item",
     "delete_attachment",
     "delete_council_meeting",
+    "delete_meeting",
     "delete_decision",
+    "delete_extension",
+    "delete_warning",
     "update_document",
     "restore_document",
     "reorder_documents",

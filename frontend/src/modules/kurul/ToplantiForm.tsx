@@ -125,7 +125,7 @@ export default function ToplantiForm({
       setError("Dosya görüşme tutanağı için bir disiplin dosyası seçilmelidir.");
       return;
     }
-    const rowError = validateRows(rows);
+    const rowError = validateRows(rows, councilType);
     if (rowError) {
       setError(rowError);
       return;
@@ -288,7 +288,7 @@ export default function ToplantiForm({
             Aktif kuruldan yükle
           </Button>
         </div>
-        <KatilimciEditor rows={rows} onChange={setRows} idBase={idBase} />
+        <KatilimciEditor rows={rows} onChange={setRows} idBase={idBase} councilType={councilType} />
       </div>
 
       <Textarea

@@ -24,6 +24,12 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
+// jsdom `window.scrollTo`yu uygulamaz ("Not implemented" gürültüsü basar); AppShell
+// rota değişiminde en üste kaydırdığı için sessiz bir taklit yeter.
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "scrollTo", { writable: true, value: vi.fn() });
+}
+
 // Her testten sonra render edilen DOM'u temizle (yan etki sızıntısını önler).
 afterEach(() => {
   cleanup();

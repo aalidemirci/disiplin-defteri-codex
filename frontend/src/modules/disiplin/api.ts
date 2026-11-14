@@ -382,6 +382,8 @@ export interface DisciplineAppeal {
   result_notes: string;
   // md. 200/Ç — "değiştirildi" sonucunda kararın DEĞİŞİKLİK ÖNCESİ ceza türü.
   previous_penalty_type: PenaltyType | "";
+  // Eski ceza uzaklaştırmaysa gün sayısı (itiraz kurulu yalnız süreyi indirmiş olabilir).
+  previous_suspension_days: number | null;
 }
 
 // EK-1 anlatı alanları (md. 168 takdir + md. 193 ifade/delil).
@@ -741,7 +743,9 @@ export interface GeneratedDocument {
 const OTHER_CATEGORY_LABEL = "Diğer Evrak";
 export const DOCUMENT_CATEGORIES: { label: string; types: DocumentType[] }[] = [
   { label: "İfadeler", types: ["STATEMENT_RECORD"] },
-  { label: "Savunmalar", types: ["DEFENSE_RECORD", "NON_COMPLIANCE_RECORD"] },
+  { label: "Savunmalar", types: ["DEFENSE_RECORD"] },
+  // md. 195 tespit tutanağı savunma değildir — ayrı kategori (saha denetimi 14.11.2026).
+  { label: "Tespit Tutanakları (md. 195)", types: ["NON_COMPLIANCE_RECORD"] },
   { label: "Bilgi Alma Tutanakları", types: ["INFO_GATHERING"] },
   { label: "Çağrı / Davet Yazıları", types: ["STATEMENT_CALL", "DEFENSE_CALL", "MEETING_CALL"] },
   { label: "Müdür Uyarısı", types: ["GUIDANCE_ASSESSMENT", "WARNING_LETTER", "PARENT_MEETING"] },
@@ -778,11 +782,25 @@ export function categorizeDocuments(
   })).filter((c) => c.documents.length > 0);
 }
 
+// Katılımcı-özgü belge türleri (backend documents.PARTICIPANT_REQUIRED ile birebir).
+const PARTICIPANT_DOCUMENT_TYPES: ReadonlySet<DocumentType> = new Set<DocumentType>([
+  "STATEMENT_CALL",
+  "STATEMENT_RECORD",
+  "INFO_GATHERING",
+  "DEFENSE_CALL",
+  "DEFENSE_RECORD",
+  "NON_COMPLIANCE_RECORD",
+]);
+
 // Bir belgenin dizi pusulasında görünen ADI: katılımcı belgelerinde "kimden"
-// (source_label[: source_name]); diğerlerinde sade başlık.
+// (source_label[: source_name]); diğerlerinde sade başlık. Katılımcı belgesi OLMAYAN
+// evrakta (elle eklenen "Diğer Evrak" vb.) kimden girilmişse başlık kaybolmaz:
+// "Başlık — Sıfat: Ad" (backend documents._keep_title_with_source ile birebir).
 export function documentDisplayName(d: GeneratedDocument): string {
-  if (d.source_label) return d.source_name ? `${d.source_label}: ${d.source_name}` : d.source_label;
-  return d.title;
+  if (!d.source_label) return d.title;
+  const source = d.source_name ? `${d.source_label}: ${d.source_name}` : d.source_label;
+  if (PARTICIPANT_DOCUMENT_TYPES.has(d.document_type) || !d.title.trim()) return source;
+  return `${d.title} — ${source}`;
 }
 
 // Manuel belge / alt evrak kütük kaydı girdisi.
@@ -1271,6 +1289,10 @@ export const disiplinApi = {
   recordMeeting: (caseId: number, body: MeetingCreateBody) =>
     api.post<DisciplineMeeting>(`${BASE}/cases/${caseId}/meeting/`, body),
 
+  // Yanlış girilen dosya toplantısı kaydını siler (kapalı dosyada backend reddeder).
+  deleteMeeting: (caseId: number, meetingId: number) =>
+    api.del<void>(`${BASE}/cases/${caseId}/meeting/${meetingId}/`),
+
   // --- Rollü katılımcı + müdür uyarısı + triaj ---
 
   listParticipants: (caseId: number) =>
@@ -1291,6 +1313,10 @@ export const disiplinApi = {
       warning_date: body.warning_date,
       summary: body.summary,
     }),
+
+  // Yanlış girilen uyarı kaydını siler (dosyada öğrenci başına tek kayıt — md. 157/7-a).
+  deleteWarning: (caseId: number, warningId: number) =>
+    api.del<void>(`${BASE}/cases/${caseId}/warnings/${warningId}/`),
 
   // Backend öğrenci başına düz liste döner; OYS zarfı (`should_route_to_committee`
   // özet bayrağı, herhangi biri true → true) burada türetilir (OYS view paritesi).
@@ -1375,6 +1401,10 @@ export const disiplinApi = {
 
   createExtension: (caseId: number, body: ExtensionCreateBody) =>
     api.post<DisciplineDeadlineExtension>(`${BASE}/cases/${caseId}/extensions/`, body),
+
+  // Yalnız ONAYLANMAMIŞ uzatma silinir (yanlış giriş / müdür onay vermedi — md. 192/3).
+  deleteExtension: (caseId: number, extensionId: number) =>
+    api.del<void>(`${BASE}/cases/${caseId}/extensions/${extensionId}/`),
 
   approveExtension: (caseId: number, extensionId: number, body: ExtensionApproveBody) =>
     api.post<DisciplineDeadlineExtension>(

@@ -9,12 +9,14 @@
 // Olumsuz kararda gerekçe zorunlu (md. 196/1, 206/2); oy birliği/çoğunluğu ve karşı görüş
 // madde başınadır (md. 196/2). Karara bağlanan madde, teklifin son adımı geri alınınca
 // (Onur Kurulu → Teklifler) yeniden karar bekler.
+// Saha bulguları 13/76: tarihi gelmemiş toplantıda karar verilemez (toplantı ileri tarihe
+// planlanabilir); yanlış girilen toplantı tarihi, karara bağlı madde yokken düzeltilebilir.
 
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
-import { formatDate } from "../../lib/format";
+import { formatDate, todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -54,6 +56,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
   const [editingAttendees, setEditingAttendees] = useState<AttendeeRow[] | null>(null);
   const [candidates, setCandidates] = useState<HonorCertificate[] | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -81,6 +84,10 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
   const items = meeting.agenda_items ?? [];
   const favorableCount = items.filter((item) => item.outcome === "FAVORABLE").length;
   const quorum = meeting.quorum;
+  // Karar tarihi = toplantı tarihi: yapılmamış toplantının kararı yazılamaz (backend de reddeder).
+  const notHeldYet = meeting.meeting_date > todayIso();
+  // Karara bağlı maddesi olan toplantının tarihi değişmez (önce karar geri alınır).
+  const dateEditable = items.every((item) => item.outcome === "PENDING");
 
   const run = async (action: () => Promise<CouncilMeeting | void>, success: string) => {
     setBusy(true);
@@ -118,7 +125,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
 
   const saveAttendees = async () => {
     if (editingAttendees === null) return;
-    const rowError = validateRows(editingAttendees);
+    const rowError = validateRows(editingAttendees, councilType);
     if (rowError) {
       setError(rowError);
       return;
@@ -128,6 +135,15 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
       "Katılımcılar güncellendi.",
     );
     if (ok) setEditingAttendees(null);
+  };
+
+  const saveDate = async () => {
+    if (!editingDate) return;
+    const ok = await run(
+      () => kurulApi.updateMeeting(meeting.id, { meeting_date: editingDate }),
+      "Toplantı tarihi güncellendi.",
+    );
+    if (ok) setEditingDate(null);
   };
 
   const download = async (kind: "minutes" | "chart") => {
@@ -168,6 +184,31 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
             {meeting.term_name ? ` · ${meeting.term_name}` : ""}
             {meeting.honor_meeting_kind === "GENERAL_ASSEMBLY" ? " · Onur Genel Kurulu" : ""}
           </p>
+          {dateEditable &&
+            (editingDate === null ? (
+              <Button
+                variant="text"
+                icon="edit"
+                onClick={() => setEditingDate(meeting.meeting_date)}
+              >
+                Tarihi düzelt
+              </Button>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <TextField
+                  label="Toplantı tarihi"
+                  type="date"
+                  value={editingDate}
+                  onChange={(e) => setEditingDate(e.target.value)}
+                />
+                <Button variant="text" onClick={() => setEditingDate(null)} disabled={busy}>
+                  Vazgeç
+                </Button>
+                <Button icon="save" onClick={() => void saveDate()} disabled={busy || !editingDate}>
+                  Tarihi kaydet
+                </Button>
+              </div>
+            ))}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outlined" icon="picture_as_pdf" onClick={() => void download("minutes")}>
@@ -202,6 +243,17 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
             {quorum.ok
               ? " Toplantı yeter sayısı sağlanmış."
               : " Yeter sayı yok — katılımcıları tamamlamadan karar verilemez."}
+          </p>
+        </Card>
+      )}
+
+      {notHeldYet && (
+        <Card elevation={0} className="flex items-start gap-3 bg-surface-container-low p-4">
+          <Icon name="schedule" className="shrink-0 text-primary" />
+          <p className="text-body-medium text-on-surface-variant">
+            Toplantı tarihi henüz gelmedi ({formatDate(meeting.meeting_date)}). Gündem
+            hazırlanabilir; kararlar toplantı günü geldiğinde girilir. Toplantı yapıldıysa önce
+            tarihi düzeltin.
           </p>
         </Card>
       )}
@@ -280,6 +332,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
                 item={item}
                 meeting={meeting}
                 busy={busy}
+                decisionLocked={notHeldYet}
                 onDecide={(body) =>
                   run(
                     () => kurulApi.decideAgendaItem(meeting.id, item.id, body),
@@ -335,6 +388,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
               rows={editingAttendees}
               onChange={setEditingAttendees}
               idBase={idBase}
+              councilType={councilType}
             />
             <div className="flex justify-end gap-2">
               <Button variant="text" onClick={() => setEditingAttendees(null)} disabled={busy}>
@@ -370,6 +424,7 @@ function AgendaItemCard({
   item,
   meeting,
   busy,
+  decisionLocked,
   onDecide,
   onRemove,
 }: {
@@ -377,6 +432,8 @@ function AgendaItemCard({
   item: AgendaItem;
   meeting: CouncilMeeting;
   busy: boolean;
+  /** Toplantı tarihi gelmediyse karar düğmeleri kapalıdır. */
+  decisionLocked: boolean;
   onDecide: (body: {
     outcome: "FAVORABLE" | "UNFAVORABLE";
     decision_text: string;
@@ -476,11 +533,15 @@ function AgendaItemCard({
                   variant="outlined"
                   icon="block"
                   onClick={() => void decide("UNFAVORABLE")}
-                  disabled={busy}
+                  disabled={busy || decisionLocked}
                 >
                   {actions.unfavorable}
                 </Button>
-                <Button icon="gavel" onClick={() => void decide("FAVORABLE")} disabled={busy}>
+                <Button
+                  icon="gavel"
+                  onClick={() => void decide("FAVORABLE")}
+                  disabled={busy || decisionLocked}
+                >
                   {actions.favorable}
                 </Button>
               </div>

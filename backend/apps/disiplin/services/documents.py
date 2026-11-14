@@ -21,6 +21,44 @@ from apps.disiplin.services.common import case_has_student
 _UNSET: Any = object()
 
 
+def _next_sort_order(
+    case: DisciplineCase, document_type: str, parent_document_id: int | None
+) -> int:
+    """Yeni belgenin dizi sırası — elle sıralanmış dosyada da türünün yanına düşer.
+
+    Varsayılan: kanonik süreç sırası (aynı türde eşitlik üretim tarihiyle çözülür).
+    Kullanıcı diziyi elle sıraladıysa (`reorder_documents` → 10, 20, 30 …) kanonik
+    değer başka bir ölçekte kalır ve yeni belge kategorisinin BAŞINA düşerdi (saha
+    denetimi 14.11.2026). O dosyada yeni belge, aynı türdeki son belgenin; yoksa
+    kanonik sırası kendisinden büyük olmayan son belgenin hemen ardına (+1) konur.
+    Alt evrak ana evrağının altında listelendiğinden kanonik değeri korur.
+    """
+    # Lazy import: documents modülü services'i import eder → döngüyü kırmak için içeride.
+    from apps.disiplin import documents
+
+    canonical = documents.canonical_order(document_type)
+    if parent_document_id is not None:
+        return canonical
+    mains = list(
+        case.generated_documents.filter(parent_document__isnull=True)
+        .order_by("sort_order", "generated_on", "created_at")
+        .values_list("document_type", "sort_order")
+    )
+    if all(order == documents.canonical_order(dt) for dt, order in mains):
+        return canonical
+    anchor: int | None = None
+    for dt, order in mains:
+        if dt == document_type:
+            anchor = order
+    if anchor is None:
+        for dt, order in mains:
+            if documents.canonical_order(dt) <= canonical:
+                anchor = order
+    if anchor is None:
+        return max(min(order for _, order in mains) - 1, 0)
+    return anchor + 1
+
+
 @transaction.atomic
 def log_generated_document(
     case: DisciplineCase,
@@ -59,10 +97,6 @@ def log_generated_document(
     ):
         raise ValueError("Bağlanılacak ana evrak bu dosyada yok (veya kendisi alt evrak).")
 
-    # Dizi pusulası varsayılan sırası = kanonik süreç sırası (lazy import:
-    # documents modülü services'i import eder → döngüyü kırmak için içeride).
-    from apps.disiplin import documents
-
     document = GeneratedDocument(
         case=case,
         student_id=student_id,
@@ -75,7 +109,7 @@ def log_generated_document(
         notes=notes,
         page_count=page_count,
         parent_document_id=parent_document_id,
-        sort_order=documents.canonical_order(document_type),
+        sort_order=_next_sort_order(case, document_type, parent_document_id),
         stored_pdf_b64=base64.b64encode(pdf_content).decode("ascii") if pdf_content else "",
         stored_pdf_size=len(pdf_content) if pdf_content else 0,
         stored_filename=stored_filename.strip() if pdf_content else "",

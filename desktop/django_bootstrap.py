@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-from desktop.errors import MigrationError, ServerStartError
+from desktop.errors import MANUAL_RESTORE_STEPS, MigrationError, ServerStartError
 from desktop.logging_setup import apply_access_log_policy
 from desktop.session_guard import ENV_TOKEN
 
@@ -66,8 +66,8 @@ def run_migrations() -> None:
         raise MigrationError(
             "Veritabanı güncellenemedi; program veriyi korumak için açılmadı.",
             hint=(
-                "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği veri "
-                "klasörüne 'db.sqlite3' adıyla kopyalayıp programı yeniden açın."
+                "Yedekler klasöründeki en son 'pre-migrate-*' (yoksa günlük) yedeğe dönün:\n"
+                f"{MANUAL_RESTORE_STEPS}"
             ),
         ) from exc
 
