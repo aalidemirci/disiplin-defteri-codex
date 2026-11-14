@@ -591,6 +591,18 @@ class _Signer:
         return str(self._member.get_member_type_display())
 
 
+class _CalledSubstitute(_Signer):
+    """Form-10 çağrılanlar tablosunda toplantıya katılan YEDEK üye (md. 188/1, 191/2).
+
+    `_Signer` ile aynı sunum (şablonun `is_substitute` süzgecinden geçer); `pk` üyenin
+    kendi anahtarıdır. Kurul kaydı DEĞİŞMEZ — üye yedek kalır.
+    """
+
+    def __init__(self, member: Any) -> None:
+        super().__init__(member)
+        self.pk = member.pk
+
+
 def _signing_members(case: DisciplineCase, committee: Any, meeting: Any | None = None) -> list[Any]:
     """Dosyayı görüşen HEYET — EK-1, Form-11 ve md. 195 tutanağı imza ızgaraları.
 
@@ -647,20 +659,28 @@ def _signing_members(case: DisciplineCase, committee: Any, meeting: Any | None =
 #: md. 195 tutanağı ve karar defterinde — ve K3 kapsamındaki diğer kurul evrakında — aynı metin.
 ACTING_CHAIR_ROLE = "Kurula Başkanlık Eden Öğretmen Üye (md. 188)"
 
+#: Form-12 giriş cümlesi: "… tarihinde <ifade> <ad> başkanlığında toplanarak" — şablondaki
+#: sabit "Disiplin Kurulu Başkanı" yerine (kullanıcı kararı, 14.11.2026 — S7).
+ACTING_CHAIR_PRESIDING = "md. 188 gereğince kurula başkanlık eden öğretmen üye"
+
+#: Form-13 gövdesi: "… başlatılan ve <ifade> tarafından yürütülen disiplin soruşturması" —
+#: şablondaki sabit "Disiplin Kurulu Başkanlığım" yerine. Dilekçeyi başkanlık eden öğretmen
+#: üye imzalar; "başkanlığım" diyemez (başkan müdür yardımcısıdır — md. 188).
+ACTING_CHAIR_OFFICE = "md. 188 uyarınca başkanlık ettiğim Disiplin Kurulu"
+
 
 class _ActingChair:
     """Katılmayan başkanın yerine başkan hanesine basılan öğretmen üye (md. 188).
 
     Şablonlar başkan hanesinde `committee.chair.get_full_name|default:…username` okur.
-    EK-1 ve Form-11 / md. 195 ızgarasında hane ETİKETİ bağlamdan (`chair_role`) gelir
-    (K1 istisnası) — ad satırı yalnız adı taşır. Etiketi şablonda SABİT olan diğer kurul
-    evrakında (`role_inline=True`, K3) md. 188 ifadesi ad satırına eklenir: şablona
-    dokunulmadan çözülebilen kısım addır.
+    Ad satırı YALNIZ adı taşır; md. 188 ifadesi hane ETİKETİNDEDİR ve bağlamdan
+    (`chair_role`) gelir: EK-1 ve Form-11 / md. 195 ızgarası (K1) ile Form-3, 4-6, 7-8, 9,
+    10, 12, 13 (kullanıcı kararı, 14.11.2026 — S7; eski "ad — md. 188 ifadesi" satır içi eki
+    kaldırıldı).
     """
 
-    def __init__(self, member: Any, *, role_inline: bool = False) -> None:
-        name = str(member.member_name)
-        self.full_name = f"{name} — {ACTING_CHAIR_ROLE}" if role_inline else name
+    def __init__(self, member: Any) -> None:
+        self.full_name = str(member.member_name)
         self.username = self.full_name
 
     def get_full_name(self) -> str:
@@ -747,9 +767,10 @@ def _case_committee(case: DisciplineCase, *, acting: bool = True) -> Any:
 
     Kullanıcı kararı, 14.11.2026 — S7/K3: şikâyetçi / zarar gören başkan (md. 191/2) dosyanın
     BÜTÜN kurul evrakından çıkar (Form-3, 4-6, 7-8, 9, 10, 12, 13, ceza tebliğleri). Dosyada
-    vekâletli toplantı kaydı varsa başkan hanesine kurula başkanlık eden üye, md. 188
-    ifadesi AD SATIRINA eklenerek yazılır (bu şablonlarda hane etiketi sabittir ve AYNEN
-    kapsamında — dokunulmadı); kayıt yoksa ad satırı boş (noktalı) kalır, ad uydurulmaz.
+    vekâletli toplantı kaydı varsa başkan hanesine kurula başkanlık eden üye yazılır (ad
+    satırı yalın; hane etiketi ve gövde ifadeleri `_committee_with_members_context` ile
+    bağlamdan gelir); kayıt yoksa ad satırı boş (noktalı) kalır, ad uydurulmaz ve etiket
+    şablonun eski sabit metnidir.
     `acting=False`: hane her durumda boş kalır — ceza tebliğlerinde etiket "Tebliğ Eden —
     Müdür Yardımcısı" sabittir; kurula başkanlık eden öğretmen üye tebliğ eden müdür
     yardımcısı değildir, tebliği kimin yapacağı kayıtlı da değildir.
@@ -761,7 +782,7 @@ def _case_committee(case: DisciplineCase, *, acting: bool = True) -> Any:
     if committee is None or not services.committee.chair_conflicted(case, committee):
         return committee
     member = _acting_chair_member(case) if acting else None
-    chair: Any = _ActingChair(member, role_inline=True) if member is not None else _BlankChair()
+    chair: Any = _ActingChair(member) if member is not None else _BlankChair()
     return _ActingCommittee(committee, chair)
 
 
@@ -1581,10 +1602,26 @@ def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
 
     S7/K3: başkan dosyada şikâyetçi / zarar gören ise başkan hanesi `_case_committee`
     kuralıyla basılır; üye listesi kurulun kendi listesidir.
+
+    Kullanıcı kararı, 14.11.2026 — S7 (Form-3, 4-6, 7-8, 9, 10, 12, 13): başkan hanesine
+    kurula başkanlık eden üye yazılıyorsa hane ETİKETİ (`chair_role`) ve Form-12 / Form-13
+    gövde ifadeleri (`chair_presiding`, `chair_office`) de bağlamdan verilir; o üye üye
+    listesinden çıkar — Form-12 ızgarasında iki kez imzalamaz, Form-10'da çağrıyı imzalayan
+    kişi kendini çağırmaz. Öteki bütün durumlarda (başkan şikâyetçi değil; vekâlet kaydı yok)
+    bu anahtarlar VERİLMEZ, liste aynen kalır: şablon eski sabit metni basar.
     """
     committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
-    return {"committee": _case_committee(case), "members": members}
+    shown = _case_committee(case)
+    panel: dict[str, Any] = {"committee": shown, "members": members}
+    if isinstance(shown, _ActingCommittee) and isinstance(shown.chair, _ActingChair):
+        acting = _acting_chair_member(case)
+        if acting is not None:
+            panel["members"] = [m for m in members if m.pk != acting.pk]
+        panel["chair_role"] = ACTING_CHAIR_ROLE
+        panel["chair_presiding"] = ACTING_CHAIR_PRESIDING
+        panel["chair_office"] = ACTING_CHAIR_OFFICE
+    return panel
 
 
 def _committee_signers_context(case: DisciplineCase) -> dict[str, Any]:
@@ -1709,10 +1746,29 @@ def _defense_record_context(
 
 
 def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
-    """Kurul toplantı çağrısı (Form-10, md. 190-191) — üye listesi + toplantı zamanı."""
+    """Kurul toplantı çağrısı (Form-10, md. 190-191) — üye listesi + toplantı zamanı.
+
+    S7 (14.11.2026): çağrıyı kurula başkanlık eden öğretmen üye imzalıyorsa (şikâyetçi /
+    zarar gören başkan + vekâletli toplantı kaydı) o toplantı kaydında KATILAN yedek üye
+    çağrılanlar tablosunda basılır — md. 188/1 "Üyenin başkanlık yaptığı durumlarda yedek
+    üye toplantıya katılır", md. 191/2 "yerine yedek üye toplantıya çağrılır". AYNEN şablon
+    yedekleri (`is_substitute`) gizlediği için yedek üye bağlamda `_CalledSubstitute` ile
+    sunulur (şablon değişmez). Kayıtta yedek yoksa ad uydurulmaz; öteki bütün durumlarda
+    liste kurulun kendi listesidir (çıktı aynen).
+    """
+    panel = _committee_with_members_context(case)
+    if "chair_role" in panel:
+        meeting = selectors.meetings_for_case(case).first()
+        attended = (
+            {m.pk for m in services.committee.meeting_attendees(meeting)} if meeting else set()
+        )
+        panel["members"] = [
+            _CalledSubstitute(m) if m.is_substitute and m.pk in attended else m
+            for m in panel["members"]
+        ]
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **panel,
         **_schedule_context(extra),
     }
 
@@ -1751,16 +1807,10 @@ def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> 
     ]
     student: dict[str, Any] | None = students[0] if students else None
     days = extension.requested_days if extension is not None else None
-    panel = _committee_with_members_context(case)
-    if isinstance(panel["committee"], _ActingCommittee):
-        # S7/K3: Form-12 imza ızgarasında başkan hanesine yazılan başkanlık eden üye, üye
-        # hanelerinde ikinci kez imzalamaz (EK-1 ile aynı kural — `_signing_members`).
-        acting = _acting_chair_member(case)
-        if acting is not None:
-            panel["members"] = [m for m in panel["members"] if m.pk != acting.pk]
     return {
         **_common_context(case),
-        **panel,
+        # S7/K3: başkanlık eden üye ızgarada bir kez imzalar — `_committee_with_members_context`.
+        **_committee_with_members_context(case),
         "extension": extension,
         "student": student,
         "students": students,

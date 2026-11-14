@@ -57,6 +57,15 @@
    (Müdür Yrd.)"); `council_meeting_minutes` başkanın katılmadığı toplantıda "(Başkan)"
    işaretini basmaz (`acting_chair`) ve katılanlar tablosunun altına `chair_absence_note`
    cümlesini ekler. Vekâletsiz çıktı üçünde de bayt bayt aynıdır (testli) — kaldırma.
+   Aynı kararın devamı (14.11.2026): `meeting_call` (Form-10), `deadline_extension_record`
+   (Form-12), `deadline_extension_petition` (Form-13), `statement_call` (Form-3),
+   `statement_record` (Form-4/5/6), `info_gathering` (Form-7/8) ve `defense_call` (Form-9)
+   başkan etiketini de bağlamdan alır (`chair_role`; verilmezse şablonun eski sabit metni).
+   Form-12 giriş cümlesi `chair_presiding`, Form-13 gövdesi `chair_office` ile aynı yolu izler.
+   Bu anahtarlar YALNIZ başkan dosyada şikâyetçi / zarar gören ve dosyanın son toplantı kaydı
+   vekâletliyse verilir (`documents._committee_with_members_context`); öteki bütün durumlarda
+   yedi şablonun çıktısı bayt bayt aynıdır (testli) — kaldırma. Ceza tebliğleri ("Tebliğ Eden —
+   Müdür Yardımcısı") kapsam DIŞIDIR, AYNEN.
    `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.
@@ -353,8 +362,12 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   toplantıda EK-1, Form-11, md. 195 tutanağı ve karar defteri başkanlık eden üyeyi TEK
   ifadeyle basar (`documents.ACTING_CHAIR_ROLE`). Şikâyetçi / zarar gören başkan dosyanın
   BÜTÜN kurul evrakından çıkar (`documents._signing_panel`, `documents._case_committee`):
-  vekâletli toplantı kaydı varsa başkanlık eden üye, yoksa boş (noktalı) hane; ceza
-  tebliğlerinde tebliğ eden hanesi her durumda boş. Başkan şikâyetçi / zarar gören değilse
+  vekâletli toplantı kaydı varsa başkanlık eden üye (ad satırı YALNIZ ad, etiket
+  `ACTING_CHAIR_ROLE`; Form-12/13 gövdesi de vekâlete göre), yoksa boş (noktalı) hane ve eski
+  sabit etiket; ceza tebliğlerinde tebliğ eden hanesi her durumda boş. Başkanlık eden üye
+  Form-12 ızgarasında ve Form-10 çağrılanlar tablosunda ikinci kez basılmaz; Form-10
+  tablosunda o toplantı kaydında katılan yedek üye basılır (md. 188/1, 191/2 — yalnız bağlam:
+  `documents._meeting_call_context`; kayıtta yedek yoksa ad uydurulmaz). Başkan şikâyetçi / zarar gören değilse
   bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
   (`case_chair_warnings`, `council_chair_warnings`). Onur Kurulu (md. 182) kapsam dışıdır.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
