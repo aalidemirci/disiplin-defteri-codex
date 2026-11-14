@@ -258,12 +258,29 @@ def test_gecmisi_olan_ogrenciye_ikinci_dosyada_uyari_kaydi_acilamaz() -> None:
 
 
 def test_gerekceli_override_ile_uyari_verilen_ikinci_dosyada_kayit_acilir() -> None:
-    """§8: geçmişi olan öğrencide yazılı uyarı yolu yalnız gerekçeli override ile açıktır."""
+    """§8: geçmişi olan öğrencide yazılı uyarı yolu yalnız gerekçeli override ile açıktır.
+
+    Kullanıcı kararı, 14.11.2026 — S10: md. 157/7-e engeli artık aşama atlama
+    override'ıyla AŞILMAZ; ayrı işaret + ayrı gerekçe gerekir. Eski test tek
+    `override` bayrağıyla iki engeli birden aşıyordu — invariant değişti.
+    """
     student = StudentFactory()
     first = _case(student)
     _warn_close(first)
     second = _case(student, petition=date(2026, 5, 25))
-    _warn_close(second, on=date(2026, 5, 26))  # override'lı müdür kararı
+    with pytest.raises(ValueError, match=r"md\. 157/7-e"):
+        _warn_close(second, on=date(2026, 5, 26))  # yalnız aşama atlama: yetmez
+    services.add_event(
+        second,
+        CaseStage.DECIDED,
+        date(2026, 5, 26),
+        override=True,
+        override_reason="Rehberlik atlandı.",
+        warning_block_override=True,
+        warning_block_override_reason="Davranışlar arasında bağ yok.",
+        principal_decisions=[PrincipalDecision.WRITTEN_WARNING],
+    )
+    second.refresh_from_db()
     warning = services.issue_warning(
         second, student_id=student.pk, warning_date=date(2026, 5, 26), summary="Override'lı."
     )

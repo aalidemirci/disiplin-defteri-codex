@@ -36,6 +36,7 @@ import type {
   DisciplineCommittee,
   PersonnelSearchRow,
 } from "../disiplin/api";
+import BilesimUyarisi from "./BilesimUyarisi";
 
 export default function OdkUyeleriPanel() {
   const [committee, setCommittee] = useState<DisciplineCommittee | null>(null);
@@ -75,6 +76,8 @@ export default function OdkUyeleriPanel() {
         <CommitteeCreateCard onCreated={(c) => setCommittee(c)} />
       ) : (
         <>
+          {/* Kullanıcı kararı, 14.11.2026 — S5: md. 185/1 bileşimi uyarılır, engellenmez. */}
+          <BilesimUyarisi warnings={committee.composition_warnings} />
           <ChairCard committee={committee} onChanged={(c) => setCommittee(c)} />
           <MembersCard
             committee={committee}

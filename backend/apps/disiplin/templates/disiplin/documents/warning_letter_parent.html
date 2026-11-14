@@ -4,7 +4,11 @@ form (resmî MEB karşılığı yok; kanonik metin data/sablonlar/mudur-uyarisi/
 form-02-veli-bilgilendirme-yazisi.md). Müdür uyarısı CEZA DEĞİLDİR (md. 157/7) —
 ton bilgilendirme; tebliğ değil. Sorumlu veli (PRIMARY) ön-doldurulur; adres modelde
 tutulmaz → elle. Davranış özeti `behavior_summary` (Form-02 ile aynı kaynak).
-Antet shared; unit boş (kurul belgesi değil — müdür işlemi).{% endcomment %}
+Antet shared; unit boş (kurul belgesi değil — müdür işlemi).
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S3): öğrenci adından sonraki tamlayan eki
+sabit "'in" yerine ünlü uyumuyla üretilir (tr_ekler: "AYDIN'IN", "KAYA'NIN", "ÖZTÜRK'ÜN");
+ad harfle bitmiyorsa ek yerine "adlı öğrencinin" kalıbı basılır. Başka metin değişmedi.{% endcomment %}
+{% load tr_ekler %}
 {% block content %}
 <div class="doc-title">VELİYE YAZILI UYARI BİLGİLENDİRMESİ</div>
 <div class="doc-subtitle">Form-02 (Veli) · MEB Ortaöğretim Kurumları Yönetmeliği md. 157/7 — bilgilendirme yazısı</div>
@@ -25,7 +29,7 @@ Antet shared; unit boş (kurul belgesi değil — müdür işlemi).{% endcomment
 
 <p class="para">
   Okulumuz {{ student.class_label }} sınıfı {{ student.student_number }} numaralı öğrencisi
-  <strong>{{ student.full_name }}</strong>'in sergilediği
+  {% with ek=student.full_name|tr_tamlayan_eki %}<strong>{{ student.full_name }}</strong>{% if ek %}{{ ek }}{% else %} adlı öğrencinin{% endif %}{% endwith %} sergilediği
   "<strong>{{ behavior_summary }}</strong>" davranışının, Millî Eğitim Bakanlığı Ortaöğretim
   Kurumları Yönetmeliği'nin kınama cezasını gerektiren davranışlar kapsamında olduğu tespit
   edilmiştir.

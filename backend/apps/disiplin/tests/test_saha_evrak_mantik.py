@@ -22,6 +22,7 @@ from apps.disiplin import honor_documents, selectors, services
 from apps.disiplin.models import (
     CaseStage,
     DisciplineCase,
+    DisciplineWarning,
     DocumentType,
     ParticipantRole,
     PenaltyType,
@@ -86,6 +87,14 @@ def _case(*students: Any, petitioner_user_id: int | None = None) -> DisciplineCa
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
     return case
+
+
+def _warn(case: DisciplineCase, student: Any) -> None:
+    """Dal B dosyaya öğrencinin müdür uyarısı kaydını ekler (uyarıdan sonra kurula sevk
+    edilmiş dosya). `issue_warning` kurula sevkli dosyada kayıt açmadığı için modelden."""
+    DisciplineWarning.objects.create(
+        case=case, student_id=student.pk, warning_date=date(2026, 5, 19), summary="x"
+    )
 
 
 def _generate(case: DisciplineCase, document_type: str, **kwargs: Any) -> Any:
@@ -579,7 +588,10 @@ def test_ceza_tebligi_onayda_degisen_kararda_yururlukteki_cezayi_basar(
 
 
 def test_ceza_tebligi_ogrenci_ve_veli_suretleri_ayni_cezayi_tasir() -> None:
-    """Gerçek PDF: iki surette de yürürlükteki ceza; not yalnız Form-15'te (Form-14 AYNEN)."""
+    """Gerçek PDF: iki surette de yürürlükteki ceza ve AYNI değişiklik notu.
+
+    Kullanıcı kararı 14.11.2026 — S3: not eskiden yalnız Form-15'teydi (Form-14 AYNEN
+    şablondu); karar Form-14'ü istisna listesine aldı, test buna göre güncellendi."""
     case, student, _decision = _reduced_case()
     texts: dict[str, str] = {}
     for recipient in ("student", "parent"):
@@ -595,9 +607,9 @@ def test_ceza_tebligi_ogrenci_ve_veli_suretleri_ayni_cezayi_tasir() -> None:
     for text in texts.values():
         assert '"Kınama" cezası verilmiştir' in text
         assert "(5 gün)" not in text
-    assert "İşbu yazı ile tebliğ edilen ceza yürürlükteki cezadır." in texts["parent"]
-    assert _SUSPENSION not in texts["student"]
-    assert "olarak değiştirilmiştir" not in texts["student"]
+        assert "İşbu yazı ile tebliğ edilen ceza yürürlükteki cezadır." in text
+        assert f'verdiği "{_SUSPENSION_5}" cezası' in text
+        assert '"Kınama" olarak değiştirilmiştir.' in text
 
 
 def test_ceza_tebligi_degismemis_kararda_not_yok(ctx: dict[str, Any]) -> None:
@@ -747,12 +759,13 @@ def test_ceza_gunleri_tebligi_guncel_cezayi_kullanir(ctx: dict[str, Any]) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Bulgu 31, 58 — karar defteri (dosya görüşme tutanağı) — OYS PARİTESİ
+# Bulgu 31, 58 — karar defteri (dosya görüşme tutanağı) — KULLANICI KARARI S1
 #
-# Gözden geçirme E3: önceki tur karar defterinde (a) kararları karar numarasına göre
-# sıralıyor, (b) uzaklaştırmada ceza etiketine "— N gün" ekliyordu. İkisi de gündemsiz
-# toplantı çıktısını OYS'den saptırır (CLAUDE.md §1/3) ve kullanıcı kararı gerektirir →
-# GERİ ALINDI; eski test (`…_uzaklastirma_gun_sayisi_ve_sira`) bu yüzden tersine çevrildi.
+# Gözden geçirme E3 bu iki davranışı (karar numarası sırası + uzaklaştırmada "— N gün")
+# OYS paritesi (CLAUDE.md §1/3) gerekçesiyle geri almış, testi "OYS ile aynı" diye
+# sabitlemişti. Kullanıcı 14.11.2026'da karar verdi (S1): İKİSİ DE uygulanır, bilinçli
+# sapma olarak yazılır → test yeniden tersine çevrildi. Ayrıntılı testler:
+# test_kararlar_evrak.py (test_s1_*).
 # ---------------------------------------------------------------------------
 def _case_review_meeting(case: DisciplineCase, year: Any) -> Any:
     return services.create_council_meeting(
@@ -765,14 +778,16 @@ def _case_review_meeting(case: DisciplineCase, year: Any) -> Any:
     )
 
 
-def test_karar_defteri_gundemsiz_toplantida_oys_ile_ayni_sira_ve_etiket() -> None:
+def test_karar_defteri_karar_numarasi_sirasi_ve_gun_sayisi() -> None:
+    """Kullanıcı kararı 14.11.2026 — S1 (eski adı `…_oys_ile_ayni_sira_ve_etiket`, tersine
+    döndü): kararlar karar numarası sırasıyla, uzaklaştırma gün sayısıyla basılır."""
     year = SchoolYearFactory()
     a, b = StudentFactory(), StudentFactory()
     case = _case(a, b)
-    services.record_decision(
+    first = services.record_decision(
         case, student_id=a.pk, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
-    services.record_decision(
+    second = services.record_decision(
         case,
         student_id=b.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -780,26 +795,25 @@ def test_karar_defteri_gundemsiz_toplantida_oys_ile_ayni_sira_ve_etiket() -> Non
         decision_date=date(2026, 5, 22),
     )
     rows = doc_engine._council_minutes_context(_case_review_meeting(case, year))["case_decisions"]
-    # (a) Sıra HEAD'deki gibi selector/model sırasıdır — bağlamda yeniden sıralanmaz.
-    expected = list(selectors.decisions_for_case(case))
-    assert len(rows) == 2
-    assert [r["decision_no"] for r in rows] == [d.decision_no for d in expected]
-    assert [r["full_name"] for r in rows] == [d.student.full_name for d in expected]
-    # (b) Ceza yalnız TÜR etiketiyle: uzaklaştırmada gün sayısı eki yok.
-    by_name = {r["full_name"]: r for r in rows}
-    assert by_name[a.full_name]["penalty_display"] == "Kınama"
-    assert by_name[b.full_name]["penalty_display"] == _SUSPENSION
-    for row, decision in zip(rows, expected, strict=True):
-        assert row["penalty_display"] == decision.get_penalty_type_display()
+    # (a) Sıra karar numarasıdır — selector/model sırası (yeniden eskiye) DEĞİL.
+    assert [r["decision_no"] for r in rows] == [first.decision_no, second.decision_no]
+    assert [r["full_name"] for r in rows] == [a.full_name, b.full_name]
+    assert [d.decision_no for d in selectors.decisions_for_case(case)] != [
+        r["decision_no"] for r in rows
+    ]
+    # (b) Uzaklaştırmada gün sayısı basılır; gün sayısı olmayan cezada etiket yalındır.
+    assert rows[0]["penalty_display"] == "Kınama"
+    assert rows[1]["penalty_display"] == f"{_SUSPENSION} — 3 gün"
+    for row, decision in zip(rows, (first, second), strict=True):
         assert row["statute_label"] == doc_engine.statute_label(decision)
 
 
 def test_karar_defterinde_itirazla_degisen_ceza_kurulun_verdigidir() -> None:
-    """Ceza sonradan değiştiyse TÜR etiketi kurulun verdiği cezadır (gün eki yine yok)."""
+    """Ceza sonradan değiştiyse basılan ceza kurulun verdiğidir — gün sayısıyla (S1)."""
     case, _student, _decision = _reduced_case()
     year = SchoolYearFactory()
     row = doc_engine._council_minutes_context(_case_review_meeting(case, year))["case_decisions"][0]
-    assert row["penalty_display"] == _SUSPENSION
+    assert row["penalty_display"] == _SUSPENSION_5
     assert row["statute_label"] == "Madde 164/2"
 
 
@@ -817,6 +831,9 @@ def test_surume_gore_varsayilan_baslik_ve_dosya_adi(ctx: dict[str, Any]) -> None
     # Variant verilmezse türün varsayılan (ilk) sürümünün başlığı.
     assert _generate(case, DocumentType.DEADLINE_EXTENSION).title == record.title
 
+    # Kullanıcı kararı 14.11.2026 — S12: kurula sevkli dosyada veli görüşme tutanağı
+    # yalnız öğrencinin uyarı kaydı varsa üretilir.
+    _warn(case, student)
     titles = {
         v: _generate(case, DocumentType.PARENT_MEETING, student_id=student.pk, variant=v).title
         for v in ("invite", "meeting", "no_show")
@@ -837,6 +854,7 @@ def test_surume_gore_varsayilan_baslik_ve_dosya_adi(ctx: dict[str, Any]) -> None
 def test_aliciya_gore_varsayilan_baslik(ctx: dict[str, Any]) -> None:
     student = StudentFactory()
     case = _case(student)
+    _warn(case, student)  # S12: kurula sevkli dosyada Form-02 için uyarı kaydı şart
     ogrenci = _generate(
         case, DocumentType.WARNING_LETTER, student_id=student.pk, behavior_summary="x"
     )

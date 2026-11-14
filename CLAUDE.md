@@ -42,6 +42,17 @@
    kararı, 14.11.2026): imza ızgarası 6 ve üzeri imzacıda 5'erli satırlara bölünür
    (kalabalık kurulda imza haneleri sayfa dışına taşıyordu); 5 ve altında çıktı OYS ile
    aynıdır — `_SIGNERS_PER_ROW` değerini düşürme.
+   **Kullanıcı kararları 14.11.2026 (S1, S3, S4, S12) — OYS'ye "geri döndürme":**
+   `warning_letter_parent` (Form-02 veli: ad sonrası tamlayan eki `tr_ekler` ile),
+   `penalty_notice` (Form-14: cezasız kararda tebellüğ metni "ceza" demez; değişen cezada
+   Form-15'teki `penalty_change_note` paragrafı), `honor_recommendation_record` (toplantılı
+   yolda "Toplantı Tarihi / No" satırı) ve `defense_record` (Form-11 YALNIZ dolu mod: imza
+   bloğu bölünmez, kutu en az 4 cm; boş mod ve "Yer" varsayılanı DEĞİŞMEDİ) değiştirildi.
+   Karar defterinde (dosya görüşme tutanağı) kararlar KARAR NUMARASI sırasıyla dizilir ve
+   uzaklaştırmada gün sayısı basılır (`documents._council_minutes_context`; dosyasız tutanak
+   etkilenmez). `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
+   değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
+   dosyanın geri kalanı AYNEN.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
 5. **Tarih ve büyük harf iki gerçek tuzak.** §7'ye bak — bu projede en çok gerçek
    kusur bu iki sınıftan çıktı.
@@ -257,8 +268,11 @@ Yasal süre → `is_working_day`; cezanın fiilen çekildiği gün → `is_schoo
 `documents.py::_student_context` anahtarları (`full_name, tckn, birth_date,
 class_label, student_number`) **değişmeden** üretilmeli; değişirse 25 şablon
 sessizce boş alan basar. Korunması gereken kilitler: **Dal A/B kısıtı** (kurula
-sevksiz dosyada yalnız uyarı + tedbir + dizi pusulası üretilebilir) ve
-**Form-16/17 yalnız kesinleşmiş kararda**.
+sevksiz dosyada yalnız uyarı + tedbir + dizi pusulası üretilebilir),
+**Form-16/17 yalnız kesinleşmiş kararda** ve **Dal B'de uyarı belgesi kilidi** (S12,
+14.11.2026): kurula sevkli dosyada öğrencinin o dosyada müdür uyarısı kaydı yoksa Form-02
+(öğrenci ve veli) ile veli görüşme tutanağı üretilmez; veli davet yazısı ve "veli gelmedi"
+tutanağı kapsam dışıdır, Dal A'da kayıt aranmaz.
 
 ### 7.5 Bayat önbellek / tazelenmeyen liste
 F4 denetiminde birden çok kez çıktı: mutasyondan sonra `prefetch`'in bayat kalması
@@ -293,7 +307,10 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   kuruluna sevk. Yalnız uyarı → dosya otomatik `CLOSED`.
 - **Müdür uyarısı (md. 157/7) ceza değildir**, davranış puanı düşürmez; geçmişte
   ceza/uyarı (uyarıyla kapanmış Dal A dosyası dahil) varsa yazılı uyarı yolu
-  override'sız kapalıdır (md. 157/7-e, 166).
+  kapalıdır (md. 157/7-e, 166). Bu engel aşama atlama override'ıyla AŞILMAZ (S10,
+  14.11.2026): yalnız AYRI işaret + AYRI gerekçeyle
+  (`add_event(warning_block_override=True, warning_block_override_reason=…)`) aşılır;
+  iz olayın `override_reason` alanına "md. 157/7-e engeli aşıldı: …" önekiyle yazılır.
 - **md. 166:** öğrencinin aynı öğretim yılında yürürlükte cezası varsa ondan ağır
   olmayan ceza yalnız gerekçeyle (`md166_override_reason`) girilir; sıralama
   `selectors.decisions.PENALTY_SEVERITY`. Cezasız karar kural dışı.
@@ -308,7 +325,11 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
 - **Kapanış uygunluğu (`close_eligible`):** onaylı karar + md. 197 askısı ve `PENDING` itiraz yok
   + tebliğ yapılmış + itiraz süresi dolmuş + 5 iş günü tampon.
   Kural hem "Kapat" ucunda hem CLOSED aşama olayında uygulanır; uygun değilse
-  yalnız gerekçeli override (iz kaydedilir).
+  yalnız gerekçeli override (iz kaydedilir). **Cezasız karar istisnası** (S9, 14.11.2026):
+  "ceza verilmesine yer olmadığı" kararı onaylanıp TEBLİĞ edildikten sonra itiraz süresi
+  ve tampon beklenmez (itiraz yolu yok, md. 169/3). Kural karar bazındadır: cezalı
+  kararların süreleri beklenir ve hakkında işlem yapılan her öğrencinin kararı girilmiş
+  olmalıdır.
 - **Kapalı dosyada kapanış dayanağı kilitli:** onay, tebliğ, md. 197 iade/sevk ve
   karar düzenleme/silme reddedilir; itiraz + sonucu, e-Okul, md. 171/2 serbest
   (`services.decisions._assert_case_open`). Kurula sevk tarihi = **son** müdür kararı
@@ -317,10 +338,15 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   dek uygulanmaz** (md. 172/2-ç, `_enforced_state`).
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
-- **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`.
+- **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`. Kurul bileşimi (md. 185/1)
+  UYARILIR, engellenmez (S5, 14.11.2026: `selectors.committee_composition_warnings`).
+  Yeter sayıya (md. 191/1) yalnız kurul üyeleri girer; sayılmayan oy hakkı satırları
+  `meeting_quorum_detail` ile adlarıyla gösterilir (S13).
 - **Onur kurulu (md. 180-181):** üye sınıf seviyesi sicilden, seviye başına tek asıl
   üye, asıl ikinci başkan 11/12. sınıftan; onur belgesi müdür onayında uygunluk
   yeniden denetlenir, müdür onayı geri alınamaz (öncesi gerekçeyle geri alınır).
+  Onur Kurulu, davranış puanı indirilmiş öğrenci için uygun görüş verebilir (md. 183/b)
+  ama karar öncesi uyarılır (S6, 14.11.2026: gündem maddesi `honor_eligible`).
 - **Onur belgesinde kurul kararı yalnız toplantıda** (kurul işleyişi, 04.10.2026):
   uygun görüş (md. 183/b) ve kabul/ret (md. 161/1) yalnız bir kurul toplantısının
   gündem maddesi karara bağlanarak verilir (`services.council.decide_agenda_item`);
@@ -330,7 +356,7 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   silinemez, tarihi değişmez; geri alma maddeyi yeniden "karar bekliyor" yapar.
 
 Süre matrisi (iş günü): itiraz tebliğ+5, sevk+5, kurul 10 (+1 uzatma), tedbir ≤10
-(+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri
+(+2 uzatma, her biri ayrı ≤10 ve MEM onaylı; başlama+3 karar gününden; başlangıç tatil günüyse tedbir günleri izleyen ilk iş gününden), uzaklaştırma 1-5 gün, kapanış tamponu +5. Puan indirimleri
 10/20/40/80. Hepsi `discipline_periods.py`'de.
 
 ---

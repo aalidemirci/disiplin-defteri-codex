@@ -33,6 +33,7 @@ import type {
   HonorMeetingKind,
   MinutesType,
 } from "./api";
+import BilesimUyarisi from "./BilesimUyarisi";
 import KatilimciEditor, { emptyRow, rowsToAttendees, toRow, validateRows } from "./KatilimciEditor";
 import type { AttendeeRow } from "./KatilimciEditor";
 import Textarea from "./Textarea";
@@ -69,6 +70,25 @@ export default function ToplantiForm({
   const [prefilling, setPrefilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const prefillRequested = useRef(false);
+  // Kullanıcı kararı, 14.11.2026 — S5: kurul md. 185/1'e uymuyorsa toplantı kaydında
+  // uyarılır; kayıt engellenmez. Uyarı yüklenemezse form sessizce uyarısız çalışır.
+  const [compositionWarnings, setCompositionWarnings] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isDiscipline) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const warnings = await kurulApi.compositionWarnings();
+        if (!cancelled) setCompositionWarnings(warnings);
+      } catch {
+        // Uyarı bilgilendirmedir; alınamaması toplantı kaydını engellemez.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDiscipline]);
 
   const loadPrefill = async (
     type: CouncilType,
@@ -165,6 +185,8 @@ export default function ToplantiForm({
       <h2 className="text-title-large text-on-surface">
         {hasAgenda ? "Toplantı aç" : "Yeni Kurul Toplantı Tutanağı"}
       </h2>
+
+      <BilesimUyarisi warnings={compositionWarnings} />
 
       {hasAgenda && (
         <Card elevation={0} className="space-y-2 bg-surface-container-low p-4">

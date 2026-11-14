@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -639,24 +638,16 @@ def _honor_meeting(year: Any, **kwargs: Any) -> Any:
     )
 
 
-def test_onur_teklif_tutanagi_sablonu_toplanti_satiri_basmaz() -> None:
-    """Gözden geçirme E1 — honor_recommendation_record.html OYS'den AYNEN bir şablondur
-    (CLAUDE.md §1/3 istisna listesinde DEĞİL). Önceki tur şablona "Toplantı Tarihi / No"
-    satırı eklemişti; geri alındı. Toplantı tarihi/numarası BAĞLAMDA hazırdır
-    (test_saha_evrak_mantik), şablona basılması kullanıcı kararıdır — eski test
-    (`…_toplanti_tarihi_ve_no`) bu yüzden tersine çevrildi."""
+def test_onur_teklif_tutanagi_toplanti_tarihi_ve_no() -> None:
+    """Kullanıcı kararı 14.11.2026 — S3 (eski adı `…_sablonu_toplanti_satiri_basmaz`, tersine
+    döndü): gözden geçirme E1 satırı OYS paritesi gerekçesiyle geri almıştı; kullanıcı şablonu
+    istisna listesine aldı — toplantı tarihi ve defter numarası künyeye basılır (md. 183/b)."""
     year = SchoolYearFactory()
     board = services.create_honor_board(school_year_id=year.pk, chair_id=PersonnelFactory().pk)
     meeting = _honor_meeting(year)
     text = _pdf_text(honor_documents.render_recommendation_record([], board=board, meeting=meeting))
-    assert "Toplantı Tarihi / No" not in text
+    assert f"Toplantı Tarihi / No 25.05.2026 / {meeting.meeting_no_display}" in text
     assert "Düzenlenme Tarihi" in text
-    source = (
-        Path(honor_documents.__file__).parent
-        / "templates/disiplin/documents/honor_recommendation_record.html"
-    ).read_text(encoding="utf-8")
-    assert "meeting_date" not in source
-    assert "meeting_no" not in source
 
 
 def test_onur_teklif_tutanagi_toplantisiz_yolda_degismez() -> None:

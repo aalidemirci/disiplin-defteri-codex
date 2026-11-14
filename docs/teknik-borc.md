@@ -48,26 +48,26 @@ Ayrıntı ve gerekçe: `docs/gelistirme-plani-2026-09.md`.
 | M8 | ~~Onur kararlarında geri alma yok; müdür onayında uygunluk denetimi yok~~ | KAPANDI 26.09.2026 — kullanıcı kararıyla (A) müdür onayında uygunluk yeniden denetlenir; müdür onayından önceki son adım gerekçeyle geri alınır (`UNDONE` olayı iz bırakır); müdür onayı kesindir |
 | M9 | Disiplin dosyasının Ödül ve Disiplin Kurulu görüşmesi toplantı yapısına bağlı değil: dosya başına ayrı yoklama (`DisciplineMeeting`, yeter sayılı) ile serbest metinli CASE_REVIEW tutanağı ayrı girilir; karar (`DisciplineDecision`) toplantıya bağlanmaz (FK boş kalır); bir oturumda birden çok dosya görüşülemez; md. 197 iadesinden sonraki ikinci görüşme kaydedilmez | AÇIK — kullanıcı kararıyla (04.10.2026) kurul işleyişi **Aşama 2**'ye bırakıldı: Aşama 1 onur belgesi kararlarını toplantı gündemine taşıdı; Aşama 2 dosya kararını aynı gündem yapısına taşıyacak (§8 invariantlarına ve EK-1'e dokunduğu için ayrı plan + denetimle) |
 
-## 14.11.2026 saha denemesinden kalan — kullanıcı kararı bekleyenler
+## 14.11.2026 saha denemesinden kalan — kararlar verildi; S7, S8, S11 bekliyor
 
-Bunlar çalıştırılarak doğrulandı ama düzeltilmedi: ya OYS'den AYNEN alınan bir dosyaya dokunmayı,
-ya mevzuat yorumunu, ya da şema değişikliğini gerektiriyor.
+Kullanıcı kararları 14.11.2026'da alındı. Uygulama #17'den AYRI dallarda/PR'larda yapılacak;
+S8 ve S7 büyük oldukları için kendi PR'larında gelir. Uygulanan kalem "Kapanmış" tablosuna taşınır.
 
-| # | Konu | Karar gereken nokta |
-|---|---|---|
-| S1 | Karar defterinde (dosya görüşme tutanağı) uzaklaştırma gün sayısı basılmıyor; kararlar karar numarasına ters sırada | Gündemsiz toplantı çıktısı OYS ile aynı tutuluyor (altın kural 3). Gün sayısı ve sıra eklensin mi? |
-| S2 | ~~Karar defteri imza ızgarası 6+ imzacıda 5'erli satıra bölünüyor (taşma düzeltmesi)~~ | KARAR VERİLDİ 14.11.2026 — kullanıcı onayladı: sapma kalır; ≤5 imzacıda çıktı OYS ile aynı. CLAUDE.md altın kural 3'e işlendi |
-| S3 | AYNEN şablonlardaki kusurlar: Form-02 veli yazısında sabit "'in" eki; cezasız kararda Form-14 tebellüğ metni "verilen disiplin cezasına"; Form-14 değişen cezada "kurulun verdiği ceza" notunu basamıyor; onur teklif tutanağında toplantı tarihi/no yok; Form-11'de imza bloğu tek başına ikinci sayfada; boş bırakılan "Yer" alanına "Müdür Yardımcısı Odası" basılıyor (dört AYNEN şablonda varsayılan) | Her biri için şablon istisna listesine alınsın mı? |
-| S4 | Tatil günü başlayan tedbirde o gün tedbirin 1. iş günü sayılıyor (`discipline_periods.precaution_end_date`, AYNEN) | Sayım ilk iş gününden mi başlasın, yoksa ayrı "karar tarihi" alanı mı tutulsun? |
-| S5 | Ödül ve Disiplin Kurulu kompozisyonu (md. 185/1) denetlenmiyor | md. 180 için 26.09.2026'da "engelle" kararı verilmişti; md. 185 için engelle / uyar? |
-| S6 | Onur Kurulu, davranış puanı indirilmiş öğrenciye "uygun görüş" verebiliyor (md. 183/b öneri yetkisi ↔ md. 161/1 koşulu) | Onur Kurulu adımında engel mi, uyarı mı? |
-| S7 | Şikâyetçi olan kurul başkanı kendi şikâyetinin kararını başkan olarak imzalayabiliyor (md. 191/2, 188) | Ret tek başına çıkmaz yaratır; "başkan katılmadı, yerine … başkanlık etti" kaydı için tasarım gerekir |
-| S8 | Disiplin kararı, kurul toplantısı kaydedilmeden (ve kurul tanımlanmadan) girilebiliyor | Onur belgesindeki "karar yalnız toplantıda" kuralı (Aşama 1) disiplin kararına da getirilsin mi (Aşama 2 / M9)? |
-| S9 | "Ceza verilmesine yer olmadığı" kararında kapanış, itiraz süresi + tampon kadar bekletiliyor | Bu karara itiraz yolu yoksa bekleme kaldırılsın mı? |
-| S10 | Rehberlik atlama için verilen override, md. 157/7-e yazılı uyarı engelini de aşıyor | İki engel ayrı onay mı istesin? |
-| S11 | Şema gerektirenler: imha edilen dosyanın numarası yeniden veriliyor (kalıcı sayaç yok); md. 197'de ilçe kurulunun onayda değiştirdiği cezanın özgün hâli ve ilk iade tarihi saklanmıyor; EK-1 "önceki cezalar" anlık kopyası sonradan bozulan cezayı göstermeye devam ediyor | Migration ile ele alınmalı |
-| S12 | Kurula sevkli (Dal B) dosyada müdür yazılı uyarısı ve veli görüşme tutanağı uyarı kaydı olmadan üretilebiliyor | OYS tasarımı; reddedilsin mi? |
-| S13 | Değişiklikten önce kaydedilmiş, adı kurul listesiyle eşleşmeyen "oy hakkı olan" satırlar artık yeter sayıya girmiyor ve arayüz hangi satırın sayılmadığını göstermiyor | Sahada mevcut toplantılar kontrol edilmeli; yeter sayı kartına açıklama eklenebilir |
+| # | Konu | Karar (14.11.2026) | Durum |
+|---|---|---|---|
+| S1 | Karar defterinde (dosya görüşme tutanağı) uzaklaştırma gün sayısı yok; kararlar karar numarasına ters sırada | İKİSİ DE düzeltilecek: gün sayısı basılır, kararlar karar numarası sırasıyla dizilir. Altın kural 3'e bilinçli sapma olarak yazılır | Uygulandı 14.11.2026 |
+| S2 | ~~Karar defteri imza ızgarası 6+ imzacıda 5'erli satıra bölünüyor~~ | Sapma kalır; ≤5 imzacıda çıktı OYS ile aynı | Uygulandı (#17) |
+| S3 | AYNEN şablonlardaki kusurlar | DÜZELTİLECEK (şablonlar istisna listesine yazılır): Form-02 veli yazısında "'in" eki (`tr_tamlayan`); cezasız kararda Form-14 tebellüğ metni; Form-14'e değişen ceza notu; onur teklif tutanağına "Toplantı Tarihi / No" satırı; Form-11 imza bloğu taşması. DOKUNULMAYACAK: boş "Yer" alanına "Müdür Yardımcısı Odası" basılması (varsayılan kalır) | Uygulandı 14.11.2026 (Form-11'de dolu kutunun en az yüksekliği 7 cm → 4 cm oldu; Form-14 değişen ceza notu ilk paragrafla birlikte okununca tekrar içeriyor — metin gözden geçirilebilir) |
+| S4 | Tatil günü başlayan tedbirde o gün 1. iş günü sayılıyor | Süre izleyen İLK İŞ GÜNÜNDEN sayılır; girilen tarih karar günü kalır, md. 175/2'deki 3 iş günü ondan sayılır. `discipline_periods.py` için bilinçli sapma | Uygulandı 14.11.2026 (yalnız YENİ kayıtlar; önceden kaydedilmiş, tatil günü başlayan tedbirlerin bitiş tarihi yeniden hesaplanmadı) |
+| S5 | Ödül ve Disiplin Kurulu kompozisyonu (md. 185/1) denetlenmiyor | UYAR, engelleme: kurul ekranında ve toplantı kaydında uyarı; kayıt yapılabilir | Uygulandı 14.11.2026 (başkanın müdür yardımcısı olması, öğretmenlerin seçimle gelmesi ve velinin okul-aile birliği üyeliği modelden ayırt edilemediği için denetlenmez) |
+| S6 | Onur Kurulu puanı indirilmiş öğrenciye uygun görüş verebiliyor | UYAR: karar girilirken md. 161/1 uyarısı; karar yine verilebilir (md. 183/b öneri yetkisi) | Uygulandı 14.11.2026 |
+| S7 | Şikâyetçi kurul başkanı kendi şikâyetinin kararını imzalayabiliyor (md. 191/2, 188) | VEKÂLET KAYDI eklenir: toplantıda "başkan katılmadı, yerine … başkanlık etti"; şikâyetçi başkan o dosyada imza ızgarasına girmez. Şema + form değişikliği — AYRI PR | Bekliyor |
+| S8 | Disiplin kararı kurul toplantısı kaydedilmeden girilebiliyor | TOPLANTI ZORUNLU (Aşama 2 / M9): yeni disiplin kararı yalnız kayıtlı, yeter sayısı olan toplantıya bağlı girilir; karar tarihi = toplantı tarihi. GEÇİŞ: toplantısız girilmiş ESKİ kararlar geçerli kalır, onay/tebliğ/itiraz sürer; "toplantı kaydı yok" bilgisi gösterilir. AYRI PR | Bekliyor |
+| S9 | "Ceza verilmesine yer olmadığı" kararında kapanış süreleri bekleniyor | Cezasız karar TEBLİĞ edildikten sonra itiraz süresi ve tampon beklenmeden dosya kapatılabilir | Uygulandı 14.11.2026 (hakkında işlem yapılan her öğrencinin kararı girilmiş olmalı) |
+| S10 | Rehberlik atlama override'ı md. 157/7-e engelini de aşıyor | AYRI ONAY: aşama atlama ile md. 157/7-e engelini aşma iki ayrı işaret ve iki ayrı gerekçe ister | Uygulandı 14.11.2026 (iki gerekçe tek 255 karakterlik iz alanına yazılıyor; ayrı sütun S11 şema işiyle açılabilir) |
+| S11 | Şema gerektirenler | ÜÇÜ DE yapılacak: (a) ders yılı başına kalıcı dosya numarası sayacı (imha edilen numara yeniden verilmez); (b) md. 197'de okul kurulunun verdiği özgün ceza ve ilk iade tarihi saklanır; (c) EK-1 "önceki cezalar" için açık dosyada "özet güncel değil — yeniden derle" uyarısı ve düğmesi | Bekliyor |
+| S12 | Dal B dosyada uyarı kaydı olmadan müdür yazılı uyarısı ve veli görüşme tutanağı üretilebiliyor | Uyarı kaydı YOKSA üretilmez (Türkçe ret); kayıt varsa üretilir. OYS'den bilinçli sapma | Uygulandı 14.11.2026 (kurula sevkli dosyada uyarı kaydı açılamadığı için bu belgeler yalnız sevkten önce kaydedilmiş uyarı varsa üretilir) |
+| S13 | Yeter sayıda sayılmayan satırlar ekranda görünmüyor | Yeter sayı kartına sayılmayan satırlar adları ve nedeniyle LİSTELENİR | Uygulandı 14.11.2026 |
 
 ## Kapanmış
 

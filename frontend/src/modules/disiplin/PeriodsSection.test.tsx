@@ -181,3 +181,19 @@ describe("PeriodsSection — kapalı dosya", () => {
     expect(await screen.findByRole("button", { name: "Uzat" })).toBeInTheDocument();
   });
 });
+
+// Kullanıcı kararı, 14.11.2026 — S4: tatil günü başlayan tedbirin iş günleri izleyen
+// ilk iş gününden sayılır; girilen tarih karar günü kalır (md. 175/1-2).
+describe("PeriodsSection — S4: tedbir başlangıcı tatil günü olabilir", () => {
+  it("başlangıç alanı yeni sayım kuralını anlatır; 'tatil kabul edilmez' demez", async () => {
+    setup([], []);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: "Tedbir ekle" }));
+    const alan = screen.getByLabelText(/Tedbir kararı \/ başlangıç tarihi/);
+    expect(alan).toHaveAccessibleDescription(/izleyen ilk iş gününden sayılır/);
+    expect(alan).toHaveAccessibleDescription(/3 iş günü bu tarihten sayılır \(md\. 175\/2\)/);
+    expect(screen.queryByText(/resmî tatil kabul edilmez/)).toBeNull();
+  });
+});

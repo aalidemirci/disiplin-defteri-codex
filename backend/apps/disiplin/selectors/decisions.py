@@ -141,6 +141,13 @@ def close_eligibility_details(
     tampon sonrası uygun; tebliğsiz (REJECTED değil) → uygun değil. Kesinleşen
     uygulanabilir cezaların e-Okul'a işlendiği de onaylanmalıdır. Hiç karar yoksa
     hemen uygun.
+
+    Kullanıcı kararı, 14.11.2026 — S9: "ceza verilmesine yer olmadığı" kararı TEBLİĞ
+    edildikten sonra itiraz süresi ve kapanış tamponu BEKLENMEZ — itiraz "cezalara
+    karşı" yapılır (md. 169/3), cezasız kararda itiraz yolu yoktur
+    (`services.file_appeal`), beklenecek süre de yoktur. Onay (md. 163/2), md. 197
+    askısı ve tebliğ şartı cezasız kararda da aranır. Kural KARAR bazındadır: çok
+    öğrencili dosyada cezalı kararların süreleri eskisi gibi beklenir.
     """
     if today is None:
         today = timezone.localdate()
@@ -149,6 +156,7 @@ def close_eligibility_details(
         return (True, None, "")
 
     eligible_dates: list[date] = []
+    shortcut_used = False
     for d in decisions:
         if d.approval_status in (
             DecisionApprovalStatus.RETURNED_TO_COMMITTEE,
@@ -166,11 +174,27 @@ def close_eligibility_details(
             return (False, None, "Karar henüz onaylanmadı (md. 163/2).")
         if d.notified_at is None or d.appeal_deadline is None:
             return (False, None, "Karar önce öğrenciye/veliye tebliğ edilmelidir.")
+        if d.penalty_type == PenaltyType.NO_PENALTY:
+            shortcut_used = True
+            continue  # S9 (14.11.2026): tebliğ edilmiş cezasız karar süre beklemez
         eligible_dates.append(
             discipline_periods.close_eligible_deadline(
                 d.appeal_deadline, is_working_day=is_working_day
             )
         )
+
+    if shortcut_used:
+        # S9 kısayolu dosyayı ANINDA kapatılabilir kıldığı için, hakkında işlem yapılan
+        # her öğrencinin kararı girilmiş olmalıdır: çok öğrencili dosyada biri cezasız
+        # karar alıp tebliğ edilmişken ötekinin kararı henüz girilmemişse dosya kapanmaz.
+        decided = {d.student_id for d in decisions}
+        undecided = set(case.case_students.values_list("student_id", flat=True)) - decided
+        if undecided:
+            return (
+                False,
+                None,
+                "Hakkında işlem yapılan her öğrenci için karar girilmeden dosya kapatılamaz.",
+            )
 
     latest = max(eligible_dates) if eligible_dates else None
     if latest is not None and today < latest:

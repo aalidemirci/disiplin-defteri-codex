@@ -36,6 +36,11 @@ from apps.disiplin.services.participants import ensure_accused_participant
 from apps.disiplin.state_machine import InvalidTransitionError, validate_transition
 from apps.okul import selectors as okul_selectors
 
+# Kullanıcı kararı, 14.11.2026 — S10: md. 157/7-e engelinin aşıldığı, olayın
+# `override_reason` iz alanına bu önekle yazılır (ayrı sütun yok — şema değişmedi).
+_WARNING_BLOCK_MARK = "md. 157/7-e engeli aşıldı: "
+_OVERRIDE_REASON_MAX = 255  # DisciplineEvent.override_reason max_length
+
 
 def generate_case_no() -> str:
     """Sıradaki dosya no: '{ders yılı adı}-{4 haneli sıra}' (örn. 2025-2026-0001).
@@ -139,6 +144,8 @@ def add_event(
     *,
     override: bool = False,
     override_reason: str = "",
+    warning_block_override: bool = False,
+    warning_block_override_reason: str = "",
     assigned_guidance_name: str = "",
     notes: str = "",
     guidance_outcome: str | None = None,
@@ -150,6 +157,13 @@ def add_event(
 
     Geçiş geçersizse: `override=True` + zorunlu gerekçe ile delinir (olay
     `is_override` iziyle kaydedilir); değilse InvalidTransitionError.
+
+    Kullanıcı kararı, 14.11.2026 — S10: `override` YALNIZ aşama geçişini (ve CLOSED
+    olayında erken kapatmayı) kapsar. md. 157/7-e engeli ("kınama cezasını gerektiren
+    ikinci davranışında" öğrenci doğrudan kurula sevk edilir) ancak AYRI işaretle
+    (`warning_block_override`) ve AYRI gerekçeyle (`warning_block_override_reason`)
+    aşılır. Şema değişmedi: iki gerekçe de olayın `override_reason` iz alanına yazılır
+    (md. 157/7-e gerekçesi `_WARNING_BLOCK_MARK` önekiyle).
     """
     current = case.current_stage
     _assert_event_date_in_order(case, event_date)
@@ -169,22 +183,42 @@ def add_event(
     if stage == CaseStage.CLOSED:
         is_override = _closing_needs_override(case, override, override_reason) or is_override
 
+    # İz alanı: aşama atlama / erken kapatma gerekçesi (yalnız o engel aşıldıysa).
+    # Mevcut davranış korunur: gerekçe girildiği gibi saklanır.
+    trail_reason = override_reason if is_override else ""
+
     # md. 157/7: müdür yazılı uyarısı yalnız DAHA ÖNCE CEZA/UYARI almamış öğrenciye;
     # ikinci kınamalık davranışta öğrenci doğrudan kurula gönderilir (157/7-e, 166).
+    # Kullanıcı kararı, 14.11.2026 — S10: bu engeli aşama atlama override'ı AŞMAZ;
+    # ayrı işaret + ayrı gerekçe gerekir (rehberlik atlanmadan verilen kararda da).
     if stage == CaseStage.DECIDED and PrincipalDecision.WRITTEN_WARNING in (
         principal_decisions or []
     ):
         blocked = _students_needing_committee(case)
         if blocked:
-            if not override:
+            if not warning_block_override:
                 raise ValueError(
                     "Yazılı uyarı yolu yalnız daha önce disiplin cezası/uyarısı olmayan "
-                    f"öğrenciye uygulanır (md. 157/7, 157/7-e): {', '.join(blocked)} "
-                    "için geçmiş kayıt var — dosyayı disiplin kuruluna sevk edin "
-                    "veya gerekçeyle override kullanın."
+                    f"öğrenciye uygulanır (md. 157/7-e): {', '.join(blocked)} "
+                    "için geçmiş kayıt var — dosyayı disiplin kuruluna sevk edin. "
+                    "Yine de yazılı uyarı verilecekse md. 157/7-e engeli ayrı onayla ve "
+                    "ayrı gerekçeyle aşılır (aşama atlama gerekçesi bu engeli kapsamaz): "
+                    "'md. 157/7-e engelini aşıyorum' kutusunu işaretleyip gerekçesini yazın."
                 )
-            if not (override_reason or "").strip():
-                raise ValueError("Override işleminde gerekçe (override_reason) zorunludur.")
+            block_reason = (warning_block_override_reason or "").strip()
+            if not block_reason:
+                raise ValueError(
+                    "md. 157/7-e engelini aşmak için ayrı gerekçe "
+                    "(warning_block_override_reason) zorunludur."
+                )
+            block_trail = f"{_WARNING_BLOCK_MARK}{block_reason}"
+            trail_reason = f"{trail_reason}\n\n{block_trail}" if is_override else block_trail
+            if len(trail_reason) > _OVERRIDE_REASON_MAX:
+                raise ValueError(
+                    "Gerekçeler iz alanına sığmıyor: aşama atlama ve md. 157/7-e gerekçeleri "
+                    f"birlikte en fazla {_OVERRIDE_REASON_MAX} karakter olabilir "
+                    f"(şu an {len(trail_reason)}). Gerekçeleri kısaltın."
+                )
             is_override = True
 
     event = DisciplineEvent(
@@ -198,7 +232,7 @@ def add_event(
         committee_decision_type=committee_decision_type,
         committee_decision_text=committee_decision_text or "",
         is_override=is_override,
-        override_reason=override_reason if is_override else "",
+        override_reason=trail_reason if is_override else "",
     )
     event.full_clean()
     event.save()
@@ -400,7 +434,9 @@ def close_case(
     kapanmaz); gerçek kapanış kararın kesinleşmesine bağlıdır (md. 169). Uygunluk
     `selectors.close_eligible` ile hesaplanır: tebliğ + 5 iş günü itiraz süresi +
     5 iş günü tampon (itirazsız) ya da itiraz sonucunun kesinleşmesi. Erken
-    kapatma yalnız GEREKÇE (override) ile mümkündür.
+    kapatma yalnız GEREKÇE (override) ile mümkündür. "Ceza verilmesine yer olmadığı"
+    kararında tebliğ yeterlidir; itiraz süresi ve tampon beklenmez (kullanıcı kararı,
+    14.11.2026 — S9; itiraz yolu yok, md. 169/3).
     """
     from apps.disiplin import selectors
 

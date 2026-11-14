@@ -33,6 +33,7 @@ import {
   kurulApi,
 } from "./api";
 import type { AgendaItem, CouncilMeeting, DecisionBasis } from "./api";
+import BilesimUyarisi from "./BilesimUyarisi";
 import KatilimciEditor, { attendeeToRow, rowsToAttendees, validateRows } from "./KatilimciEditor";
 import type { AttendeeRow } from "./KatilimciEditor";
 import Textarea from "./Textarea";
@@ -84,6 +85,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
   const items = meeting.agenda_items ?? [];
   const favorableCount = items.filter((item) => item.outcome === "FAVORABLE").length;
   const quorum = meeting.quorum;
+  const unmatched = quorum?.unmatched ?? [];
   // Karar tarihi = toplantı tarihi: yapılmamış toplantının kararı yazılamaz (backend de reddeder).
   const notHeldYet = meeting.meeting_date > todayIso();
   // Karara bağlı maddesi olan toplantının tarihi değişmez (önce karar geri alınır).
@@ -233,19 +235,38 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
             name={quorum.ok ? "how_to_vote" : "warning"}
             className={`shrink-0 ${quorum.ok ? "text-primary" : "text-on-error-container"}`}
           />
-          <p
-            className={`text-body-medium ${
+          <div
+            className={`space-y-2 text-body-medium ${
               quorum.ok ? "text-on-surface-variant" : "text-on-error-container"
             }`}
           >
-            Yeter sayı (md. 191/1): kurul {quorum.full} kişi, en az {quorum.required} oy hakkı olan
-            üye gerekir; bu toplantıda {quorum.present}.
-            {quorum.ok
-              ? " Toplantı yeter sayısı sağlanmış."
-              : " Yeter sayı yok — katılımcıları tamamlamadan karar verilemez."}
-          </p>
+            <p>
+              Yeter sayı (md. 191/1): kurul {quorum.full} kişi, en az {quorum.required} oy hakkı
+              olan üye gerekir; bu toplantıda {quorum.present}.
+              {quorum.ok
+                ? " Toplantı yeter sayısı sağlanmış."
+                : " Yeter sayı yok — katılımcıları tamamlamadan karar verilemez."}
+            </p>
+            {/* Kullanıcı kararı, 14.11.2026 — S13: sayılmayan satırlar adı ve nedeniyle
+                listelenir (md. 191/1: üye dışı çağrılanlar oy kullanamaz). Yoksa kart aynıdır. */}
+            {unmatched.length > 0 && (
+              <div>
+                <p>Yeter sayıya girmeyen oy hakkı satırları:</p>
+                <ul className="list-inside list-disc">
+                  {unmatched.map((name, index) => (
+                    <li key={`${name}-${index}`}>
+                      {name} kurul üyesi olarak kayıtlı değil; yeter sayıya katılmadı.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </Card>
       )}
+
+      {/* Kullanıcı kararı, 14.11.2026 — S5: md. 185/1 bileşimi uyarılır, engellenmez. */}
+      <BilesimUyarisi warnings={meeting.composition_warnings} />
 
       {notHeldYet && (
         <Card elevation={0} className="flex items-start gap-3 bg-surface-container-low p-4">
@@ -496,6 +517,20 @@ function AgendaItemCard({
 
         {pending ? (
           <div className="space-y-3">
+            {/* Kullanıcı kararı, 14.11.2026 — S6: Onur Kurulu karardan ÖNCE uyarılır,
+                engellenmez (md. 183/b öneri yetkisi; uygunluk md. 161/1). */}
+            {meeting.council_type === "HONOR" && item.honor_eligible === false && (
+              <div
+                role="status"
+                className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-small text-on-tertiary-container"
+              >
+                <Icon name="warning" size="sm" />
+                <span>
+                  Öğrencinin davranış puanı indirilmiş (md. 161/1); uygun görüş verilse de Ödül ve
+                  Disiplin Kurulu kabulünde ve müdür onayında uygunluk yeniden denetlenir.
+                </span>
+              </div>
+            )}
             <Textarea
               id={`${idBase}-reason`}
               label="Karar gerekçesi (olumsuz kararda zorunlu)"

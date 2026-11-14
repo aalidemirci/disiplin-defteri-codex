@@ -177,7 +177,14 @@ def test_dal_a_kurul_formu_uretilemez() -> None:
 
 
 def test_uyari_yazisi_gerekce_zorunlu() -> None:
+    from apps.disiplin.models import DisciplineWarning
+
     case, sid = _committee_case()
+    # Kullanıcı kararı 14.11.2026 — S12: kurula sevkli dosyada Form-02 yalnız öğrencinin
+    # uyarı kaydı varsa üretilir; burada özeti boş bir kayıt var (gerekçe denetimi sınanır).
+    DisciplineWarning.objects.create(
+        case=case, student_id=sid, warning_date=date(2026, 5, 19), summary=""
+    )
     with pytest.raises(ValueError, match="kısa açıklaması zorunludur"):
         doc_engine.generate_document(
             case,
@@ -226,7 +233,13 @@ def test_form16_kesinlesme_kilidi() -> None:
 # Dizi pusulası + kütük API'si
 # ---------------------------------------------------------------------------
 def test_dizi_pusulasi_kategorili_ve_toplam_sayfali() -> None:
+    from apps.disiplin.models import DisciplineWarning
+
     case, sid = _committee_case()
+    # Kullanıcı kararı 14.11.2026 — S12: kurula sevkli dosyada Form-02 için uyarı kaydı şart.
+    DisciplineWarning.objects.create(
+        case=case, student_id=sid, warning_date=date(2026, 5, 19), summary="Uyarı gerekçesi."
+    )
     doc_engine.generate_document(
         case,
         document_type=DocumentType.WARNING_LETTER,

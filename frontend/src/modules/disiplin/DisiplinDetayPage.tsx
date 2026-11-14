@@ -234,12 +234,20 @@ function CloseCaseForm({
           <Icon name="schedule" size="base" />
           <span>
             Dosya henüz kapatılamaz;{" "}
-            {eligibleReason || "karar(lar) kesinleşmedi (tebliğ / itiraz süresi / tampon)"}
+            {eligibleReason ||
+              "karar(lar) için kapanış koşulları oluşmadı (onay / tebliğ / itiraz)"}
             {eligibleOn ? ` — en erken ${formatDate(eligibleOn)}` : ""}.
             {isAdmin && " ADMIN olarak gerekçeyle erken kapatabilirsiniz."}
           </span>
         </div>
       )}
+      {/* Kullanıcı kararı, 14.11.2026 — S9: cezasız karar tebliğle kapanışa hazırdır. */}
+      <p className="text-label-small text-on-surface-variant">
+        Kapanış kuralı: “Ceza verilmesine yer olmadığı” kararının tebliğ edilmesi yeterlidir —
+        itiraz yolu olmadığından (md. 169/3) itiraz süresi ve tampon beklenmez. Cezalı kararda
+        tebliğden sonra itiraz süresi (5 iş günü) ve 5 iş günü tampon beklenir; çok öğrencili dosya
+        bütün kararlar uygun olunca kapanır.
+      </p>
       {!eligible && isAdmin && (
         <div>
           <label htmlFor={fieldId} className="mb-1 block text-label-large text-on-surface-variant">
@@ -937,10 +945,47 @@ function EventForm({
 
   const [overrideReason, setOverrideReason] = useState("");
 
+  // Kullanıcı kararı, 14.11.2026 — S10: md. 157/7-e engeli (önceki ceza/uyarısı olan
+  // öğrenciye yazılı uyarı) aşama atlama override'ından AYRI onay + AYRI gerekçe ister.
+  // Geçmiş triaj ucundan okunur; okunamazsa kutu yine sunulur (sunucu engel yoksa yok sayar).
+  const [priorHistory, setPriorHistory] = useState<"none" | "blocked" | "unknown">("none");
+  const [blockedNames, setBlockedNames] = useState<string[]>([]);
+  const [warningBlockOverride, setWarningBlockOverride] = useState(false);
+  const [warningBlockReason, setWarningBlockReason] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
   const fieldIdBase = useId();
+
+  useEffect(() => {
+    let cancelled = false;
+    disiplinApi
+      .triageSuggestion(caseObj.id)
+      .then((triage) => {
+        if (cancelled) return;
+        const blocked = triage.students.filter((s) => s.should_route_to_committee);
+        setBlockedNames(
+          blocked
+            .map((s) => caseObj.students.find((st) => st.id === s.student_id)?.full_name ?? "")
+            .filter(Boolean),
+        );
+        setPriorHistory(
+          blocked.length > 0 || triage.should_route_to_committee ? "blocked" : "none",
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPriorHistory("unknown");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseObj.id, caseObj.students]);
+
+  const needsWarningBlockOverride =
+    selectedStage === "DECIDED" &&
+    principalDecision === "WRITTEN_WARNING" &&
+    priorHistory !== "none";
 
   // COMMITTEE_DONE için karar tipi listesi
   useEffect(() => {
@@ -1027,6 +1072,22 @@ function EventForm({
       if (selectedStage === "DECIDED") {
         if (!principalDecision) throw new Error("Müdür değerlendirmesi seçilmelidir (tek seçim).");
         body.principal_decisions = [principalDecision];
+        if (needsWarningBlockOverride) {
+          if (priorHistory === "blocked" && !warningBlockOverride) {
+            throw new Error(
+              "md. 157/7-e engeli ayrı onay ister: öğrencinin önceki cezası/uyarısı var. " +
+                "Yazılı uyarı verilecekse 'md. 157/7-e engelini aşıyorum' kutusunu işaretleyin " +
+                "ya da dosyayı disiplin kuruluna sevk edin.",
+            );
+          }
+          if (warningBlockOverride) {
+            if (!warningBlockReason.trim()) {
+              throw new Error("md. 157/7-e engelini aşma gerekçesi zorunludur.");
+            }
+            body.warning_block_override = true;
+            body.warning_block_override_reason = warningBlockReason.trim();
+          }
+        }
       }
       if (selectedStage === "COMMITTEE_DONE") {
         if (!committeeTypeId) throw new Error("Kurul karar tipi seçilmelidir.");
@@ -1176,6 +1237,58 @@ function EventForm({
               ),
             )}
           </div>
+        </div>
+      )}
+
+      {needsWarningBlockOverride && (
+        <div
+          role="alert"
+          className="space-y-3 rounded-shape-sm border border-outline-variant bg-tertiary-container px-4 py-3 text-on-tertiary-container"
+        >
+          <p className="flex items-start gap-2 text-body-small">
+            <Icon name="warning" size="base" />
+            <span>
+              {priorHistory === "blocked" ? (
+                <>
+                  {blockedNames.length > 0 ? `${blockedNames.join(", ")} ` : "Dosyadaki öğrenci "}
+                  daha önce disiplin cezası/uyarısı almış. Kınama cezasını gerektiren ikinci
+                  davranışta öğrenci doğrudan disiplin kuruluna sevk edilir (md. 157/7-e); yazılı
+                  uyarı yolu kapalıdır.
+                </>
+              ) : (
+                <>
+                  Öğrencinin geçmişi okunamadı. Daha önce disiplin cezası/uyarısı almış öğrenciye
+                  yazılı uyarı verilemez; öğrenci doğrudan disiplin kuruluna sevk edilir (md.
+                  157/7-e).
+                </>
+              )}{" "}
+              Yine de yazılı uyarı verecekseniz bu engeli ayrıca onaylayıp gerekçesini yazın — aşama
+              atlama gerekçesi bu engeli kapsamaz.
+            </span>
+          </p>
+          <label
+            htmlFor={`${fieldIdBase}-warning-block`}
+            className="flex min-h-12 items-center gap-3 text-body-medium"
+          >
+            <input
+              id={`${fieldIdBase}-warning-block`}
+              type="checkbox"
+              checked={warningBlockOverride}
+              onChange={(e) => setWarningBlockOverride(e.target.checked)}
+              className="h-5 w-5 accent-primary"
+            />
+            md. 157/7-e engelini aşıyorum: önceki cezası/uyarısı olan öğrenciye yazılı uyarı
+            veriyorum
+          </label>
+          {warningBlockOverride && (
+            <TextField
+              label="md. 157/7-e engelini aşma gerekçesi"
+              required
+              value={warningBlockReason}
+              onChange={(e) => setWarningBlockReason(e.target.value)}
+              helperText="Aşama atlama gerekçesinden ayrıdır; aşama kaydında 'md. 157/7-e engeli aşıldı' notuyla saklanır."
+            />
+          )}
         </div>
       )}
 

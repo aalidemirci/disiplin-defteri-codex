@@ -500,7 +500,11 @@ function DecisionCard({
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
             <Icon name="mark_email_read" size="xs" />
             Tebliğ: {formatDate(d.notified_at)}
-            {d.appeal_deadline && ` · İtiraz son gün: ${formatDate(d.appeal_deadline)}`}
+            {/* Kullanıcı kararı, 14.11.2026 — S9: cezasız kararda itiraz yolu yoktur
+                (md. 169/3); itiraz son günü göstermek beklenecek süre varmış izlenimi verir. */}
+            {d.penalty_type === "NO_PENALTY"
+              ? " · itiraz yolu yok (md. 169/3); bu karar için süre beklenmez"
+              : d.appeal_deadline && ` · İtiraz son gün: ${formatDate(d.appeal_deadline)}`}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-tertiary-container px-2.5 py-0.5 text-on-tertiary-container">
@@ -1505,7 +1509,10 @@ function NotifyForm({
   return (
     <PanelShell title="Tebliğ kaydet" icon="mark_email_read">
       <p className="text-body-small text-on-surface-variant">
-        Tebliğ (md. 169/5) tarihinden itibaren itiraz son günü otomatik hesaplanır (md. 169/3).
+        {d.penalty_type === "NO_PENALTY"
+          ? // Kullanıcı kararı, 14.11.2026 — S9.
+            "“Ceza verilmesine yer olmadığı” kararına itiraz yolu yoktur (md. 169/3); karar tebliğ edildikten sonra dosya itiraz süresi ve kapanış tamponu beklenmeden kapatılabilir."
+          : "Tebliğ (md. 169/5) tarihinden itibaren itiraz son günü otomatik hesaplanır (md. 169/3)."}
       </p>
       <TextField
         label="Tebliğ tarihi"

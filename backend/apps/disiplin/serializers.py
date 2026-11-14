@@ -413,6 +413,11 @@ class EventCreateSerializer(serializers.Serializer[dict[str, Any]]):
     event_date = serializers.DateField()
     override = serializers.BooleanField(default=False)
     override_reason = serializers.CharField(required=False, allow_blank=True, default="")
+    # Kullanıcı kararı, 14.11.2026 — S10: md. 157/7-e engelini aşma AYRI işaret + gerekçe.
+    warning_block_override = serializers.BooleanField(default=False)
+    warning_block_override_reason = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
     assigned_guidance_name = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=200
     )
@@ -446,10 +451,25 @@ class CommitteeMemberSerializer(serializers.ModelSerializer[DisciplineCommitteeM
 class CommitteeSerializer(serializers.ModelSerializer[DisciplineCommittee]):
     chair_name = serializers.CharField(source="chair.full_name", read_only=True)
     members = CommitteeMemberSerializer(many=True, read_only=True)
+    composition_warnings = serializers.SerializerMethodField()
 
     class Meta:
         model = DisciplineCommittee
-        fields = ["id", "school_year", "chair", "chair_name", "notes", "members"]
+        fields = [
+            "id",
+            "school_year",
+            "chair",
+            "chair_name",
+            "notes",
+            "members",
+            "composition_warnings",
+        ]
+
+    def get_composition_warnings(self, obj: DisciplineCommittee) -> list[str]:
+        """md. 185/1 bileşim uyarıları — uyarır, engellemez (kullanıcı kararı, 14.11.2026 — S5)."""
+        from apps.disiplin.selectors.committee import committee_composition_warnings
+
+        return committee_composition_warnings(obj)
 
 
 def _md181_penalty(student_id: int | None, since: Any, active: bool) -> dict[str, str] | None:
@@ -651,6 +671,7 @@ class CouncilAgendaItemSerializer(serializers.ModelSerializer[CouncilAgendaItem]
     certificate_status = serializers.CharField(
         source="honor_certificate.status", read_only=True, default=""
     )
+    honor_eligible = serializers.SerializerMethodField()
 
     class Meta:
         model = CouncilAgendaItem
@@ -666,6 +687,7 @@ class CouncilAgendaItemSerializer(serializers.ModelSerializer[CouncilAgendaItem]
             "justification",
             "proposer_role_display",
             "certificate_status",
+            "honor_eligible",
             "outcome",
             "outcome_display",
             "decision_text",
@@ -673,6 +695,19 @@ class CouncilAgendaItemSerializer(serializers.ModelSerializer[CouncilAgendaItem]
             "dissent_note",
         ]
         read_only_fields = fields
+
+    def get_honor_eligible(self, obj: CouncilAgendaItem) -> bool | None:
+        """Öğrenci onur belgesine uygun mu (md. 161/1: davranış puanı indirilmemiş).
+
+        Kullanıcı kararı, 14.11.2026 — S6: Onur Kurulu karar ekranı bununla UYARIR; uygun
+        görüş yine verilebilir (md. 183/b). Kabul ve müdür onayındaki denetim serviste sürer.
+        """
+        from apps.disiplin.selectors.committee import is_eligible_for_honor
+
+        certificate = obj.honor_certificate
+        if certificate is None:
+            return None
+        return is_eligible_for_honor(certificate.student_id, certificate.school_year_id)
 
     def get_outcome_display(self, obj: CouncilAgendaItem) -> str:
         labels = AGENDA_OUTCOME_LABELS.get(obj.meeting.council_type, {})
@@ -685,6 +720,7 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
     attendees = CouncilAttendeeSerializer(many=True, read_only=True)
     agenda_items = CouncilAgendaItemSerializer(many=True, read_only=True)
     quorum = serializers.SerializerMethodField()
+    composition_warnings = serializers.SerializerMethodField()
     discipline_case_no = serializers.CharField(
         source="discipline_case.case_no", read_only=True, default=None
     )
@@ -718,14 +754,24 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
             "attendees",
             "agenda_items",
             "quorum",
+            "composition_warnings",
         ]
         read_only_fields = ["meeting_no", "council_type", "minutes_type", "discipline_case"]
 
     def get_quorum(self, obj: CouncilMeeting) -> dict[str, Any] | None:
-        """Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda None."""
-        from apps.disiplin.services.council import meeting_quorum
+        """Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda None.
 
-        return meeting_quorum(obj)
+        `unmatched`: yeter sayıya girmeyen oy hakkı satırları (kullanıcı kararı, 14.11.2026 — S13).
+        """
+        from apps.disiplin.services.council import meeting_quorum_detail
+
+        return meeting_quorum_detail(obj)
+
+    def get_composition_warnings(self, obj: CouncilMeeting) -> list[str]:
+        """Kurulun md. 185/1 bileşim uyarıları (kullanıcı kararı, 14.11.2026 — S5)."""
+        from apps.disiplin.services.council import meeting_composition_warnings
+
+        return meeting_composition_warnings(obj)
 
 
 class DecisionNarrativeSerializer(serializers.Serializer[dict[str, Any]]):

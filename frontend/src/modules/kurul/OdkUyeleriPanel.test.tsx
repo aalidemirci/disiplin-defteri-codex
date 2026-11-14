@@ -106,6 +106,33 @@ describe("OdkUyeleriPanel", () => {
     expect(await screen.findByText("Ayşe Müdür Yardımcısı")).toBeInTheDocument();
   });
 
+  it("S5: kurul md. 185/1'e uymuyorsa neyin eksik olduğu kalıcı uyarıyla gösterilir", async () => {
+    dapi.getCommittee.mockResolvedValue({
+      committee: {
+        ...COMMITTEE,
+        composition_warnings: [
+          "Kurul md. 185/1-ç'ye göre eksik: okul-aile birliği temsilcisi (öğrenci velisi) tanımlı değil.",
+          "Kurul md. 185/1-b'ye göre eksik: öğretmenler kurulunca seçilen iki öğretmen üyeden yalnız biri tanımlı.",
+        ],
+      },
+    });
+    renderPage();
+    expect(await screen.findByText(/okul-aile birliği temsilcisi/)).toBeInTheDocument();
+    expect(screen.getByText(/iki öğretmen üyeden yalnız biri/)).toBeInTheDocument();
+    expect(screen.getByText(/kayıt ve toplantı engellenmez/)).toBeInTheDocument();
+    // Uyarı engel değildir: üye ekleme açık kalır.
+    expect(screen.getByRole("button", { name: /Üye ekle/ })).toBeEnabled();
+  });
+
+  it("S5: bileşim uygunsa (uyarı listesi boş) uyarı kartı gösterilmez", async () => {
+    dapi.getCommittee.mockResolvedValue({
+      committee: { ...COMMITTEE, composition_warnings: [] },
+    });
+    renderPage();
+    expect(await screen.findByText("Ayşe Müdür Yardımcısı")).toBeInTheDocument();
+    expect(screen.queryByText(/kayıt ve toplantı engellenmez/)).not.toBeInTheDocument();
+  });
+
   it("kurul yoksa: oluşturma kartı gösterilir", async () => {
     dapi.getCommittee.mockResolvedValue({ committee: null });
     renderPage();

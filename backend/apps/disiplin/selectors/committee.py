@@ -82,6 +82,87 @@ def get_committee_member(
     return DisciplineCommitteeMember.objects.filter(committee=committee, pk=member_id).first()
 
 
+def committee_composition_warnings(committee: DisciplineCommittee) -> list[str]:
+    """Kurul bileşiminin md. 185/1'e uymayan yanları — UYARI metinleri (engel değil).
+
+    Kullanıcı kararı, 14.11.2026 — S5: bileşim denetlenir ama kayıt/toplantı engellenmez;
+    neyin eksik/fazla olduğu somut söylenir. md. 185/1: kurul a) müdürün görevlendireceği
+    müdür yardımcısı, b) öğretmenler kurulunca gizli oyla seçilecek İKİ öğretmen, c) onur
+    kurulu ikinci başkanı, ç) okul-aile birliğinin kendi üyeleri arasından seçeceği BİR
+    öğrenci velisinden oluşur. Yalnız ASIL üyeler sayılır (yedekler md. 186).
+
+    Modelden ayırt edilebilenler denetlenir: asıl üye tipi sayıları (öğretmen/öğrenci/veli)
+    ve öğrenci üyenin o ders yılının Onur Kurulunda görevdeki asıl ikinci başkan olması.
+    Denetlenemeyenler (şema sınırı): başkanın müdür yardımcısı olması (`Personnel.title`
+    serbest metin), öğretmenlerin öğretmenler kurulunca seçilmiş olması ve velinin
+    okul-aile birliği üyeliği (veli üye yalnız ad snapshot'ı).
+    """
+    from apps.disiplin.models import CommitteeMemberType
+
+    # Doğrudan sorgu: `committee.members.all()` prefetch önbelleğinden bayat liste
+    # verebilir (§7.5 — üye eklendikten/çıkarıldıktan hemen sonraki yanıt).
+    members = list(
+        DisciplineCommitteeMember.objects.filter(committee=committee, is_substitute=False)
+    )
+    teachers = [m for m in members if m.member_type == CommitteeMemberType.TEACHER]
+    students = [m for m in members if m.member_type == CommitteeMemberType.STUDENT]
+    parents = [m for m in members if m.member_type == CommitteeMemberType.PARENT]
+    warnings: list[str] = []
+
+    if not teachers:
+        warnings.append(
+            "Kurul md. 185/1-b'ye göre eksik: öğretmen üye tanımlı değil (öğretmenler "
+            "kurulunca seçilen iki öğretmen asıl üyedir)."
+        )
+    elif len(teachers) == 1:
+        warnings.append(
+            "Kurul md. 185/1-b'ye göre eksik: öğretmenler kurulunca seçilen iki öğretmen "
+            "üyeden yalnız biri tanımlı."
+        )
+    elif len(teachers) > 2:
+        warnings.append(
+            f"Kurul md. 185/1-b'ye göre fazla: {len(teachers)} asıl öğretmen üye tanımlı; "
+            "asıl öğretmen üye sayısı ikidir."
+        )
+
+    if not students:
+        warnings.append(
+            "Kurul md. 185/1-c'ye göre eksik: onur kurulu ikinci başkanı tanımlı değil."
+        )
+    elif len(students) > 1:
+        warnings.append(
+            f"Kurul md. 185/1-c'ye göre fazla: {len(students)} asıl öğrenci üye tanımlı; "
+            "öğrenci üye yalnız onur kurulu ikinci başkanıdır."
+        )
+    second_chair_ids = set(
+        HonorBoardMember.objects.filter(
+            board__school_year_id=committee.school_year_id,
+            board__deleted_at__isnull=True,
+            is_second_chair=True,
+            is_substitute=False,
+            effective_until__isnull=True,
+        ).values_list("member_student_id", flat=True)
+    )
+    for student in students:
+        if student.member_student_id not in second_chair_ids:
+            warnings.append(
+                f"Kurul md. 185/1-c'ye uymuyor: öğrenci üye {student.member_name}, Onur "
+                "Kurulunun ikinci başkanı değil."
+            )
+
+    if not parents:
+        warnings.append(
+            "Kurul md. 185/1-ç'ye göre eksik: okul-aile birliği temsilcisi (öğrenci velisi) "
+            "tanımlı değil."
+        )
+    elif len(parents) > 1:
+        warnings.append(
+            f"Kurul md. 185/1-ç'ye göre fazla: {len(parents)} asıl veli üye tanımlı; "
+            "okul-aile birliğinden bir öğrenci velisi asıl üyedir."
+        )
+    return warnings
+
+
 def meetings_for_case(case: DisciplineCase) -> QuerySet[DisciplineMeeting]:
     """Bir dosyanın kurul toplantıları (katılan üyeler önceden çekilir)."""
     return case.meetings.prefetch_related("attendees").all()
