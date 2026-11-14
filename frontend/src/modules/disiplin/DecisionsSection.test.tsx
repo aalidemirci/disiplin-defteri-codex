@@ -743,6 +743,68 @@ describe("DecisionsSection — 14.11.2026 saha testi bulguları", () => {
   });
 });
 
+// Kullanıcı kararı, 14.11.2026 — S9: cezasız kararda itiraz yolu yok (md. 169/3);
+// tebliğden sonra itiraz süresi ve tampon beklenmeden dosya kapatılabilir.
+describe("DecisionsSection — S9: cezasız kararda süre beklenmez", () => {
+  const CEZASIZ: Partial<DisciplineDecision> = {
+    penalty_type: "NO_PENALTY",
+    penalty_type_display: "Ceza verilmesine yer olmadığı",
+    behavior_point_deduction: 0,
+    approval_status: "APPROVED",
+    approval_status_display: "Onaylandı",
+    approved_at: "2026-03-02",
+  };
+
+  it("tebliğ edilmiş cezasız kararda itiraz son günü yerine 'süre beklenmez' yazar", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({ ...CEZASIZ, notified_at: "2026-03-03", appeal_deadline: "2026-03-10" }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+
+    expect(await screen.findByText(/Tebliğ: 03\.03\.2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/İtiraz son gün/)).toBeNull();
+    expect(
+      screen.getByText(/itiraz yolu yok \(md\. 169\/3\); bu karar için süre beklenmez/),
+    ).toBeInTheDocument();
+  });
+
+  it("tebliğ panelinde cezasız karar için itiraz süresi değil kapanış kuralı anlatılır", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(CEZASIZ)],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: "Tebliğ kaydet" }));
+    expect(
+      screen.getByText(/itiraz süresi ve kapanış tamponu beklenmeden kapatılabilir/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/itiraz son günü otomatik hesaplanır/)).toBeNull();
+  });
+
+  it("cezalı kararda itiraz son günü eskisi gibi görünür", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approval_status_display: "Onaylandı",
+          approved_at: "2026-03-02",
+          notified_at: "2026-03-03",
+          appeal_deadline: "2026-03-10",
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText(/İtiraz son gün: 10\.03\.2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/süre beklenmeden kapatılabilir/)).toBeNull();
+  });
+});
+
 function itiraz() {
   return {
     id: 9,

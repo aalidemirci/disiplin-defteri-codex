@@ -131,6 +131,10 @@ export interface DisciplineEventCreateBody {
   committee_decision_text?: string; // COMMITTEE_DONE zorunlu
   override?: boolean;
   override_reason?: string; // override=true ise zorunlu
+  // Kullanıcı kararı, 14.11.2026 — S10: md. 157/7-e engeli (önceki ceza/uyarı varken
+  // yazılı uyarı) aşama atlamadan AYRI işaret + AYRI gerekçeyle aşılır.
+  warning_block_override?: boolean;
+  warning_block_override_reason?: string; // warning_block_override=true ise zorunlu
 }
 
 export interface DecisionTypeCreateBody {
@@ -206,6 +210,8 @@ export interface DisciplineCommittee {
   chair_name: string;
   notes: string;
   members: CommitteeMember[];
+  // md. 185/1 bileşim uyarıları (S5, 14.11.2026) — uyarır, engellemez.
+  composition_warnings?: string[];
 }
 
 export interface DisciplineMeeting {

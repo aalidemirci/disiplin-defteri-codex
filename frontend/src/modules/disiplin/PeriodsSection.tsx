@@ -720,12 +720,14 @@ function AddPrecautionForm({
         />
       </div>
       <TextField
-        label="Başlangıç tarihi"
+        label="Tedbir kararı / başlangıç tarihi"
         type="date"
         required
         value={startDate}
         onChange={(e) => setStartDate(e.target.value)}
-        helperText="İş günü olmalı (md. 175/1 süreyi iş günüyle sayar); hafta sonu ve resmî tatil kabul edilmez."
+        // Kullanıcı kararı, 14.11.2026 — S4: tatil günü başlangıç reddedilmez; iş günleri
+        // izleyen ilk iş gününden sayılır, md. 175/2 süresi girilen (karar) tarihinden işler.
+        helperText="Tedbir kararının alındığı gün. Hafta sonu ya da resmî tatile denk gelirse tedbirin iş günleri izleyen ilk iş gününden sayılır (md. 175/1); disiplin işlemine başlama için 3 iş günü bu tarihten sayılır (md. 175/2)."
       />
       <div>
         <label

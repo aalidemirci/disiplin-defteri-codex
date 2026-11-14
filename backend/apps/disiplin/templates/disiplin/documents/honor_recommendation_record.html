@@ -1,13 +1,17 @@
 {% extends "documents/base.html" %}
 {% comment %}Onur Kurulu Teklif Tutanağı (md. 161 + 183/b) — uygun görülen öğrencileri
 gerekçeleriyle listeler; Okul Öğrenci Ödül ve Disiplin Kurulu'na sunulur. index_sheet
-aggregate (tablo) + sig-grid (başkan + asıl üyeler) desenini izler.{% endcomment %}
+aggregate (tablo) + sig-grid (başkan + asıl üyeler) desenini izler.
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S3): künyeye "Toplantı Tarihi / No" satırı
+eklendi — uygun görüş kararı toplantıda verilir (md. 183/b); `meeting_date` / `meeting_no`
+bağlamından. Toplantısız eski kayıt yolunda satır BASILMAZ (çıktı eskisiyle aynı).{% endcomment %}
 {% block content %}
 <div class="doc-title">ONUR KURULU TEKLİF TUTANAĞI</div>
 <div class="doc-subtitle">Okul Öğrenci Ödül ve Disiplin Kuruluna sunulmak üzere (md. 161, md. 183/b)</div>
 
 <table class="info">
   <tr><td class="label">Teklif Dönemi</td><td>{{ term_name|default:'—' }}</td></tr>
+  {% if meeting_date %}<tr><td class="label">Toplantı Tarihi / No</td><td>{{ meeting_date|date:'d.m.Y' }}{% if meeting_no %} / {{ meeting_no }}{% endif %}</td></tr>{% endif %}
   <tr><td class="label">Düzenlenme Tarihi</td><td>{{ generated_at|date:'d.m.Y' }}</td></tr>
 </table>
 

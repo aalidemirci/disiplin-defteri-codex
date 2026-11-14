@@ -872,9 +872,10 @@ def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any
     """Ceza tebliği (Form-14/15) bağlamı — karar + (veli sürümünde) veli + kurul.
 
     Tebliğ YÜRÜRLÜKTEKİ cezayı bildirir: `decision` karar kaydının KENDİSİDİR (kurulun
-    verdiği ceza görünümü değil) — öğrenci (Form-14, AYNEN şablon) ve veli (Form-15)
-    suretleri aynı cezayı taşır. Ceza üst kurulca değiştirildiyse kurulun verdiği ceza
-    yalnız `penalty_change_note` ile (Form-15'te ayrı paragraf) anlatılır. EK-1, karar
+    verdiği ceza görünümü değil) — öğrenci (Form-14) ve veli (Form-15) suretleri aynı
+    cezayı taşır. Ceza üst kurulca değiştirildiyse kurulun verdiği ceza yalnız
+    `penalty_change_note` ile, İKİ surette de ayrı paragrafta anlatılır (Form-14'e
+    kullanıcı kararıyla eklendi, 14.11.2026 — S3). EK-1, karar
     defteri, Form-18 ve onaya sevk/iade/ilçe yazıları kurulun verdiği cezayı basmayı
     sürdürür (`_board_decision_context`).
     """
@@ -1802,6 +1803,34 @@ def _assert_process_letter_ready(
     """
     from apps.disiplin.models import DisciplinePrecaution
 
+    # BİLİNÇLİ SAPMA (kullanıcı kararı, 14.11.2026 — S12; OYS'de bu denetim yoktur):
+    # kurula sevk edilmiş (Dal B) dosyada öğrencinin O DOSYADA müdür uyarısı kaydı yoksa
+    # müdür yazılı uyarısı (Form-02, öğrenci ve veli sürümü — md. 157/7-a) ve "yazılı
+    # uyarıya rağmen…" diyen veli görüşme tutanağı (md. 157/7-b) üretilmez: yapılmamış
+    # uyarı "yapıldı" diye belgelenmez. Kayıt varsa (uyarıdan sonra aşama geri alınıp
+    # kurula sevk edilen dosya) üretilir. Veli davet yazısı ve "veli gelmedi" tutanağı
+    # kararın kapsamında değildir. Dal A (yazılı uyarıyla kapanan) ve müdür kararı henüz
+    # verilmemiş dosyada davranış DEĞİŞMEZ.
+    warning_document = ""
+    if document_type == DocumentType.WARNING_LETTER:
+        warning_document = "müdür yazılı uyarısı (Form-02)"
+    elif (
+        document_type == DocumentType.PARENT_MEETING
+        and _effective_variant(document_type, variant) == VARIANT_PARENT_MEETING
+    ):
+        warning_document = "veli görüşme tutanağı"
+    if (
+        warning_document
+        and _case_referred_to_committee(case)
+        and not case.warnings.filter(student_id=student_id).exists()
+    ):
+        raise ValueError(
+            f"Dosya kurula sevk edilmiş ve bu öğrenci için dosyada müdür uyarısı kaydı yok; "
+            f"{warning_document} üretilemez (md. 157/7). Kurula sevkli dosyada bu belge yalnız "
+            "öğrencinin bu dosyada kayıtlı bir müdür uyarısı varsa üretilir; uyarı başka bir "
+            "dosyada yapıldıysa belgeyi o dosyadan üretin."
+        )
+
     if (
         document_type == DocumentType.PENALTY_NOTICE
         and not case.decisions.filter(student_id=student_id).exists()
@@ -1961,6 +1990,24 @@ _COUNCIL_ARTICLES_DEFAULT: dict[str, str] = {
 }
 
 
+def _decision_no_sort_key(decision_no: str) -> tuple[int, list[tuple[int, int, str]]]:
+    """Karar numarası için DOĞAL sıralama anahtarı (kullanıcı kararı, 14.11.2026 — S1).
+
+    Rakam öbekleri sayı olarak karşılaştırılır: "2026-2027/0002" < "2026-2027/0010" <
+    "2026-2027/0100" (düz metin sıralaması elle girilmiş "9" ile "10"u ters dizer).
+    Numarasız (boş) karar SONA düşer; eşit anahtarlarda `sorted` kararlıdır (model sırası).
+    """
+    text = (decision_no or "").strip()
+    if not text:
+        return (1, [])
+    parts: list[tuple[int, int, str]] = [
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.split(r"(\d+)", text)
+        if part
+    ]
+    return (0, parts)
+
+
 def _council_minutes_context(meeting: Any) -> dict[str, Any]:
     """Kurul toplantı tutanağı şablon bağlamı (render'dan ayrı — HTML testi için)."""
     from apps.okul.services import setup as okul_setup
@@ -1988,22 +2035,26 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
     case = meeting.discipline_case if meeting.minutes_type == "CASE_REVIEW" else None
     case_decisions: list[dict[str, Any]] = []
     if case is not None:
-        # Gündemsiz (dosya görüşme) tutanağının çıktısı OYS ile AYNI kalır (CLAUDE.md §1/3):
-        # kararlar model sırasıyla ve ceza yalnız TÜR etiketiyle basılır. Karar numarasına
-        # göre sıralama ve uzaklaştırmada "— N gün" eki OYS paritesinden sapmadır; kullanıcı
-        # kararı alınmadan uygulanmaz (gözden geçirme 14.11.2026).
-        for decision in selectors.decisions_for_case(case).select_related("student"):
+        # BİLİNÇLİ SAPMA (kullanıcı kararı, 14.11.2026 — S1; CLAUDE.md §1/3): OYS kararları
+        # model sırasıyla (yeniden eskiye — karar numarasına TERS) ve cezayı yalnız tür
+        # etiketiyle basıyordu. Karar defterinde (md. 196/1) kararlar KARAR NUMARASI
+        # sırasıyla dizilir ve uzaklaştırmada kaç gün verildiği de yazılır (md. 164/2:
+        # 1-5 gün) — "… — 3 gün". Dosya görüşmesi olmayan tutanak etkilenmez.
+        decisions = sorted(
+            selectors.decisions_for_case(case).select_related("student"),
+            key=lambda d: _decision_no_sort_key(d.decision_no),
+        )
+        for decision in decisions:
             student = decision.student
             # Karar defteri okul kurulunun kararını kaydeder (md. 196/1): ceza sonradan üst
-            # kurulca değiştirildiyse tür etiketi kurulun VERDİĞİ cezadır (değişmemiş
-            # kararda kaydın kendi etiketi — OYS ile aynı).
+            # kurulca değiştirildiyse basılan ceza (ve gün sayısı) kurulun VERDİĞİ cezadır.
             shown = _board_decision_context(decision)
             case_decisions.append(
                 {
                     "full_name": student.full_name or "",
                     "class_label": student.class_label,
                     "student_number": student.student_number or "",
-                    "penalty_display": shown["decision"].get_penalty_type_display(),
+                    "penalty_display": shown["board_penalty_display"],
                     "penalty_detail": decision.penalty_detail,
                     "decision_no": decision.decision_no,
                     "decision_date": decision.decision_date,

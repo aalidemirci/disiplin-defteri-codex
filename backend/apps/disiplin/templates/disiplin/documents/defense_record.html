@@ -11,7 +11,16 @@ Tur 219 (talep 2) — iki mod (statement_record deseni; içerik DB'de SAKLANMAZ)
   12.5cm kutu künyeden sonra sığmayıp bütün hâlde 2. sayfaya itiliyordu — taşma
   şikâyetinin kökü), devam kutusu 2. sayfada 14cm. Boş kutuda .flow KULLANILMAZ:
   WeasyPrint içeriksiz bloğu güvenilir bölmez (kırılma fırsatı satır kutularında).
-`statement_subject` her iki modda künyedeki "Olay" satırına basılır.{% endcomment %}
+`statement_subject` her iki modda künyedeki "Olay" satırına basılır.
+
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S3) — YALNIZ DOLU MOD: kurul imza ızgarası
+birkaç cümlelik savunmada bile TEK BAŞINA 2. sayfaya düşüyor, "SAVUNMAYI ALANLAR" başlığı
+1. sayfada sahipsiz kalıyordu. (1) İmza bloğu (savunmayı veren + başlık + ızgara) tek sarmalda
+bölünmez ve savunma metninden kopmaz (break-before: avoid → sığmazsa metnin son satırlarıyla
+birlikte sonraki sayfaya geçer). (2) Dolu kutunun en az yüksekliği 7cm → 4cm: 7cm'lik kutuyla
+blok ilk sayfaya hiç sığmıyordu (eşik ≈ 5,5cm; pay künyenin uzamasına bırakıldı). Kutu metinle
+büyür; metni zaten son sayfaya akan uzun tutanakta sayfa sayısı değişmez. BOŞ MOD ve "Yer"
+varsayılanı ("Müdür Yardımcısı Odası") DEĞİŞMEDİ.{% endcomment %}
 {% block content %}
 <div class="doc-title">SAVUNMA TUTANAĞI</div>
 <div class="doc-subtitle">Form-11 · MEB Ortaöğretim Kurumları Yönetmeliği md. 194</div>
@@ -40,9 +49,12 @@ Tur 219 (talep 2) — iki mod (statement_record deseni; içerik DB'de SAKLANMAZ)
 {% comment %}DOLU MOD — metin akışkan; uzun savunma sonraki sayfaya kesilmeden sürer.{% endcomment %}
 <div class="section flow">
   <div class="section-title">SAVUNMAM</div>
-  <div class="field-box" style="min-height: 7cm;">{{ statement_body }}</div>
+  <div class="field-box" style="min-height: 4cm;">{{ statement_body }}</div>
 </div>
 
+{% comment %}kullanıcı kararı, 14.11.2026 — S3: imza bloğu (savunmayı veren + "SAVUNMAYI
+ALANLAR" + kurul ızgarası) bölünmez ve savunma metninden kopmaz.{% endcomment %}
+<div style="break-inside: avoid; page-break-inside: avoid; break-before: avoid; page-break-before: avoid;">
 <div class="signature">
   <div class="date">…/…/202…</div>
   <div class="sig-line"></div>
@@ -54,6 +66,7 @@ Tur 219 (talep 2) — iki mod (statement_record deseni; içerik DB'de SAKLANMAZ)
   <div class="section-title">SAVUNMAYI ALANLAR</div>
 </div>
 {% include "disiplin/documents/_defense_record_committee_grid.html" %}
+</div>
 {% else %}
 {% comment %}BOŞ MOD — elle yazım: sayfa 1 künye + 8.5cm kutu; sayfa 2 devam + imzalar.{% endcomment %}
 <div class="section">

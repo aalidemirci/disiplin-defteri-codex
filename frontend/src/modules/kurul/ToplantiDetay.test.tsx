@@ -205,6 +205,127 @@ describe("ToplantiDetay", () => {
     expect(screen.queryByRole("button", { name: "Tarihi düzelt" })).not.toBeInTheDocument();
   });
 
+  it("S13: yeter sayıya girmeyen oy hakkı satırları adı ve nedeniyle listelenir", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        council_type: "DISCIPLINE",
+        honor_meeting_kind: undefined,
+        quorum: {
+          full: 5,
+          required: 3,
+          present: 2,
+          ok: false,
+          unmatched: ["Öğr. Kurul Dışı Kişi", "Ahmet Yılmaz"],
+        },
+      }),
+    );
+    ekran();
+    expect(
+      await screen.findByText(
+        "Öğr. Kurul Dışı Kişi kurul üyesi olarak kayıtlı değil; yeter sayıya katılmadı.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Ahmet Yılmaz kurul üyesi olarak kayıtlı değil; yeter sayıya katılmadı."),
+    ).toBeInTheDocument();
+  });
+
+  it("S13: eşleşmeyen satır yoksa yeter sayı kartı değişmez", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        council_type: "DISCIPLINE",
+        honor_meeting_kind: undefined,
+        quorum: { full: 5, required: 3, present: 3, ok: true, unmatched: [] },
+      }),
+    );
+    ekran();
+    expect(await screen.findByText(/Toplantı yeter sayısı sağlanmış/)).toBeInTheDocument();
+    expect(screen.queryByText(/yeter sayıya katılmadı/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Yeter sayıya girmeyen/)).not.toBeInTheDocument();
+  });
+
+  it("S6: puanı indirilmiş öğrencide Onur Kurulu karardan önce uyarılır, uygun görüş verilebilir", async () => {
+    const user = userEvent.setup();
+    kapi.getMeeting.mockResolvedValue(
+      meeting({ agenda_items: [{ ...ITEM, honor_eligible: false }] }),
+    );
+    kapi.decideAgendaItem.mockResolvedValue(
+      meeting({
+        agenda_items: [
+          {
+            ...ITEM,
+            honor_eligible: false,
+            outcome: "FAVORABLE",
+            outcome_display: "Uygun görüldü",
+          },
+        ],
+      }),
+    );
+    ekran();
+    expect(
+      await screen.findByText(/davranış puanı indirilmiş \(md\. 161\/1\)/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Ödül ve Disiplin Kurulu kabulünde ve müdür onayında uygunluk yeniden/),
+    ).toBeInTheDocument();
+    const uygunGor = screen.getByRole("button", { name: "Uygun gör" });
+    expect(uygunGor).toBeEnabled();
+    await user.click(uygunGor);
+    expect(kapi.decideAgendaItem).toHaveBeenCalledWith(
+      5,
+      9,
+      expect.objectContaining({ outcome: "FAVORABLE" }),
+    );
+    // Karara bağlanan maddede karar öncesi uyarı artık gösterilmez.
+    expect(await screen.findByText("Uygun görüldü")).toBeInTheDocument();
+    expect(screen.queryByText(/davranış puanı indirilmiş/)).not.toBeInTheDocument();
+  });
+
+  it("S6: uygun öğrencide ve Ödül ve Disiplin Kurulu ekranında puan uyarısı yok", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({ agenda_items: [{ ...ITEM, honor_eligible: true }] }),
+    );
+    const { unmount } = ekran();
+    expect(await screen.findByRole("button", { name: "Uygun gör" })).toBeInTheDocument();
+    expect(screen.queryByText(/davranış puanı indirilmiş/)).not.toBeInTheDocument();
+    unmount();
+
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        council_type: "DISCIPLINE",
+        honor_meeting_kind: undefined,
+        agenda_items: [{ ...ITEM, honor_eligible: false }],
+      }),
+    );
+    ekran();
+    expect(await screen.findByRole("button", { name: "Kabul et" })).toBeInTheDocument();
+    expect(screen.queryByText(/davranış puanı indirilmiş/)).not.toBeInTheDocument();
+  });
+
+  it("S5: kurul md. 185/1'e uymuyorsa toplantı ekranında uyarılır, karar düğmeleri açık kalır", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        council_type: "DISCIPLINE",
+        honor_meeting_kind: undefined,
+        quorum: { full: 3, required: 2, present: 2, ok: true, unmatched: [] },
+        composition_warnings: [
+          "Kurul md. 185/1-ç'ye göre eksik: okul-aile birliği temsilcisi (öğrenci velisi) tanımlı değil.",
+        ],
+      }),
+    );
+    ekran();
+    expect(await screen.findByText(/okul-aile birliği temsilcisi/)).toBeInTheDocument();
+    expect(screen.getByText(/kayıt ve toplantı engellenmez/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kabul et" })).toBeEnabled();
+  });
+
+  it("S5: bileşim uyarısı yoksa uyarı kartı gösterilmez", async () => {
+    kapi.getMeeting.mockResolvedValue(meeting({ composition_warnings: [] }));
+    ekran();
+    expect(await screen.findByText(/Toplantı T005/)).toBeInTheDocument();
+    expect(screen.queryByText(/kayıt ve toplantı engellenmez/)).not.toBeInTheDocument();
+  });
+
   it("Onur Genel Kurulu toplantısında teklif görüşülmez", async () => {
     kapi.getMeeting.mockResolvedValue(
       meeting({ honor_meeting_kind: "GENERAL_ASSEMBLY", agenda_items: [] }),

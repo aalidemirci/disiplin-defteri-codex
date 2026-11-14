@@ -3,7 +3,11 @@
 (data/sablonlar/disiplin-kurulu/form-14-...md) temel alınır; OYS uyarlamaları:
 itiraz hakkı + hesaplanan son gün (md. 169/3) + tebellüğ beyanı basılı (Tur 142);
 kapanış Form-15 üslubuna ("…gereğini rica ederim") uyarlandı (Tur 143, okul tercihi).
-Antet shared (Kaymakamlık). Form-15 (veliye) ayrı belge.{% endcomment %}
+Antet shared (Kaymakamlık). Form-15 (veliye) ayrı belge.
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S3), iki değişiklik — ikisi de Form-15 ile
+aynı: (1) "ceza verilmesine yer olmadığı" kararında tebellüğ açıklaması "disiplin cezasına"
+demez; (2) ceza onayda/itirazda üst kurulca değiştirildiyse `penalty_change_note` ayrı
+paragrafta basılır (md. 200). Cezalı ve değişmemiş kararda çıktı eskisiyle aynıdır.{% endcomment %}
 {% block content %}
 <div class="doc-title">{% if decision.penalty_type == 'NO_PENALTY' %}ÖĞRENCİYE DİSİPLİN KURULU KARARI TEBLİĞİ{% else %}ÖĞRENCİYE DİSİPLİN CEZASI TEBLİĞİ{% endif %}</div>
 <div class="doc-subtitle">Form-14 · MEB Ortaöğretim Kurumları Yönetmeliği md. 169</div>
@@ -40,6 +44,10 @@ karar tarihi sistemden basılır. "İtiraz için son gün" çıkarıldı (tebli�
   cezası, kararın kesinleşmesinden sonra e-Okul sistemine işlenecek olup işbu belge ile
   tarafınıza tebliğ edilmektedir.{% endif %}
 </p>
+{% comment %}kullanıcı kararı, 14.11.2026 — S3: değişen ceza notu (Form-15 ile aynı metin).{% endcomment %}
+{% if penalty_change_note %}
+<p class="para">{{ penalty_change_note }}</p>
+{% endif %}
 
 {% if decision and decision.penalty_type != 'NO_PENALTY' %}
 <p class="para">
@@ -84,9 +92,13 @@ kararında (Tur 181) basılmaz.{% endcomment %}
     </td>
   </tr>
 </table>
+{% comment %}kullanıcı kararı, 14.11.2026 — S3: cezasız kararda öğrenci "ceza" tebellüğ etmez
+(Form-15 örnek şerhiyle aynı ifade: "… verilen disiplin kurulu kararına ilişkin …").{% endcomment %}
 <p class="muted">
-  Açıklama: Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği uyarınca şahsıma verilen
+  {% if decision.penalty_type == 'NO_PENALTY' %}Açıklama: Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği uyarınca hakkımda verilen
+  disiplin kurulu kararına ilişkin yukarıdaki tebliğ yazısını okudum, içeriğini anladım ve bir
+  suretini elden teslim aldım.{% else %}Açıklama: Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği uyarınca şahsıma verilen
   disiplin cezasına ilişkin yukarıdaki tebliğ yazısını okudum, içeriğini anladım ve bir suretini
-  elden teslim aldım.
+  elden teslim aldım.{% endif %}
 </p>
 {% endblock %}

@@ -157,9 +157,9 @@ def create_precaution(
     # yoktur, başlangıç = tedbir kararının alındığı gündür ve md. 175/2 "tedbir kararının
     # alınmasını izleyen en geç üç iş günü" bu günden sayılır. Karar hafta sonu/tatilde
     # alınabilir (ör. pansiyonlu okul); ilk iş gününe ötelemek 175/2 son gününü bir gün
-    # geç hesaplatırdı. Bilinen açık konu (kullanıcı kararı bekliyor): tatil günü
-    # başlangıcında `discipline_periods.precaution_end_date` (AYNEN) o günü tedbirin
-    # 1. iş günü sayar.
+    # geç hesaplatırdı. Kullanıcı kararı, 14.11.2026 — S4: tatil günü başlangıcında
+    # tedbirin iş günleri (md. 175/1) izleyen İLK İŞ GÜNÜNDEN sayılır
+    # (`discipline_periods.precaution_end_date`); `start_date` karar günü olarak kalır.
     if _active_precaution_exists(case, student_id):
         raise ValueError("Bu öğrenci için dosyada zaten yürürlükte bir tedbir var (md. 175).")
 
@@ -225,7 +225,8 @@ def extend_precaution(
 
     Her uzatma AYRI bir süredir: en fazla 10 iş günü (md. 175/1 sınırı her tedbir
     kararı için geçerli), en fazla iki uzatma. Uzatma mevcut bitiş gününden sonra
-    başlar. Haklı ve zorlayıcı sebeplerin devamı + Millî Eğitim Müdürünün onayı
+    başlar: ek günler bitişi İZLEYEN iş günlerinden sayılır, tatil günü hiç sayılmaz
+    (kullanıcı kararı, 14.11.2026 — S4 ile aynı kural). Haklı ve zorlayıcı sebeplerin devamı + Millî Eğitim Müdürünün onayı
     şarttır (`mne_notified=True` bu uçta onayın alındığını kaydeder).
     """
     _assert_case_open(precaution.case, "tedbir uzatılamaz")

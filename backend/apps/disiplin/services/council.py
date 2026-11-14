@@ -519,6 +519,20 @@ def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
     sayısı değişmez). Bilinen sınır: BAŞKAN değişikliğinin geçmişi tutulmaz (şema);
     eski başkan kurul üyesi olarak kalmadıysa geçmiş toplantıda sayılmaz.
     """
+    detail = meeting_quorum_detail(meeting)
+    if detail is None:
+        return None
+    return {key: value for key, value in detail.items() if key != "unmatched"}
+
+
+def meeting_quorum_detail(meeting: CouncilMeeting) -> dict[str, Any] | None:
+    """`meeting_quorum` + yeter sayıya GİRMEYEN oy hakkı satırlarının adları (`unmatched`).
+
+    Kullanıcı kararı, 14.11.2026 — S13: "oy hakkı olan üye" rolüyle yazılmış ama kurul
+    listesiyle (başkan, asıl, yedek) eşleşmediği için sayılmayan satırlar ekranda adlarıyla
+    gösterilir (md. 191/1: "üyelerin dışında toplantıya çağrılanlar da oy kullanamazlar").
+    Sayım kuralı DEĞİŞMEZ; md. 185/6 davetlileri listeye girmez. Sıra katılımcı sırasıdır.
+    """
     from apps.disiplin.services.committee import committee_quorum
 
     committee = meeting_committee(meeting)
@@ -527,6 +541,7 @@ def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
     # `.filter()` önbelleği (prefetch) atlar — katılımcı değişikliğinden hemen sonra da doğru.
     roster = _committee_roster(committee, as_of=meeting.meeting_date)
     matched: set[int] = set()
+    unmatched: list[str] = []
     for attendee in meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER):
         index = _roster_index(
             roster,
@@ -536,7 +551,23 @@ def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
         )
         if index is not None:
             matched.add(index)
-    return committee_quorum(committee, len(matched))
+        else:
+            unmatched.append(attendee.person_name)
+    return {**committee_quorum(committee, len(matched)), "unmatched": unmatched}
+
+
+def meeting_composition_warnings(meeting: CouncilMeeting) -> list[str]:
+    """Toplantının kurulunun md. 185/1 bileşim uyarıları (kullanıcı kararı, 14.11.2026 — S5).
+
+    Yalnız Ödül ve Disiplin Kurulu toplantısında; kurulun GÜNCEL bileşimine bakar (üyelik
+    geçmişi tutulmaz). Uyarıdır: toplantı kaydını ve kararı engellemez.
+    """
+    from apps.disiplin.selectors.committee import committee_composition_warnings
+
+    committee = meeting_committee(meeting)
+    if committee is None:
+        return []
+    return committee_composition_warnings(committee)
 
 
 def _require_quorum(meeting: CouncilMeeting) -> None:

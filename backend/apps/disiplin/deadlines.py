@@ -22,7 +22,7 @@ from datetime import date
 from typing import Any
 
 from apps.disiplin import selectors
-from apps.disiplin.models import CaseStage, DecisionApprovalStatus
+from apps.disiplin.models import CaseStage, DecisionApprovalStatus, PenaltyType
 from apps.okul.services.calendar import is_working_day
 from shared.working_days import add_working_days
 
@@ -211,11 +211,19 @@ def collect_deadline_items(today: date) -> list[DeadlineItem]:
             continue
         eligible, _eligible_on = selectors.close_eligible(case, today=today)
         if eligible:
+            # Kullanıcı kararı, 14.11.2026 — S9: cezasız karar tebliğle kapanışa hazırdır;
+            # beklenen bir itiraz süresi/tampon yoktur — başlık bunu söylemeli.
+            penalty_types = set(case.decisions.values_list("penalty_type", flat=True))
+            only_no_penalty = bool(penalty_types) and penalty_types <= {PenaltyType.NO_PENALTY}
             items.append(
                 DeadlineItem(
                     severity=Severity.INFO,
                     case_no=case.case_no,
-                    title="Dosya kapatılabilir (itiraz süresi + tampon doldu)",
+                    title=(
+                        "Dosya kapatılabilir (cezasız karar tebliğ edildi)"
+                        if only_no_penalty
+                        else "Dosya kapatılabilir (itiraz süresi + tampon doldu)"
+                    ),
                     due_date=None,
                     statute_ref="md. 169",
                     link=f"/disiplin/{case.pk}",

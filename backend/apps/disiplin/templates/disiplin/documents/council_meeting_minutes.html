@@ -15,7 +15,10 @@ genel "KARAR" bölümü yalnız serbest karar metni varsa basılır (her maddeni
 kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın). Aynı gerekçeyle
 üst bilgideki "Karar Esası" satırı o durumda maddelere atıf yapar (saha denetimi 14.11.2026).
 İmza ızgarası `signer_rows` ile 5'erli satırlara bölünür (kalabalık Onur Genel Kurulunda tek
-satır sayfa dışına taşıyordu); 5 ve altı imzacıda çıktı eski tek satırlı ızgaradır.{% endcomment %}
+satır sayfa dışına taşıyordu); 5 ve altı imzacıda çıktı eski tek satırlı ızgaradır.
+BİLİNÇLİ SAPMA (kullanıcı kararı, 14.11.2026 — S1): dosya görüşme tutanağında öğrenci-bazlı
+kararlar KARAR NUMARASI sırasıyla dizilir ve uzaklaştırmada gün sayısı basılır ("… — 3 gün");
+ikisi de bağlamda (`documents._council_minutes_context`) üretilir, şablon gövdesi değişmedi.{% endcomment %}
 {% block content %}
 <div class="doc-title">{{ title }}</div>
 <div class="doc-subtitle">{{ articles.subtitle }}</div>

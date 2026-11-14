@@ -623,3 +623,137 @@ describe("DisiplinDetayPage — kapalı dosyada taraflar kilitli (A3)", () => {
     expect(screen.queryByText("Dosya kapalı; taraflar değiştirilemez.")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Kullanıcı kararları, 14.11.2026 — S10 (md. 157/7-e engeli aşama atlama
+// override'ından AYRI onay + AYRI gerekçe ister) ve S9 (cezasız kararda kapanış).
+// ---------------------------------------------------------------------------
+describe("DisiplinDetayPage — S10: md. 157/7-e engeli ayrı onay ister", () => {
+  const GECMISLI = {
+    students: [
+      { student_id: 50, warning_count: 1, penalty_count: 0, should_route_to_committee: true },
+    ],
+    should_route_to_committee: true,
+  };
+  const KUTU = /md\. 157\/7-e engelini aşıyorum/;
+  const GEREKCE = /md\. 157\/7-e engelini aşma gerekçesi/;
+
+  function hazirla(triage: unknown) {
+    dapi.listParticipants.mockResolvedValue([]);
+    dapi.listWarnings.mockResolvedValue([]);
+    dapi.triageSuggestion.mockResolvedValue(triage);
+    dapi.addEvent.mockResolvedValue({});
+  }
+
+  it("override yolunda ayrı kutu + ayrı gerekçe ister; ikisi de gövdeye ayrı alanlarla gider", async () => {
+    hazirla(GECMISLI);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: /Override \(aşama atla\)/ }));
+    await user.type(await screen.findByLabelText(/Override gerekçesi/), "Rehberlik atlandı.");
+
+    // Kurula sevk seçiliyken ayrı onay sunulmaz.
+    await user.click(screen.getByRole("radio", { name: "Disiplin Kuruluna sevk" }));
+    expect(screen.queryByRole("checkbox", { name: KUTU })).toBeNull();
+
+    await user.click(screen.getByRole("radio", { name: "Yazılı uyarı" }));
+    const kutu = await screen.findByRole("checkbox", { name: KUTU });
+    // Hangi engelin aşıldığı açıkça yazılır; aşama atlama gerekçesinin kapsamadığı söylenir.
+    expect(screen.getByText(/daha önce disiplin cezası\/uyarısı almış/)).toBeInTheDocument();
+    expect(screen.getByText(/aşama atlama gerekçesi bu engeli kapsamaz/i)).toBeInTheDocument();
+
+    // Kutu işaretlenmeden kaydedilmez.
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+    expect(await screen.findByText(/md\. 157\/7-e engeli ayrı onay ister/)).toBeInTheDocument();
+    expect(dapi.addEvent).not.toHaveBeenCalled();
+
+    // Kutu işaretli ama gerekçe boşken de kaydedilmez (alan zorunlu — tarayıcı doğrulaması).
+    await user.click(kutu);
+    expect(screen.getByLabelText(GEREKCE)).toBeRequired();
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+    expect(dapi.addEvent).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText(GEREKCE), "Davranışlar arasında bağ yok.");
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+    await waitFor(() =>
+      expect(dapi.addEvent).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({
+          stage: "DECIDED",
+          override: true,
+          override_reason: "Rehberlik atlandı.",
+          principal_decisions: ["WRITTEN_WARNING"],
+          warning_block_override: true,
+          warning_block_override_reason: "Davranışlar arasında bağ yok.",
+        }),
+      ),
+    );
+  });
+
+  it("normal yoldan (rehberlik atlanmadan) verilen müdür kararında da ayrı onay istenir", async () => {
+    hazirla(GECMISLI);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "GUIDANCE_RETURNED" });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: "Müdür değerlendirmesi / sevk" }));
+    await user.click(await screen.findByRole("radio", { name: "Yazılı uyarı" }));
+    await user.click(await screen.findByRole("checkbox", { name: KUTU }));
+    await user.type(screen.getByLabelText(GEREKCE), "Müdür takdiri.");
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+    await waitFor(() =>
+      expect(dapi.addEvent).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({
+          override: false,
+          override_reason: "",
+          warning_block_override: true,
+          warning_block_override_reason: "Müdür takdiri.",
+        }),
+      ),
+    );
+  });
+
+  it("geçmişi temiz öğrencide ayrı onay sunulmaz ve gövdeye işaret gitmez", async () => {
+    hazirla({ students: [], should_route_to_committee: false });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: /Override \(aşama atla\)/ }));
+    await user.type(await screen.findByLabelText(/Override gerekçesi/), "Rehberlik atlandı.");
+    await user.click(screen.getByRole("radio", { name: "Yazılı uyarı" }));
+    expect(screen.queryByRole("checkbox", { name: KUTU })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Aşamayı ekle" }));
+    await waitFor(() => expect(dapi.addEvent).toHaveBeenCalled());
+    const body = dapi.addEvent.mock.calls[0][1] as Record<string, unknown>;
+    expect(body.warning_block_override).toBeUndefined();
+    expect(body.warning_block_override_reason).toBeUndefined();
+  });
+});
+
+describe("DisiplinDetayPage — S9: kapanış kuralı açıklaması", () => {
+  it("cezasız kararda tebliğin yettiği, cezalı kararda sürelerin beklendiği yazılır", async () => {
+    dapi.listParticipants.mockResolvedValue([]);
+    dapi.listWarnings.mockResolvedValue([]);
+    dapi.triageSuggestion.mockResolvedValue({ students: [], should_route_to_committee: false });
+    const user = userEvent.setup();
+    renderPage({
+      current_stage: "COMMITTEE_DONE",
+      close_eligible_reason: "Karar önce öğrenciye/veliye tebliğ edilmelidir.",
+    });
+
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("button", { name: /Dosyayı kapat/ }));
+
+    expect(
+      await screen.findByText(/Karar önce öğrenciye\/veliye tebliğ edilmelidir/),
+    ).toBeInTheDocument();
+    const kural = screen.getByText(/Ceza verilmesine yer olmadığı/);
+    expect(kural).toHaveTextContent(/tebliğ edilmesi yeterlidir/);
+    expect(kural).toHaveTextContent(/itiraz süresi ve tampon beklenmez/);
+    expect(kural).toHaveTextContent(/Cezalı kararda .*itiraz süresi.*tampon.*beklenir/);
+  });
+});

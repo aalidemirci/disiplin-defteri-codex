@@ -85,6 +85,9 @@ export interface CouncilMeeting {
   agenda_items: AgendaItem[];
   // Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda null.
   quorum: Quorum | null;
+  // Kurulun md. 185/1 bileşim uyarıları (S5, 14.11.2026) — uyarır, engellemez; Onur
+  // Kurulu toplantısında boş.
+  composition_warnings?: string[];
 }
 
 export type AgendaOutcome = "PENDING" | "FAVORABLE" | "UNFAVORABLE";
@@ -101,6 +104,9 @@ export interface AgendaItem {
   justification: string;
   proposer_role_display: string;
   certificate_status: string;
+  // Öğrenci onur belgesine uygun mu (md. 161/1: davranış puanı indirilmemiş). S6,
+  // 14.11.2026: `false` ise Onur Kurulu karar öncesi uyarılır; karar yine verilebilir.
+  honor_eligible?: boolean | null;
   outcome: AgendaOutcome;
   outcome_display: string;
   decision_text: string;
@@ -113,6 +119,9 @@ export interface Quorum {
   required: number;
   present: number;
   ok: boolean;
+  // "Oy hakkı olan üye" yazılmış ama kurul listesiyle eşleşmediği için yeter sayıya
+  // girmeyen satırların adları (S13, 14.11.2026).
+  unmatched?: string[];
 }
 
 export interface AgendaDecisionBody {
@@ -272,6 +281,15 @@ export const kurulApi = {
       `${BASE}/prefill/?council_type=${councilType}&honor_meeting_kind=${honorMeetingKind}`,
     );
     return { attendees };
+  },
+
+  // Aktif Ödül ve Disiplin Kurulunun md. 185/1 bileşim uyarıları (S5, 14.11.2026) —
+  // toplantı kaydı formu için. Kurul tanımsızsa (204, boş gövde) uyarı yoktur.
+  compositionWarnings: async (): Promise<string[]> => {
+    const committee = await api.get<{ composition_warnings?: string[] } | undefined>(
+      "/discipline/committee/",
+    );
+    return committee?.composition_warnings ?? [];
   },
 
   // Dosya görüşme tutanağına bağlanabilecek dosyalar (kurula sevkli + kararlı).

@@ -16,7 +16,7 @@ Mevzuat: Ortaöğretim Kurumları Yönetmeliği md. 163 (ceza/onay), 169 (itiraz
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from apps.disiplin.models import ApprovalAuthority, PenaltyType
 
@@ -25,6 +25,9 @@ from apps.disiplin.models import ApprovalAuthority, PenaltyType
 # re-export); mevcut `discipline_periods.add_working_days` importları çalışmaya devam eder.
 from shared.working_days import WorkingDayPredicate as WorkingDayPredicate
 from shared.working_days import add_working_days as add_working_days
+
+# Kullanıcı kararı, 14.11.2026 — S4: varsayılan iş günü yüklemi (`precaution_end_date`).
+from shared.working_days import is_weekday
 
 # --- Yasal süreler (iş günü) — md. 169/3 ---
 APPEAL_FILING_WORKING_DAYS = 5  # cezanın tebliğini izleyen 5 iş günü içinde itiraz
@@ -175,10 +178,22 @@ def precaution_end_date(
     `days` 1..PRECAUTION_MAX_WORKING_DAYS aralığında olmalıdır (md. 175/1 "on iş gününü
     geçmemek"). Aralık dışı → ValueError. Bitiş, son uzaklaştırma gününü gösterir
     (start dahil sayılır: 1 iş günü → start'ın kendisi).
+
+    Kullanıcı kararı, 14.11.2026 — S4 (OYS'den bilinçli sapma): `precaution_start`
+    iş günü DEĞİLSE (hafta sonu / resmî tatil) tedbirin iş günleri İZLEYEN İLK İŞ
+    GÜNÜNDEN sayılır — md. 175/1 süreyi "iş günü" ile ölçer, tatil günü 1. gün
+    olamaz (Cmt + 3 iş günü → Pzt, Sal, Çar). Başlangıç iş günüyse davranış AYNEN.
+    Girilen tarih karar günü olarak kalır; md. 175/2'deki 3 iş günü
+    (`precaution_process_start_deadline`) o tarihten sayılmaya devam eder.
     """
     if not (1 <= days <= PRECAUTION_MAX_WORKING_DAYS):
         raise ValueError(
             f"Tedbir süresi 1-{PRECAUTION_MAX_WORKING_DAYS} iş günü olmalıdır (md. 175/1)."
         )
-    # 1 iş günü = yalnız start günü; bu yüzden days-1 iş günü eklenir.
-    return add_working_days(precaution_start, days - 1, is_working_day=is_working_day)
+    # Kullanıcı kararı, 14.11.2026 — S4: 1. gün = başlangıç ya da onu izleyen ilk iş günü.
+    predicate = is_working_day or is_weekday
+    first_day = precaution_start
+    while not predicate(first_day):
+        first_day += timedelta(days=1)
+    # 1 iş günü = yalnız ilk gün; bu yüzden days-1 iş günü eklenir.
+    return add_working_days(first_day, days - 1, is_working_day=is_working_day)
