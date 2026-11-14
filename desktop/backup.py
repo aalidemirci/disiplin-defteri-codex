@@ -26,7 +26,9 @@ günün yedeğini yeniden ÜRETMEZ (sabah alınan yedek, akşam bozulan veriyle 
 from __future__ import annotations
 
 import logging
+import os
 import re
+import secrets
 import shutil
 import sqlite3
 from contextlib import closing
@@ -76,14 +78,46 @@ def password_configured(data_dir: Path) -> bool:
     return (data_dir / STATE_FILE_NAME).is_file()
 
 
+def _serialize_supported() -> bool:
+    """`sqlite3.Connection.serialize` var mı?
+
+    Yöntem yalnız SQLite kitaplığı serileştirme desteğiyle derlenmişse bulunur. Debian 11'in
+    SQLite'ında (3.34) YOKTUR: Linux paketi orada derlendiği için paketlenmiş programda
+    `serialize` çağrısı AttributeError verip açılışı durduruyordu (14.11.2026, paketleme
+    kapısının `--autotest` adımı yakaladı).
+    """
+    return hasattr(sqlite3.Connection, "serialize")
+
+
+def _snapshot_via_file(source: sqlite3.Connection, data_dir: Path) -> bytes:
+    """`serialize` yokken görüntüyü geçici dosya üzerinden üretir.
+
+    Geçici dosya veritabanının KENDİ dizinine yazılır (canlı veritabanıyla aynı disk ve aynı
+    erişim izinleri; yedek dizinine ya da sistem geçici dizinine düz kopya sızmaz) ve her
+    durumda silinir. Parola kuruluyken de bu yol kullanılır: geçici kopya, yanında duran
+    canlı `db.sqlite3`'ten daha açık değildir.
+    """
+    temp = data_dir / f".yedek-goruntu-{os.getpid()}-{secrets.token_hex(4)}.tmp"
+    try:
+        with closing(sqlite3.connect(temp)) as target:
+            source.backup(target)
+        return temp.read_bytes()
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 def database_snapshot(source_path: Path) -> bytes:
-    """WAL dahil tutarlı SQLite görüntüsünü RAM'de üretir; düz yedek diske yazılmaz."""
-    with (
-        closing(sqlite3.connect(source_path)) as source,
-        closing(sqlite3.connect(":memory:")) as target,
-    ):
-        source.backup(target)
-        return bytes(target.serialize())
+    """WAL dahil tutarlı SQLite görüntüsünü üretir.
+
+    Olağan yol RAM'dedir (düz ara kopya diske yazılmaz). SQLite kitaplığı serileştirmeyi
+    desteklemiyorsa (`_serialize_supported`) görüntü veri dizinindeki geçici dosyadan okunur.
+    """
+    with closing(sqlite3.connect(source_path)) as source:
+        if not _serialize_supported():
+            return _snapshot_via_file(source, source_path.parent)
+        with closing(sqlite3.connect(":memory:")) as target:
+            source.backup(target)
+            return bytes(target.serialize())
 
 
 def _write_plain(snapshot: bytes, target: Path) -> None:

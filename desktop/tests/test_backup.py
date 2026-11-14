@@ -538,3 +538,46 @@ def test_rotasyon_eski_geri_yukleme_oncesi_klasorlerini_siler(tmp_path: Path) ->
 
     assert eski in silinen and not eski.exists()
     assert (yeni / "db.sqlite3").exists()
+
+
+@pytest.mark.parametrize("parola", [False, True], ids=["parolasiz", "parola_kurulu"])
+def test_serialize_desteklenmeyen_sqlite_ile_de_yedek_alinir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parola: bool
+) -> None:
+    # Debian 11'in SQLite'ında `Connection.serialize` yoktur; Linux paketi açılışta
+    # AttributeError ile duruyordu (14.11.2026 paketleme kapısı). Görüntü geçici dosyadan
+    # alınır, içerik aynıdır ve geçici dosya geride kalmaz.
+    db = tmp_path / "data" / "db.sqlite3"
+    db.parent.mkdir()
+    _db_olustur(db, satir_sayisi=7, parola=parola)
+    beklenen = backup_mod.database_snapshot(db)
+    monkeypatch.setattr(backup_mod, "_serialize_supported", lambda: False)
+
+    goruntu = backup_mod.database_snapshot(db)
+
+    kopya = tmp_path / "kopya.sqlite3"
+    kopya.write_bytes(goruntu)
+    assert _satir_sayisi(kopya) == 7
+    assert len(goruntu) == len(beklenen)
+    assert [p.name for p in db.parent.iterdir() if p.name.endswith(".tmp")] == []
+
+    sonuc = daily_backup(db, tmp_path / "backups", today=date(2026, 11, 14))
+    assert sonuc is not None and sonuc.exists()
+    assert [p.name for p in db.parent.iterdir() if p.name.endswith(".tmp")] == []
+
+
+def test_serialize_yolu_hata_verirse_gecici_goruntu_dosyasi_silinir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "data" / "db.sqlite3"
+    db.parent.mkdir()
+    _db_olustur(db, parola=False)
+    monkeypatch.setattr(backup_mod, "_serialize_supported", lambda: False)
+
+    def _patla(self: Path) -> bytes:
+        raise OSError("disk okunamadı")
+
+    monkeypatch.setattr(Path, "read_bytes", _patla)
+    with pytest.raises(OSError, match="disk okunamadı"):
+        backup_mod.database_snapshot(db)
+    assert [p.name for p in db.parent.iterdir() if p.name.endswith(".tmp")] == []
