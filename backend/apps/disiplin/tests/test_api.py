@@ -19,6 +19,8 @@ from apps.disiplin.tests.factories import (
     PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
+    decide,
+    ensure_meeting,
     ensure_terms,
 )
 
@@ -74,15 +76,20 @@ class TestCaseLifecycleApi:
         assert client.get("/api/v1/discipline/cases/").json()["count"] == 1
         assert client.get("/api/v1/discipline/cases/", {"student": student.pk}).json()["count"] == 1
 
-        # Kurula sevk + karar
+        # Kurula sevk + karar. S8: toplantısız karar girilemez (eyleme dönük 400).
         _refer_to_committee(client, case_id)
-        resp = client.post(
-            f"/api/v1/discipline/cases/{case_id}/decisions/",
-            {"student": student.pk, "penalty_type": "REPRIMAND", "decision_date": "2026-05-22"},
-            format="json",
-        )
+        body = {"student": student.pk, "penalty_type": "REPRIMAND"}
+        resp = client.post(f"/api/v1/discipline/cases/{case_id}/decisions/", body, format="json")
+        assert resp.status_code == 400
+        assert resp.json()["code"] == "validation_error"
+        assert "kayıtlı kurul toplantısı yok" in resp.json()["message"]
+        meeting = ensure_meeting(DisciplineCase.objects.get(pk=case_id), date(2026, 5, 22))
+        # Tek toplantı: `meeting` gönderilmese de servis onu seçer; tarih toplantı tarihidir.
+        resp = client.post(f"/api/v1/discipline/cases/{case_id}/decisions/", body, format="json")
         assert resp.status_code == 201
         decision = resp.json()
+        assert decision["meeting"] == meeting.pk
+        assert decision["decision_date"] == decision["meeting_date"] == "2026-05-22"
         assert decision["behavior_point_deduction"] == 10  # otomatik türetildi
         did = decision["id"]
 
@@ -473,7 +480,7 @@ class TestDecisionTypeAndDeadlinesApi:
             override_reason="atla",
             principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
         )
-        services.record_decision(
+        decide(
             case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
         )
         items = client.get("/api/v1/disiplin/yaklasan-sureler/").json()
@@ -572,9 +579,10 @@ class TestOysZarfParitesiApi:
         student = StudentFactory(birth_date=date(2010, 3, 15))
         case = _case_via_api(client, student.pk)
         _refer_to_committee(client, case["id"])
+        meeting = ensure_meeting(DisciplineCase.objects.get(pk=case["id"]), date(2026, 5, 22))
         resp = client.post(
             f"/api/v1/discipline/cases/{case['id']}/decisions/",
-            {"student": student.pk, "penalty_type": "REPRIMAND", "decision_date": "2026-05-22"},
+            {"student": student.pk, "penalty_type": "REPRIMAND", "meeting": meeting.pk},
             format="json",
         )
         assert resp.status_code == 201, resp.content

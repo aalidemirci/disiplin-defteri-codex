@@ -15,7 +15,12 @@ from apps.disiplin.models import (
     ParticipantRole,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    decide,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -113,9 +118,7 @@ def test_son_suclanan_cikarilamaz_ve_kararli_cikarilamaz() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     with pytest.raises(ValueError, match="karar verilmiş"):
         services.remove_participant(tek)
 

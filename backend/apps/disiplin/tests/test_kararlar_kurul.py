@@ -39,6 +39,7 @@ from apps.disiplin.tests.factories import (
     StudentFactory,
     approve,
     council_meeting,
+    decide,
     ensure_terms,
 )
 from apps.okul.models import SchoolTerm, SchoolYear, Student
@@ -124,7 +125,7 @@ def _penalize(student_id: int) -> None:
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
     approve(
-        services.record_decision(
+        decide(
             case, student_id=student_id, penalty_type="REPRIMAND", decision_date=date(2026, 5, 20)
         )
     )

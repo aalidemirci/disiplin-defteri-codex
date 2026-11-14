@@ -29,6 +29,7 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     approve,
+    decide,
     ensure_terms,
 )
 from apps.okul.models import Student
@@ -89,7 +90,7 @@ def test_ek1_pdf_turkce_duman_ve_kutuk() -> None:
     year = SchoolYearFactory()
     chair = PersonnelFactory(first_name="MÜDÜR", last_name="YARDIMCISI")
     services.create_committee(school_year_id=year.pk, chair_id=chair.pk)
-    services.record_decision(
+    decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.REPRIMAND,
@@ -120,7 +121,7 @@ def test_veli_tebligi_guardian_alanlarindan() -> None:
     student.guardian_name = "AYŞE YILMAZ"
     student.guardian_kinship = "ANNE"
     student.save(update_fields=["guardian_name", "guardian_kinship"])
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     pdf_bytes, _record = doc_engine.generate_document(
@@ -196,7 +197,7 @@ def test_uyari_yazisi_gerekce_zorunlu() -> None:
 
 def test_form16_kesinlesme_kilidi() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -307,7 +308,7 @@ def test_document_log_api_crud_ve_reorder(client: APIClient) -> None:
 
 def test_documents_generate_api_pdf_ve_kutuk(client: APIClient) -> None:
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     resp = client.post(
@@ -512,7 +513,7 @@ def test_generate_ucundan_dizi_pusulasi_reddedilir(client: APIClient) -> None:
 def test_index_sheet_ucu_kutuge_yazmadan_uretir(client: APIClient) -> None:
     """Bulgu 2: GET documents/index-sheet — log=False fihrist yolu."""
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     client.post(
@@ -531,7 +532,7 @@ def test_index_sheet_ucu_kutuge_yazmadan_uretir(client: APIClient) -> None:
 def test_generate_log_parametresi_istemciden_kapatilamaz(client: APIClient) -> None:
     """Bulgu 4/8: resmî belge daima kütüğe yazılır — log=false yok sayılır."""
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     resp = client.post(
@@ -670,7 +671,7 @@ def test_form18_itiraz_eden_ve_sure_kayittan() -> None:
     """Form-18: itiraz eden (18+ öğrenci), süre dışı başvuru ve tebliğ tarihi kayıttan;
     itiraz derdestken karar "kesinleşmiş" yazılmaz (md. 169/3)."""
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)
@@ -690,7 +691,7 @@ def test_form18_itiraz_eden_ve_sure_kayittan() -> None:
 
 def test_form18_mudur_itirazi_orantililik_gorusu_basmaz() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)
@@ -706,7 +707,7 @@ def test_form18_mudur_itirazi_orantililik_gorusu_basmaz() -> None:
 def test_form18_md197_ilce_kararinda_itiraz_il_kurulunda() -> None:
     """md. 169/4, 202/1-b: ilçe kurulunun bağladığı karara itiraz il kurulunda."""
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     services.record_principal_review(d, action="RETURN", reason="a", decided_on=date(2026, 5, 21))
@@ -725,7 +726,7 @@ def test_form15_17_savunma_ifadesi_yalniz_savunma_tutanagiyla() -> None:
     from apps.disiplin.models import DisciplineParticipant, ParticipantRole
 
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -818,7 +819,7 @@ def test_generate_ucu_oylama_esasini_iletir(client: APIClient) -> None:
 def test_ek1_cezasiz_kararda_md197_iade_kutusu() -> None:
     """md. 197: müdür uygun bulmadığı her kararı (cezasız dahil) bir kez kurula iade eder."""
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.NO_PENALTY, decision_date=date(2026, 5, 22)
     )
     pdf_bytes, _ = doc_engine.generate_document(
@@ -852,7 +853,7 @@ def _letter_text(case: DisciplineCase, sid: int, document_type: str, variant: st
 
 def test_md197_iade_ve_ilceye_gonderme_yazilari() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     with pytest.raises(ValueError, match="iade edilmemiş"):
@@ -879,7 +880,7 @@ def test_md197_iade_ve_ilceye_gonderme_yazilari() -> None:
 
 def test_md169_1_onaya_sevk_yazisi_yalniz_ilce_il_onayli_cezada() -> None:
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
     with pytest.raises(ValueError, match="ilçe/il kurulu onayına"):

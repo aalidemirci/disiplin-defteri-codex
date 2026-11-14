@@ -28,7 +28,7 @@ from apps.disiplin.models import (
     PrincipalDecision,
 )
 from apps.disiplin.services.decisions import update_decision_narrative
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve, decide
 from apps.okul.models import SchoolYear
 
 pytestmark = pytest.mark.django_db
@@ -58,7 +58,7 @@ def _committee_case() -> tuple[DisciplineCase, int]:
 
 
 def _suspension(case: DisciplineCase, sid: int, *, days: int = 5) -> DisciplineDecision:
-    return services.record_decision(
+    return decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -123,7 +123,7 @@ def test_sk2_ayni_tur_ayni_gun_degisiklik_sayilmaz() -> None:
 
 def test_sk2_uzaklastirma_disinda_ayni_tur_reddedilir() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)
@@ -316,7 +316,7 @@ def test_sk29_sevk_geri_alinmis_dosyada_karar_girilemez() -> None:
     case, sid = _committee_case()
     services.revert_stage(case, target_stage=CaseStage.PETITION, reason="Yanlış sevk.")
     with pytest.raises(ValueError, match="163/2"):
-        services.record_decision(
+        decide(
             case,
             student_id=sid,
             penalty_type=PenaltyType.REPRIMAND,
@@ -327,7 +327,7 @@ def test_sk29_sevk_geri_alinmis_dosyada_karar_girilemez() -> None:
 
 def test_sk29_sevk_geri_alinmis_dosyada_silinmis_karar_geri_yuklenemez() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     services.delete_decision(d)
@@ -344,7 +344,7 @@ def test_sk29_kurul_tamamlandi_asamasinda_karar_girilebilir() -> None:
     case, sid = _committee_case()
     case.current_stage = CaseStage.COMMITTEE_DONE
     case.save(update_fields=["current_stage"])
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     assert d.pk is not None
@@ -354,7 +354,7 @@ def test_sk29_kurul_tamamlandi_asamasinda_karar_girilebilir() -> None:
 def test_sk59_onay_tarihi_onceden_girilmis_baslangictan_sonra_olamaz() -> None:
     """Karar formunda başlangıç baştan girilince onay denetimi atlanıyordu."""
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -374,7 +374,7 @@ def test_sk59_onay_tarihi_onceden_girilmis_baslangictan_sonra_olamaz() -> None:
 # --- SK-YIL: ders yılı bitişinden sonra verilen ceza (md. 166 ile aynı yıl tanımı) ---
 def test_skyil_ders_yili_bitisinden_sonra_verilen_ceza_puani_dusurur() -> None:
     case, sid = _committee_case()  # 2025-2026: 08.09.2025 – 26.06.2026
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 30)
     )
     approve(d)
@@ -388,7 +388,7 @@ def test_skyil_ders_yili_bitisinden_sonra_verilen_ceza_puani_dusurur() -> None:
 
 def test_skyil_yaz_karari_yeni_yila_degil_biten_yila_sayilir() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 6, 30)
     )
     approve(d)

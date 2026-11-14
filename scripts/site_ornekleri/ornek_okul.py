@@ -212,32 +212,35 @@ def _disiplin_dosyalari(o: OrnekOkul) -> None:
         date(2026, 9, 22),
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    karar = services.record_decision(
-        kurul,
-        student_id=s["Mehmet SINAMA"].pk,
-        penalty_type="REPRIMAND",
-        decision_date=date(2026, 9, 29),
-        penalty_detail=(
-            "Öğrencinin savunması alınmış; olayın tanık ifadeleriyle sabit olduğu, "
-            "öğrencinin daha önce disiplin cezası almadığı göz önünde bulundurulmuştur."
-        ),
-    )
     # Kurul toplantısı (md. 191): şikâyetçi Matematik öğretmeni kurula katılamaz (md. 191/2),
     # yerine yedek üye çağrılır; yeter sayı başkan dahil 5 kişiden en az 3.
+    # S8: karar yalnız kayıtlı toplantıya bağlı girilir — ÖNCE toplantı, SONRA karar;
+    # karar tarihi toplantı tarihidir.
     from apps.disiplin.selectors import get_active_committee
     from apps.disiplin.services.decisions import update_decision_narrative
 
     uyeler = {m.member_name: m.pk for m in get_active_committee().members.all()}
-    services.record_meeting(
+    katilanlar = [
+        uyeler["Fizik ÖĞRETMENİ"],
+        uyeler["Tarih ÖĞRETMENİ"],
+        uyeler[s["Elif ÖRNEK"].full_name],
+        uyeler["Veli ÜYE"],
+    ]
+    toplanti = services.record_meeting(
         kurul,
         meeting_date=date(2026, 9, 29),
-        attendee_member_ids=[
-            uyeler["Fizik ÖĞRETMENİ"],
-            uyeler["Tarih ÖĞRETMENİ"],
-            uyeler[s["Elif ÖRNEK"].full_name],
-            uyeler["Veli ÜYE"],
-        ],
+        attendee_member_ids=katilanlar,
         notes="Şikâyetçi üye yerine yedek üye katıldı (md. 191/2).",
+    )
+    karar = services.record_decision(
+        kurul,
+        student_id=s["Mehmet SINAMA"].pk,
+        penalty_type="REPRIMAND",
+        meeting=toplanti,
+        penalty_detail=(
+            "Öğrencinin savunması alınmış; olayın tanık ifadeleriyle sabit olduğu, "
+            "öğrencinin daha önce disiplin cezası almadığı göz önünde bulundurulmuştur."
+        ),
     )
     update_decision_narrative(
         karar,
@@ -273,12 +276,19 @@ def _disiplin_dosyalari(o: OrnekOkul) -> None:
     services.set_decision_approval(karar, approval_status="APPROVED", approved_on=date(2026, 9, 30))
     services.notify_decision(karar, notified_on=date(2026, 10, 1), notification_method="Elden")
     o.karar["kinama"] = karar
+    # İkinci öğrencinin kararı ayrı bir toplantıda verildi (S8: her karar bir toplantıya bağlı).
+    ikinci_toplanti = services.record_meeting(
+        kurul,
+        meeting_date=date(2026, 10, 2),
+        attendee_member_ids=katilanlar,
+        notes="Şikâyetçi üye yerine yedek üye katıldı (md. 191/2).",
+    )
     o.karar["onay_bekleyen"] = services.record_decision(
         kurul,
         student_id=s["Burak MİSAL"].pk,
         penalty_type="SHORT_TERM_SUSPENSION",
         suspension_days=2,
-        decision_date=date(2026, 10, 2),
+        meeting=ikinci_toplanti,
         penalty_detail=(
             "Olayın başlatıcısı olduğu, sınıf eşyasına verilen zararın tutanakla tespit "
             "edildiği göz önünde bulundurulmuştur."

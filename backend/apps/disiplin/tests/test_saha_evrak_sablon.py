@@ -36,6 +36,7 @@ from apps.disiplin.tests.factories import (
     StudentFactory,
     approve,
     committee_for,
+    decide,
     ensure_terms,
 )
 from apps.okul.models import SchoolTerm, SchoolYear
@@ -93,7 +94,7 @@ def _appealed(
     """Kınama → onay → tebliğ → veli itirazı (Form-18 üretilebilir durum)."""
     student = StudentFactory(first_name="IRAZ", last_name="ÇIĞ")
     case = _case(student, district=district)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -328,7 +329,7 @@ def test_form18_ilce_kayitli_degilse_muhatap_elle_doldurulur() -> None:
 def _school_change_case(district: str = "Çekmeköy") -> tuple[DisciplineCase, Any]:
     student = StudentFactory(first_name="IRAZ", last_name="ÇIĞ")
     case = _case(student, district=district)
-    services.record_decision(
+    decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -357,7 +358,7 @@ def test_onaya_sevk_yazisinda_ilce_yoksa_muhatap_noktali_kalir() -> None:
 def test_onaya_sevk_yazisinda_gerekce_doluyken_o_basilir() -> None:
     student = StudentFactory(first_name="IRAZ", last_name="ÇIĞ")
     case = _case(student)
-    services.record_decision(
+    decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SCHOOL_CHANGE,
@@ -394,7 +395,7 @@ def test_ilceye_gonderme_yazisinda_muhatap_dolu_iade_yazisi_tarihi_kayittan() ->
     gününden FARKLI bir tarihle üretilir, İlgi (b) yine iade gününü basar."""
     student = StudentFactory()
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.REPRIMAND,
@@ -457,7 +458,7 @@ def test_mem_bilgilendirme_uzatilmis_tedbirde_toplami_md175_1e_baglamaz() -> Non
 def _suspension_case(*, incident: date | None) -> tuple[DisciplineCase, Any]:
     student = StudentFactory(guardian_name="Veli Örnek")
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -509,7 +510,7 @@ def test_form17_olay_tarihi_kayittan_basilir(incident: date | None, expected: st
 def test_cezasiz_kararin_veli_tebliginde_serh_ceza_demez() -> None:
     student = StudentFactory()
     case = _case(student)
-    services.record_decision(
+    decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.NO_PENALTY,
@@ -538,7 +539,7 @@ def _reduced_case() -> tuple[DisciplineCase, Any]:
     """5 gün uzaklaştırma → onay → tebliğ → itiraz → REDUCED (kınama)."""
     student = StudentFactory(guardian_name="Veli Örnek")
     case = _case(student)
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=student.pk,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -819,7 +820,7 @@ def test_ek1_mudur_imzasi_onay_kutusundan_kopmaz(penalty_type: str) -> None:
     student = StudentFactory(first_name="IRAZ ÖYKÜ", last_name="ÜNLÜ")
     case = _case(student)
     committee_for(SchoolYear.objects.get(is_active=True))
-    decision = services.record_decision(
+    decision = decide(
         case, student_id=student.pk, penalty_type=penalty_type, decision_date=date(2026, 5, 22)
     )
     for line_count in range(5, 15):

@@ -29,6 +29,7 @@ from apps.disiplin.tests.factories import (
     approve,
     award,
     council_meeting,
+    decide,
     decide_in_meeting,
     ensure_terms,
     recommend,
@@ -115,7 +116,7 @@ def test_davranis_puani_dusen_ogrenciye_teklif_edilemez() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    decision = services.record_decision(
+    decision = decide(
         case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
     )
     # Onaysız kurul kararı henüz ceza değildir (md. 163/2) — puan düşmez.
@@ -386,7 +387,7 @@ def test_md181_cezali_uye_uyarisi_uyelik_elle_sonlandirilir() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    d = services.record_decision(
+    d = decide(
         case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 5, 20)
     )
     assert assembly_row()["md181_penalty"] is None  # onaysız karar ceza değil
@@ -471,7 +472,7 @@ def test_m8_mudur_onayinda_uygunluk_yeniden_denetlenir() -> None:
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
     approve(
-        services.record_decision(
+        decide(
             case, student_id=student.pk, penalty_type="REPRIMAND", decision_date=date(2026, 6, 3)
         )
     )

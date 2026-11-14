@@ -591,7 +591,7 @@ class _Signer:
         return str(self._member.get_member_type_display())
 
 
-def _signing_members(case: DisciplineCase, committee: Any) -> list[Any]:
+def _signing_members(case: DisciplineCase, committee: Any, meeting: Any | None = None) -> list[Any]:
     """Dosyayı görüşen HEYET — EK-1, Form-11 ve md. 195 tutanağı imza ızgaraları.
 
     md. 196/1 "karar bütün üyelerce imzalanır", md. 194/1 savunmayı kurul alır: imzayı
@@ -600,12 +600,18 @@ def _signing_members(case: DisciplineCase, committee: Any) -> list[Any]:
     üyeleri; ancak dosyada şikâyetçi / zarar gören (veya hakkında işlem yapılan) üye
     kurula katılamayacağından ızgaradan çıkarılır (md. 191/2 —
     `services.committee._check_conflicts` ile aynı küme).
+
+    `meeting` (S8): EK-1'de kararın BAĞLI olduğu toplantı verilir; verilmezse dosyanın SON
+    toplantısı (dosya düzeyindeki belgeler ve toplantısız girilmiş eski kararlar).
     """
     if committee is None:
         return []
-    meeting = selectors.meetings_for_case(case).first()
+    if meeting is None:
+        meeting = selectors.meetings_for_case(case).first()
     if meeting is not None:
-        attendees = list(meeting.attendees.all())
+        # Sonradan kuruldan çıkarılan üye de o gün katılmış ve kararı imzalamıştır
+        # (md. 196/1) — yeter sayı sayımıyla aynı küme (`services.committee.meeting_attendees`).
+        attendees = services.committee.meeting_attendees(meeting)
         if attendees:
             # S7: başkanlık eden üye başkan hanesinde basılır (`_signing_panel`); üye
             # hanelerinde ikinci kez yer almaz. Vekâletsiz toplantıda liste aynen kalır.
@@ -694,7 +700,7 @@ class _ActingCommittee:
         return getattr(self._committee, name)
 
 
-def _signing_panel(case: DisciplineCase) -> dict[str, Any]:
+def _signing_panel(case: DisciplineCase, meeting: Any | None = None) -> dict[str, Any]:
     """İmza ızgarası bağlamı: dosyanın kurulu + işlemi yapan heyet (EK-1, Form-11, md. 195).
 
     VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): dosyanın SON toplantı kaydında başkan
@@ -703,15 +709,19 @@ def _signing_panel(case: DisciplineCase) -> dict[str, Any]:
     Vekâlet kaydı olmayan toplantıda ve toplantı kaydı olmayan dosyada bağlam eskisiyle
     aynıdır (gerçek kurul nesnesi + `_signing_members`) — TEK istisna: başkan o dosyada
     şikâyetçi / zarar gören ise (md. 191/2) vekâlet kaydı olmasa da BASILMAZ; başkan hanesinin
-    ad satırı boş (noktalı) kalır. Toplantı kaydı zorunlu olmadığından (S8) ve S7 öncesi
-    kaydedilmiş toplantılarda vekâlet alanı bulunmadığından bu yol açıktır; üyeler için aynı
+    ad satırı boş (noktalı) kalır. S8 öncesi (toplantısız girilmiş) kararlarda ve S7 öncesi
+    kaydedilmiş toplantılarda (vekâlet alanı yok) bu yol açıktır; üyeler için aynı
     süzme `_signing_members` içindedir. Evrak üretimi engellenmez: kapalı dosyada toplantı
     kaydedilemediği için ret, eski dosyada çıkışsız kalırdı (§7.6).
+
+    `meeting` (S8): EK-1 kararın BAĞLI olduğu toplantıyı verir — heyet ve başkan / vekâlet o
+    toplantıdan basılır. Verilmezse "SON toplantı" kuralı (yukarıdaki) aynen işler.
     """
     committee = selectors.committee_for_case(case)
-    members = _signing_members(case, committee)
+    members = _signing_members(case, committee, meeting)
     if committee is not None:
-        meeting = selectors.meetings_for_case(case).first()
+        if meeting is None:
+            meeting = selectors.meetings_for_case(case).first()
         if meeting is not None and meeting.chair_absent and meeting.acting_chair_id is not None:
             return {
                 "committee": _ActingCommittee(committee, _ActingChair(meeting.acting_chair)),
@@ -942,11 +952,19 @@ def _board_decision_context(decision: Any) -> dict[str, Any]:
 def _ek1_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
     """EK-1 kurul kararı bağlamı — karar + anlatı alanları + kurul üyeleri (TAM-OTO)."""
     decision = case.decisions.filter(student_id=student.pk).first()
+    # S8: karar toplantıya bağlıysa (ve toplantı canlıysa) imza heyeti o toplantıdır —
+    # md. 196/1 kararı, onu veren heyet imzalar. Bağ yoksa (S8 öncesi karar / karar yok)
+    # dosyanın SON toplantısı (S7 kuralı).
+    meeting = None
+    if decision is not None and decision.meeting_id is not None:
+        bound = decision.meeting
+        if bound is not None and bound.deleted_at is None:
+            meeting = bound
     return {
         **_common_context(case),
         "student": _student_context(student),
         **_board_decision_context(decision),
-        **_signing_panel(case),
+        **_signing_panel(case, meeting),
     }
 
 

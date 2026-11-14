@@ -36,7 +36,12 @@ from apps.disiplin.models import (
 )
 from apps.disiplin.selectors import purge as purge_selectors
 from apps.disiplin.services import purge as purge_service
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    decide,
+)
 from apps.okul.models import Student
 from apps.okul.services import setup as okul_setup
 
@@ -120,7 +125,7 @@ def _committee_case() -> tuple[DisciplineCase, Student]:
     year = SchoolYearFactory()
     chair = PersonnelFactory(first_name="MÜDÜR", last_name="YARDIMCISI")
     services.create_committee(school_year_id=year.pk, chair_id=chair.pk)
-    services.record_decision(
+    decide(
         case,
         student_id=s.pk,
         penalty_type=PenaltyType.REPRIMAND,

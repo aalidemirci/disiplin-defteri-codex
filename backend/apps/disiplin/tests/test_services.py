@@ -26,6 +26,7 @@ from apps.disiplin.tests.factories import (
     PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
+    decide,
 )
 
 pytestmark = pytest.mark.django_db
@@ -243,9 +244,7 @@ def test_revert_stage_karar_varken_karar_oncesine_engel() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     with pytest.raises(ValueError, match="resmî karar"):
         services.revert_stage(case, target_stage=CaseStage.PETITION, reason="geri al")
 
@@ -275,9 +274,7 @@ def test_close_case_tebligsiz_karar_bloke_eder() -> None:
         override_reason="atla",
         principal_decisions=[PrincipalDecision.DISCIPLINE_COMMITTEE],
     )
-    services.record_decision(
-        case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22)
-    )
+    decide(case, student_id=sid, penalty_type="REPRIMAND", decision_date=date(2026, 5, 22))
     with pytest.raises(ValueError, match="kapatılamaz"):
         services.close_case(case)
     # Erken kapatma gerekçeyle mümkün.

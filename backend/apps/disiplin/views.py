@@ -107,6 +107,17 @@ def _parse_date(value: Any) -> date:
     return result
 
 
+def _get_meeting_or_400(case: Any, raw: Any) -> Any:
+    """İstekteki toplantı kimliğini dosyanın CANLI toplantısına çözer — yoksa sözleşmeli 400."""
+    meeting_id = _to_int(raw)
+    meeting = selectors.get_meeting_for_case(case, meeting_id) if meeting_id is not None else None
+    if meeting is None:
+        raise drf_serializers.ValidationError(
+            "Seçilen kurul toplantısı bu dosyada bulunamadı (silinmiş olabilir)."
+        )
+    return meeting
+
+
 def _to_int(raw: str | None) -> int | None:
     """URL/istek kimliğini güvenle int'e çevirir — çevrilemeyen her şey None.
 
@@ -460,7 +471,11 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 case,
                 student_id=student.pk,
                 penalty_type=data["penalty_type"],
-                decision_date=data["decision_date"],
+                # S8: karar toplantıya bağlı girilir; tarih toplantı tarihidir. `meeting`
+                # verilmezse servis dosyanın TEK toplantısını seçer; `decision_date`
+                # gönderilirse toplantı tarihine eşit olmalıdır.
+                meeting=data.get("meeting"),
+                decision_date=data.get("decision_date"),
                 suspension_days=data.get("suspension_days"),
                 enforcement_start_date=data.get("enforcement_start_date"),
                 statute_ref=data.get("statute_ref", ""),
@@ -490,13 +505,22 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
             enforcement_start = _parse_date(raw_esd) if raw_esd else None
         else:
             enforcement_start = decision.enforcement_start_date
+        # S8: `meeting` gönderildiyse karar o toplantıya bağlanır (tarih toplantı tarihine
+        # geçer). Verilmeyen tarih serviste korunur (bağlı kararda toplantı tarihi).
+        meeting_kwargs: dict[str, Any] = {}
+        if "meeting" in request.data:
+            raw_meeting = request.data.get("meeting")
+            if raw_meeting in (None, ""):
+                meeting_kwargs["meeting"] = None
+            else:
+                meeting_kwargs["meeting"] = _get_meeting_or_400(case, raw_meeting)
+        raw_date = request.data.get("decision_date")
         with _service_errors():
             services.update_decision(
                 decision,
                 penalty_type=str(request.data.get("penalty_type", decision.penalty_type)),
-                decision_date=_parse_date(
-                    request.data.get("decision_date", decision.decision_date)
-                ),
+                decision_date=_parse_date(raw_date) if raw_date else None,
+                **meeting_kwargs,
                 suspension_days=suspension_days,
                 enforcement_start_date=enforcement_start,
                 statute_ref=str(request.data.get("statute_ref", decision.statute_ref)),
@@ -509,6 +533,16 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                     else None
                 ),
             )
+        return Response(DecisionSerializer(decision).data)
+
+    @action(detail=True, methods=["post"], url_path=r"decisions/(?P<did>[0-9]+)/meeting")
+    def decision_meeting(self, request: Request, pk: str | None = None, did: str = "") -> Response:
+        """Kararı AYNI tarihli başka bir toplantı kaydına bağlar (S8 — tarih değişmez)."""
+        case = _get_case_or_404(pk)
+        decision = _get_decision_or_404(case, did)
+        meeting = _get_meeting_or_400(case, request.data.get("meeting"))
+        with _service_errors():
+            services.rebind_decision_meeting(decision, meeting)
         return Response(DecisionSerializer(decision).data)
 
     @action(detail=True, methods=["post"], url_path=r"decisions/(?P<did>[0-9]+)/restore")

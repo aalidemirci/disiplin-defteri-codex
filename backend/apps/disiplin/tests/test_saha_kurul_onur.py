@@ -35,6 +35,7 @@ from apps.disiplin.tests.factories import (
     StudentFactory,
     award,
     committee_for,
+    decide,
     ensure_terms,
     recommend,
 )
@@ -412,7 +413,7 @@ def test_yaz_tarihli_dosya_gorusme_tutanagi_kaydedilir() -> None:
     year = SchoolYear.objects.get(is_active=True)
     committee = committee_for(year)
     student_id = case.case_students.values_list("student_id", flat=True)[0]
-    services.record_decision(
+    decide(
         case,
         student_id=student_id,
         decision_date=date(2026, 6, 29),

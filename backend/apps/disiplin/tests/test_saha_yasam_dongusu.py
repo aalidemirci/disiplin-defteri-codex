@@ -31,7 +31,12 @@ from apps.disiplin.models import (
 )
 from apps.disiplin.selectors import purge as purge_selectors
 from apps.disiplin.services import purge as purge_service
-from apps.disiplin.tests.factories import PersonnelFactory, SchoolYearFactory, StudentFactory
+from apps.disiplin.tests.factories import (
+    PersonnelFactory,
+    SchoolYearFactory,
+    StudentFactory,
+    decide,
+)
 from apps.okul.models import Student, StudentStatus
 from apps.okul.services import persons as persons_service
 from apps.okul.services import setup as okul_setup
@@ -616,7 +621,7 @@ def test_panel_karari_girilmis_dosyada_kurul_karar_suresi_alarmi_vermez() -> Non
     _ensure_committee()
     horizon = date(2026, 6, 30)
     assert [c.pk for c, _d in selectors.cases_awaiting_committee_decision(horizon)] == [case.pk]
-    services.record_decision(
+    decide(
         case,
         student_id=_sid(case),
         penalty_type=PenaltyType.REPRIMAND,
@@ -639,7 +644,7 @@ def test_panel_cok_ogrencili_dosyada_karari_eksik_ogrenci_varsa_alarm_surer() ->
     )
     _refer(case)
     _ensure_committee()
-    services.record_decision(
+    decide(
         case, student_id=a.pk, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     assert len(selectors.cases_awaiting_committee_decision(date(2026, 6, 30))) == 1
@@ -648,7 +653,7 @@ def test_panel_cok_ogrencili_dosyada_karari_eksik_ogrenci_varsa_alarm_surer() ->
 def test_panel_md197_askisindaki_karari_gosterir() -> None:
     case = _committee_case()
     _ensure_committee()
-    decision = services.record_decision(
+    decision = decide(
         case,
         student_id=_sid(case),
         penalty_type=PenaltyType.REPRIMAND,
@@ -720,7 +725,7 @@ def test_geri_alinmis_sevk_kurula_sevk_sayilmaz() -> None:
     assert selectors.committee_decision_deadline(case) is None
     _ensure_committee()
     with pytest.raises(ValueError, match=r"md\. 163/2"):
-        services.record_decision(
+        decide(
             case,
             student_id=_sid(case),
             penalty_type=PenaltyType.REPRIMAND,
@@ -899,7 +904,7 @@ def test_uyari_kaydi_ya_da_karari_olan_ogrenci_silinemez() -> None:
 
     decided = _committee_case()
     _ensure_committee()
-    services.record_decision(
+    decide(
         decided,
         student_id=_sid(decided),
         penalty_type=PenaltyType.REPRIMAND,

@@ -49,6 +49,7 @@ from apps.disiplin.tests.factories import (
     SchoolYearFactory,
     StudentFactory,
     council_meeting,
+    legacy_decision,
 )
 from apps.okul.services import setup as okul_setup
 
@@ -466,7 +467,9 @@ def test_odk_vekalette_baskanlik_eden_asil_ogretmen_uye_olmalidir(kurul: _Kurul,
 
 def _case_with_decision(kurul: _Kurul, *, petitioner_user_id: int | None) -> DisciplineCase:
     case = kurul.case(petitioner_user_id=petitioner_user_id)
-    services.record_decision(
+    # S8 ÖNCESİ kayıt taklidi: bu testler "toplantı kaydı yok / S7 öncesi toplantı" durumlarını
+    # sınar; yeni yolda karar toplantısız girilemez (bkz. test_s8_toplanti_zorunlu.py).
+    legacy_decision(
         case,
         student_id=case.students.get().pk,
         decision_date=date(2026, 5, 29),

@@ -22,7 +22,7 @@ from apps.disiplin.models import (
     PenaltyType,
     PrincipalDecision,
 )
-from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve
+from apps.disiplin.tests.factories import SchoolYearFactory, StudentFactory, approve, decide
 
 pytestmark = pytest.mark.django_db
 
@@ -54,7 +54,7 @@ def _committee_case() -> tuple[DisciplineCase, int]:
 
 
 def _suspension_decision(case: DisciplineCase, sid: int) -> DisciplineDecision:
-    return services.record_decision(
+    return decide(
         case,
         student_id=sid,
         penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
@@ -323,7 +323,7 @@ def test_normal_rehberlik_akisi_overridesiz() -> None:
 # ---------------------------------------------------------------------------
 def test_sure_disi_bekleyen_itiraz_kapanisi_bloke_eder() -> None:
     case, sid = _committee_case()
-    d = services.record_decision(
+    d = decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     approve(d)
@@ -416,7 +416,7 @@ def test_council_meeting_guncelle_ve_sil(client: APIClient) -> None:
 # ---------------------------------------------------------------------------
 def test_case_options_zarfi(client: APIClient) -> None:
     case, sid = _committee_case()
-    services.record_decision(
+    decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
     )
     body = client.get("/api/v1/council/meetings/case-options/").json()

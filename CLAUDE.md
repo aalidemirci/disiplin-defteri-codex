@@ -323,6 +323,24 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   `selectors.decisions.PENALTY_SEVERITY`. Cezasız karar kural dışı.
 - Dosya başına öğrenciye **tek canlı karar**. Puan ve onay/itiraz mercii cezadan
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
+- **Toplantı zorunlu (S8 — 14.11.2026):** yeni disiplin kararı yalnız dosyanın kayıtlı, yeter
+  sayısı olan (md. 191/1) kurul toplantısına (`DisciplineMeeting`) bağlı girilir; karar tarihi =
+  toplantı tarihi, ayrı tarih girilemez (`services.decisions.record_decision`; toplantı
+  verilmezse dosyanın TEK toplantısı seçilir). Toplantı kurula sevk tarihinden önce olamaz.
+  Yeter sayı karar anında yeniden doğrulanır (`services.committee.case_meeting_quorum`).
+  `meeting IS NULL` = S8 öncesi toplantısız girilmiş karar: GEÇERLİDİR; onay/tebliğ/itiraz/
+  kapanış toplantıya bakmaz, kayıt kendiliğinden değiştirilmez, geriye dönük toplantı
+  üretilmez; arayüz "Toplantı kaydı yok" bilgisini gösterir. Canlı kararı bağlı toplantı
+  silinemez; bağ KALDIRILAMAZ, yalnız taşınır: beklemedeki karar düzenlemede başka toplantıya
+  (tarih toplantıya geçer — md. 197 iadesinden sonraki ikinci görüşme böyle kaydedilir),
+  düzenlemeye kapalı karar ve eski karar yalnız AYNI tarihli toplantıya
+  (`rebind_decision_meeting`). Bağlı karar çöp kutusundan, toplantısı silinmişse ya da toplantı
+  yürürlükteki sevk tarihinden önce kaldıysa geri yüklenmez (eski bağsız karar bu denetime
+  girmez). Toplantıya katılanlar her yerde AYNI kümedir (`services.committee.meeting_attendees`:
+  sonradan kuruldan çıkarılan üye dahil — `meeting.attendees.all()` kullanma, çıkarılanı
+  süzer). EK-1 imza heyeti kararın BAĞLI toplantısından, bağ yoksa dosyanın son toplantısından
+  basılır. Göç yok: mevcut `DisciplineDecision.meeting` alanı kullanılır. Testlerde karar
+  `tests/factories.py::decide` ile (gerçek yol), S8 öncesi kayıt `legacy_decision` ile kurulur.
 - **Vekâlet kaydı (md. 188, 191/2 — S7, 14.11.2026):** kurul başkanı toplantıya katılmadıysa
   toplantı `chair_absent` ile kaydedilir ve kurula kurulun ASIL ÖĞRETMEN üyelerinden biri
   başkanlık eder (`services.committee.acting_chair_candidates`; yedek, veli ve öğrenci üye
@@ -370,7 +388,8 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   kararların süreleri beklenir ve hakkında işlem yapılan her öğrencinin kararı girilmiş
   olmalıdır.
 - **Kapalı dosyada kapanış dayanağı kilitli:** onay, tebliğ, md. 197 iade/sevk ve
-  karar düzenleme/silme ve EK-1 önceki cezalar özetinin yeniden derlenmesi reddedilir;
+  karar düzenleme/silme, karar–toplantı bağının değiştirilmesi, toplantı silme ve EK-1 önceki
+  cezalar özetinin yeniden derlenmesi reddedilir;
   itiraz + sonucu, e-Okul, md. 171/2 serbest
   (`services.decisions._assert_case_open`). Kurula sevk tarihi = **son** müdür kararı
   (`committee_referred_on`; geri alınmış sevk/uyarı sayılmaz).
