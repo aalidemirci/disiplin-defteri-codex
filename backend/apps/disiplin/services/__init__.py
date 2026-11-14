@@ -17,9 +17,13 @@ from apps.disiplin.services.cases import (
     update_guidance_assignee,
 )
 from apps.disiplin.services.committee import (
+    acting_chair_options,
     add_committee_member,
+    case_chair_warnings,
+    committee_quorum,
     create_committee,
     delete_meeting,
+    meeting_chair_warnings,
     record_meeting,
     remove_committee_member,
     set_committee_chair,
@@ -89,6 +93,7 @@ from apps.disiplin.services.precautions import (
 __all__ = [
     "add_agenda_items",
     "add_attachment",
+    "acting_chair_options",
     "add_committee_member",
     "add_event",
     "add_general_assembly_member",
@@ -100,6 +105,9 @@ __all__ = [
     "close_case",
     "confirm_e_school_entry",
     "create_case",
+    "committee_quorum",
+    "case_chair_warnings",
+    "meeting_chair_warnings",
     "create_committee",
     "create_council_meeting",
     "create_extension",

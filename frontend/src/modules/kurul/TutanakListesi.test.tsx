@@ -51,6 +51,7 @@ function meeting(overrides: Partial<CouncilMeeting>): CouncilMeeting {
     minutes_type: "GENERAL",
     discipline_case: null,
     discipline_case_no: null,
+    chair_absent: false,
     attendees: [],
     agenda_items: [],
     quorum: null,

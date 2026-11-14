@@ -323,6 +323,7 @@ def test_s13_eslesmeyen_oy_hakki_satirlari_adlariyla_doner() -> None:
         "present": 1,
         "ok": False,
         "unmatched": ["Öğr. Kurul Dışı Kişi"],  # davetli (md. 185/6) listeye girmez
+        "chair_skipped": [],  # S7: yalnız "başkan katılmadı" kayıtlı toplantıda dolabilir
     }
     # Sayım değişmedi: eski çıktı aynı (yalnız `unmatched` eklendi).
     assert services.meeting_quorum(meeting) == {

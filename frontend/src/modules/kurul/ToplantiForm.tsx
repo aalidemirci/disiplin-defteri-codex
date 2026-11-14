@@ -26,6 +26,7 @@ import TextField from "../../ui/TextField";
 import type { HonorCertificate } from "../odul/api";
 import { DECISION_BASIS_TR, MINUTES_TYPE_TR, kurulApi, listSchoolYears } from "./api";
 import type {
+  ActingChairOptions,
   CaseOption,
   CouncilMeeting,
   CouncilType,
@@ -33,6 +34,11 @@ import type {
   HonorMeetingKind,
   MinutesType,
 } from "./api";
+import BaskanVekaleti, {
+  actingChairMemberId,
+  withChairRestored,
+  withoutChair,
+} from "./BaskanVekaleti";
 import BilesimUyarisi from "./BilesimUyarisi";
 import KatilimciEditor, { emptyRow, rowsToAttendees, toRow, validateRows } from "./KatilimciEditor";
 import type { AttendeeRow } from "./KatilimciEditor";
@@ -73,6 +79,49 @@ export default function ToplantiForm({
   // Kullanıcı kararı, 14.11.2026 — S5: kurul md. 185/1'e uymuyorsa toplantı kaydında
   // uyarılır; kayıt engellenmez. Uyarı yüklenemezse form sessizce uyarısız çalışır.
   const [compositionWarnings, setCompositionWarnings] = useState<string[]>([]);
+  // VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): başkan katılmadıysa kurula asıl
+  // öğretmen üyelerden biri başkanlık eder (md. 188). Dosya görüşme tutanağında başkan
+  // seçilen dosyada şikâyetçi / zarar gören ise kurula katılamaz (md. 191/2) — kutu zorunlu.
+  // Bilgi alınamazsa form kutusuz çalışır; kural backend tarafında yine uygulanır.
+  const [chairOptions, setChairOptions] = useState<ActingChairOptions | null>(null);
+  const [chairAbsent, setChairAbsent] = useState(false);
+  // Kutu ZORLA mı (başkan seçilen dosyada engelli) işaretlendi? Zorunluluk kalkınca (başka
+  // dosya / tutanak türü) yalnız zorla gelen durum geri alınır; elle işaretlenen kutu kalır.
+  const chairForced = useRef(false);
+
+  useEffect(() => {
+    if (!isDiscipline) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const options = await kurulApi.actingChairOptions(
+          minutesType === "CASE_REVIEW" && caseId ? Number(caseId) : null,
+        );
+        if (cancelled) return;
+        setChairOptions(options);
+        if (options?.chair_conflicted) {
+          // Kutu zaten elle işaretliyse seçim kullanıcınındır; zorunluluk kalkınca da kalır.
+          setChairAbsent((already) => {
+            if (!already) chairForced.current = true;
+            return true;
+          });
+          setRows((prev) =>
+            actingChairMemberId(prev, options) !== null ? prev : withoutChair(prev, options),
+          );
+        } else if (options && chairForced.current) {
+          // Yanlış dosya seçilmişti: sessiz kalıntı bırakma — başkan satırı geri gelir.
+          chairForced.current = false;
+          setChairAbsent(false);
+          setRows((prev) => withChairRestored(prev, options));
+        }
+      } catch {
+        // Bilgilendirme amaçlı; alınamazsa kayıt denetimi backend tarafında kalır.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDiscipline, minutesType, caseId]);
 
   useEffect(() => {
     if (!isDiscipline) return;
@@ -99,7 +148,15 @@ export default function ToplantiForm({
     try {
       const data = await kurulApi.prefill(type, meetingKind);
       if (data.attendees.length > 0) {
-        setRows(data.attendees.map(toRow));
+        const loaded = data.attendees.map(toRow);
+        // Aktif kurul listesi başkanı içerir: başkan dosyada engelliyse (md. 191/2) çıkarılır,
+        // değilse vekâlet kutusu sıfırlanır (liste başkanlı hâle döndü).
+        if (chairOptions?.chair_conflicted) {
+          setRows(withoutChair(loaded, chairOptions));
+        } else {
+          setRows(loaded);
+          setChairAbsent(false);
+        }
         snackbar.success("Aktif kurul üyeleri yüklendi; düzenleyebilirsiniz.");
       } else {
         snackbar.show("Aktif kurul bulunamadı; katılımcıları elle ekleyin.");
@@ -145,6 +202,13 @@ export default function ToplantiForm({
       setError("Dosya görüşme tutanağı için bir disiplin dosyası seçilmelidir.");
       return;
     }
+    const vekalet = isDiscipline && chairAbsent && chairOptions !== null;
+    if (vekalet && actingChairMemberId(rows, chairOptions) === null) {
+      setError(
+        "Başkan toplantıya katılmadıysa kurula başkanlık eden öğretmen üyeyi seçin (md. 188).",
+      );
+      return;
+    }
     const rowError = validateRows(rows, councilType);
     if (rowError) {
       setError(rowError);
@@ -169,6 +233,7 @@ export default function ToplantiForm({
         minutes_type: isDiscipline ? minutesType : "GENERAL",
         discipline_case_id: minutesType === "CASE_REVIEW" && caseId ? Number(caseId) : null,
         attendees: rowsToAttendees(rows),
+        ...(vekalet ? { chair_absent: true } : {}),
         ...(hasAgenda ? { honor_certificate_ids: agendaCertificates.map((c) => c.id) } : {}),
       });
       snackbar.success(`Tutanak kaydedildi (Toplantı No: ${created.meeting_no_display}).`);
@@ -310,7 +375,25 @@ export default function ToplantiForm({
             Aktif kuruldan yükle
           </Button>
         </div>
-        <KatilimciEditor rows={rows} onChange={setRows} idBase={idBase} councilType={councilType} />
+        {isDiscipline && chairOptions !== null && (
+          <BaskanVekaleti
+            options={chairOptions}
+            chairAbsent={chairAbsent}
+            onChairAbsentChange={(absent) => {
+              chairForced.current = false;
+              setChairAbsent(absent);
+            }}
+            rows={rows}
+            onRowsChange={setRows}
+          />
+        )}
+        <KatilimciEditor
+          rows={rows}
+          onChange={setRows}
+          idBase={idBase}
+          councilType={councilType}
+          chairLocked={isDiscipline && chairAbsent && chairOptions !== null}
+        />
       </div>
 
       <Textarea

@@ -1,5 +1,8 @@
 {% comment %}Form-11 "Savunmayı Alanlar" kurul imza ızgarası (Tur 219) — dolu/boş
-modun ortak parçası (EK-1 deseni: başkan + asıl üyeler; yedekler hariç).{% endcomment %}
+modun ortak parçası (EK-1 deseni: başkan + asıl üyeler; yedekler hariç).
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S7): başkan hanesinin etiketi bağlamdan
+(`chair_role`) gelir — başkanın katılmadığı toplantıda "Kurula Başkanlık Eden Öğretmen Üye
+(md. 188)"; verilmezse eski sabit metin basılır, vekâletsiz çıktı bayt bayt aynıdır.{% endcomment %}
 {% if committee %}
 <table class="sig-grid">
   <tr>
@@ -11,7 +14,7 @@ modun ortak parçası (EK-1 deseni: başkan + asıl üyeler; yedekler hariç).{%
   <tr>
     <td>
       <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
-      <div class="role">Başkan (Müdür Yrd.)</div>
+      <div class="role">{{ chair_role|default:'Başkan (Müdür Yrd.)' }}</div>
     </td>
     {% for m in members %}{% if not m.is_substitute %}
       <td>

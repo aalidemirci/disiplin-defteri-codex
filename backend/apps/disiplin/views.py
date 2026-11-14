@@ -325,6 +325,8 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
                 meeting_date=_parse_date(request.data.get("meeting_date")),
                 attendee_member_ids=[int(i) for i in request.data.get("attendee_member_ids", [])],
                 notes=str(request.data.get("notes", "")),
+                chair_absent=_parse_bool(request.data.get("chair_absent")),
+                acting_chair_member_id=_to_int(request.data.get("acting_chair_member_id")),
             )
         return Response(MeetingSerializer(meeting).data, status=201)
 
@@ -1006,6 +1008,22 @@ class DisciplineCommitteeView(APIView):
         return Response(CommitteeSerializer(committee).data, status=201)
 
 
+class DisciplineCommitteeActingChairOptionsView(APIView):
+    """VEKÂLET KAYDI (S7) — toplantı formları için: başkan, başkan dosyada engelli mi, adaylar.
+
+    `?case=<id>` verilirse o dosyanın şikâyetçi / zarar görenleri hesaba katılır (md. 191/2);
+    adaylar kurulun asıl öğretmen üyeleridir (md. 188). Kurul tanımsızsa 204.
+    """
+
+    def get(self, request: Request) -> Response:
+        committee = selectors.get_active_committee()
+        if committee is None:
+            return Response(status=204)
+        raw_case = request.query_params.get("case")
+        case = _get_case_or_404(raw_case) if raw_case else None
+        return Response(services.acting_chair_options(committee, case))
+
+
 class DisciplineCommitteeChairView(APIView):
     def post(self, request: Request) -> Response:
         committee = selectors.get_active_committee()
@@ -1324,6 +1342,7 @@ class CouncilMeetingViewSet(viewsets.GenericViewSet[Any]):
                 discipline_case_id=int(raw_case) if raw_case else None,
                 honor_meeting_kind=str(request.data.get("honor_meeting_kind", "BOARD")),
                 honor_certificate_ids=_int_list(request.data.get("honor_certificate_ids")),
+                chair_absent=_parse_bool(request.data.get("chair_absent")),
             )
         refreshed = selectors.get_council_meeting(meeting.pk)
         return Response(CouncilMeetingSerializer(refreshed or meeting).data, status=201)
@@ -1354,6 +1373,11 @@ class CouncilMeetingViewSet(viewsets.GenericViewSet[Any]):
                 decision_basis=request.data.get("decision_basis"),
                 notes=request.data.get("notes"),
                 attendees=request.data.get("attendees"),
+                chair_absent=(
+                    _parse_bool(request.data.get("chair_absent"))
+                    if "chair_absent" in request.data
+                    else None
+                ),
             )
         return self._fresh(meeting)
 

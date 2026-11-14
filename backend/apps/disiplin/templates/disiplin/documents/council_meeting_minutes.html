@@ -18,7 +18,12 @@ kendi satırındadır; boş genel karar "oy birliği" cümlesiyle yanıltmasın)
 satır sayfa dışına taşıyordu); 5 ve altı imzacıda çıktı eski tek satırlı ızgaradır.
 BİLİNÇLİ SAPMA (kullanıcı kararı, 14.11.2026 — S1): dosya görüşme tutanağında öğrenci-bazlı
 kararlar KARAR NUMARASI sırasıyla dizilir ve uzaklaştırmada gün sayısı basılır ("… — 3 gün");
-ikisi de bağlamda (`documents._council_minutes_context`) üretilir, şablon gövdesi değişmedi.{% endcomment %}
+ikisi de bağlamda (`documents._council_minutes_context`) üretilir, şablon gövdesi değişmedi.
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S7): başkanın katılmadığı Ödül ve Disiplin
+Kurulu toplantısında (`acting_chair` bağlamı) katılanlar tablosunda "(Başkan)" işareti
+basılmaz — başkan işaretli satır kurula başkanlık eden öğretmen üyedir, görevi md. 188
+ifadesiyle bağlamdan gelir — ve tablonun altına `chair_absence_note` cümlesi eklenir.
+İkisi de verilmezse (vekâletsiz toplantı, Onur Kurulu) çıktı bayt bayt aynıdır.{% endcomment %}
 {% block content %}
 <div class="doc-title">{{ title }}</div>
 <div class="doc-subtitle">{{ articles.subtitle }}</div>
@@ -102,13 +107,14 @@ ikisi de bağlamda (`documents._council_minutes_context`) üretilir, şablon gö
     {% for a in voting_members %}
     <tr>
       <td style="text-align: center;">{{ forloop.counter }}</td>
-      <td>{{ a.person_name }}{% if a.is_chair %} <strong>(Başkan)</strong>{% endif %}</td>
+      <td>{{ a.person_name }}{% if a.is_chair and not acting_chair %} <strong>(Başkan)</strong>{% endif %}</td>
       <td>{{ a.title|default:'Üye' }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="3" class="muted" style="text-align: center;">Oy hakkı olan üye yok.</td></tr>
     {% endfor %}
-  </table>
+  </table>{% if chair_absence_note %}
+  <p class="para">{{ chair_absence_note }}</p>{% endif %}
 </div>
 
 {% if invitees %}
