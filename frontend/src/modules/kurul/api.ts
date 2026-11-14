@@ -13,9 +13,10 @@
 
 import { api } from "../../lib/api";
 import { unwrap, type Paginated } from "../../lib/pagination";
+import type { ActingChairOptions } from "../disiplin/api";
 import type { HonorCertificate } from "../odul/api";
 
-export type { Paginated };
+export type { ActingChairOptions, Paginated };
 
 // --- TextChoices (backend models/council_meeting.py ile birebir) ---
 
@@ -80,6 +81,9 @@ export interface CouncilMeeting {
   minutes_type: MinutesType;
   discipline_case: number | null;
   discipline_case_no: string | null;
+  // VEKÂLET KAYDI (S7, 14.11.2026 — yalnız Ödül ve Disiplin Kurulu): başkan katılmadı;
+  // başkan işaretli katılımcı kurula başkanlık eden öğretmen üyedir (md. 188).
+  chair_absent: boolean;
   attendees: CouncilAttendee[];
   // Kurul işleyişi (04.10.2026): kurul kararı gündem maddesinde verilir.
   agenda_items: AgendaItem[];
@@ -88,6 +92,9 @@ export interface CouncilMeeting {
   // Kurulun md. 185/1 bileşim uyarıları (S5, 14.11.2026) — uyarır, engellemez; Onur
   // Kurulu toplantısında boş.
   composition_warnings?: string[];
+  // VEKÂLET KAYDI uyarıları (S7) — uyarır, engellemez: başkan katılmadı ama yedek üye
+  // çağrılmamış (md. 188) ya da dosya görüşme tutanağı dosya toplantısı kaydıyla çelişiyor.
+  chair_warnings?: string[];
 }
 
 export type AgendaOutcome = "PENDING" | "FAVORABLE" | "UNFAVORABLE";
@@ -122,6 +129,10 @@ export interface Quorum {
   // "Oy hakkı olan üye" yazılmış ama kurul listesiyle eşleşmediği için yeter sayıya
   // girmeyen satırların adları (S13, 14.11.2026).
   unmatched?: string[];
+  // "Başkan katılmadı" kayıtlı toplantıda kurulun BUGÜNKÜ başkanıyla eşleştiği (ve o gün üye
+  // olduğu da gösterilemediği) için sayılmayan satırların adları (S7, 14.11.2026). Başkan
+  // değişikliğinin geçmişi tutulmaz; satır sessizce düşmez, nedeniyle gösterilir.
+  chair_skipped?: string[];
 }
 
 export interface AgendaDecisionBody {
@@ -194,6 +205,8 @@ export interface MeetingCreateBody {
   attendees: AttendeeInput[];
   // Toplantı açılırken gündeme alınacak onur belgesi teklifleri.
   honor_certificate_ids?: number[];
+  // VEKÂLET KAYDI (S7): başkan katılmadı (yalnız Ödül ve Disiplin Kurulu).
+  chair_absent?: boolean;
 }
 
 // --- Ders yılları (okul modülü /school-years/ ucu) ---
@@ -250,6 +263,8 @@ export const kurulApi = {
       decision_basis: DecisionBasis;
       notes: string;
       attendees: AttendeeInput[];
+      // Verilmezse kayıtlı vekâlet durumu korunur (S7).
+      chair_absent: boolean;
     }>,
   ) => api.patch<CouncilMeeting>(`${BASE}/${id}/`, body),
 
@@ -290,6 +305,17 @@ export const kurulApi = {
       "/discipline/committee/",
     );
     return committee?.composition_warnings ?? [];
+  },
+
+  // VEKÂLET KAYDI (S7): kurul başkanı, başkan seçilen dosyada şikâyetçi / zarar gören mi
+  // (md. 191/2) ve kurula başkanlık edebilecek asıl öğretmen üyeler (md. 188). Kurul
+  // tanımsızsa (204, boş gövde) null.
+  actingChairOptions: async (caseId?: number | null): Promise<ActingChairOptions | null> => {
+    const qs = caseId ? `?case=${caseId}` : "";
+    const options = await api.get<ActingChairOptions | undefined>(
+      `/discipline/committee/acting-chair-options/${qs}`,
+    );
+    return options ?? null;
   },
 
   // Dosya görüşme tutanağına bağlanabilecek dosyalar (kurula sevkli + kararlı).

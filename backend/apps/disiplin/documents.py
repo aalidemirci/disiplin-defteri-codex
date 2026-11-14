@@ -607,7 +607,10 @@ def _signing_members(case: DisciplineCase, committee: Any) -> list[Any]:
     if meeting is not None:
         attendees = list(meeting.attendees.all())
         if attendees:
-            return [_Signer(m) for m in attendees]
+            # S7: başkanlık eden üye başkan hanesinde basılır (`_signing_panel`); üye
+            # hanelerinde ikinci kez yer almaz. Vekâletsiz toplantıda liste aynen kalır.
+            acting_id = meeting.acting_chair_id if meeting.chair_absent else None
+            return [_Signer(m) for m in attendees if m.pk != acting_id]
     conflicted_users = set(
         case.participants.filter(role=ParticipantRole.VICTIM, user__isnull=False).values_list(
             "user_id", flat=True
@@ -630,6 +633,126 @@ def _signing_members(case: DisciplineCase, committee: Any) -> list[Any]:
             or (m.member_student_id is not None and m.member_student_id in conflicted_students)
         )
     ]
+
+
+#: md. 188/1: "Başkan bulunmadığında müdürün görevlendireceği öğretmen üyelerden biri kurula
+#: başkanlık eder." Yönetmelik bu kişiye ayrı bir unvan ("vekil") vermez; belgede maddenin
+#: kendi ifadesi kullanılır. TEK ifade (kullanıcı kararı, 14.11.2026 — S7/K1): EK-1, Form-11,
+#: md. 195 tutanağı ve karar defterinde — ve K3 kapsamındaki diğer kurul evrakında — aynı metin.
+ACTING_CHAIR_ROLE = "Kurula Başkanlık Eden Öğretmen Üye (md. 188)"
+
+
+class _ActingChair:
+    """Katılmayan başkanın yerine başkan hanesine basılan öğretmen üye (md. 188).
+
+    Şablonlar başkan hanesinde `committee.chair.get_full_name|default:…username` okur.
+    EK-1 ve Form-11 / md. 195 ızgarasında hane ETİKETİ bağlamdan (`chair_role`) gelir
+    (K1 istisnası) — ad satırı yalnız adı taşır. Etiketi şablonda SABİT olan diğer kurul
+    evrakında (`role_inline=True`, K3) md. 188 ifadesi ad satırına eklenir: şablona
+    dokunulmadan çözülebilen kısım addır.
+    """
+
+    def __init__(self, member: Any, *, role_inline: bool = False) -> None:
+        name = str(member.member_name)
+        self.full_name = f"{name} — {ACTING_CHAIR_ROLE}" if role_inline else name
+        self.username = self.full_name
+
+    def get_full_name(self) -> str:
+        return self.full_name
+
+
+#: Başkan hanesinde ad yerine basılan boş satır — şablonların başkan tanımsızken kullandığı
+#: noktalı çizginin aynısı (ör. `meeting_call.html`).
+_BLANK_CHAIR_NAME = "…………………………"
+
+
+class _BlankChair:
+    """Kurula katılamayan başkanın yerine başkan hanesine BOŞ ad satırı basan vekil.
+
+    md. 191/2: şikâyetçi / zarar gören başkan kurula katılamaz; dosyada vekâlet kaydı da
+    yoksa kimin başkanlık ettiği bilinmez — ad uydurulmaz, hane elle doldurulur.
+    """
+
+    full_name = _BLANK_CHAIR_NAME
+    username = _BLANK_CHAIR_NAME
+
+    def get_full_name(self) -> str:
+        return _BLANK_CHAIR_NAME
+
+
+class _ActingCommittee:
+    """Kurulu şablona yalnız `chair` alanı FARKLI sunan salt-okunur vekil (S7).
+
+    Verilmeyen her alan kurul kaydına devredilir; kayıt DEĞİŞMEZ.
+    """
+
+    def __init__(self, committee: Any, chair: Any) -> None:
+        self._committee = committee
+        self.chair = chair
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._committee, name)
+
+
+def _signing_panel(case: DisciplineCase) -> dict[str, Any]:
+    """İmza ızgarası bağlamı: dosyanın kurulu + işlemi yapan heyet (EK-1, Form-11, md. 195).
+
+    VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): dosyanın SON toplantı kaydında başkan
+    katılmadıysa (md. 191/2 şikâyetçi / zarar gören başkan ya da izin/rapor) katılmayan
+    başkan BASILMAZ; başkan hanesine kurula başkanlık eden öğretmen üye yazılır (md. 188).
+    Vekâlet kaydı olmayan toplantıda ve toplantı kaydı olmayan dosyada bağlam eskisiyle
+    aynıdır (gerçek kurul nesnesi + `_signing_members`) — TEK istisna: başkan o dosyada
+    şikâyetçi / zarar gören ise (md. 191/2) vekâlet kaydı olmasa da BASILMAZ; başkan hanesinin
+    ad satırı boş (noktalı) kalır. Toplantı kaydı zorunlu olmadığından (S8) ve S7 öncesi
+    kaydedilmiş toplantılarda vekâlet alanı bulunmadığından bu yol açıktır; üyeler için aynı
+    süzme `_signing_members` içindedir. Evrak üretimi engellenmez: kapalı dosyada toplantı
+    kaydedilemediği için ret, eski dosyada çıkışsız kalırdı (§7.6).
+    """
+    committee = selectors.committee_for_case(case)
+    members = _signing_members(case, committee)
+    if committee is not None:
+        meeting = selectors.meetings_for_case(case).first()
+        if meeting is not None and meeting.chair_absent and meeting.acting_chair_id is not None:
+            return {
+                "committee": _ActingCommittee(committee, _ActingChair(meeting.acting_chair)),
+                "members": members,
+                # K1: hane etiketi — verilmezse şablon eski sabit metni basar.
+                "chair_role": ACTING_CHAIR_ROLE,
+            }
+        if services.committee.chair_conflicted(case, committee):
+            return {"committee": _ActingCommittee(committee, _BlankChair()), "members": members}
+    return {"committee": committee, "members": members}
+
+
+def _acting_chair_member(case: DisciplineCase) -> Any | None:
+    """Dosyanın SON toplantı kaydında kurula başkanlık eden üye (vekâlet kaydı yoksa None)."""
+    meeting = selectors.meetings_for_case(case).first()
+    if meeting is not None and meeting.chair_absent and meeting.acting_chair_id is not None:
+        return meeting.acting_chair
+    return None
+
+
+def _case_committee(case: DisciplineCase, *, acting: bool = True) -> Any:
+    """Dosyanın kurulu — başkan o dosyada şikâyetçi / zarar gören ise başkansız sunulur.
+
+    Kullanıcı kararı, 14.11.2026 — S7/K3: şikâyetçi / zarar gören başkan (md. 191/2) dosyanın
+    BÜTÜN kurul evrakından çıkar (Form-3, 4-6, 7-8, 9, 10, 12, 13, ceza tebliğleri). Dosyada
+    vekâletli toplantı kaydı varsa başkan hanesine kurula başkanlık eden üye, md. 188
+    ifadesi AD SATIRINA eklenerek yazılır (bu şablonlarda hane etiketi sabittir ve AYNEN
+    kapsamında — dokunulmadı); kayıt yoksa ad satırı boş (noktalı) kalır, ad uydurulmaz.
+    `acting=False`: hane her durumda boş kalır — ceza tebliğlerinde etiket "Tebliğ Eden —
+    Müdür Yardımcısı" sabittir; kurula başkanlık eden öğretmen üye tebliğ eden müdür
+    yardımcısı değildir, tebliği kimin yapacağı kayıtlı da değildir.
+
+    Başkan şikâyetçi / zarar gören DEĞİLSE (başkan izinli olduğu için vekâletli toplantı kaydı
+    olsa bile) kurulun kendi kaydı döner: bu belgelerin çıktısı AYNEN kalır.
+    """
+    committee = selectors.committee_for_case(case)
+    if committee is None or not services.committee.chair_conflicted(case, committee):
+        return committee
+    member = _acting_chair_member(case) if acting else None
+    chair: Any = _ActingChair(member, role_inline=True) if member is not None else _BlankChair()
+    return _ActingCommittee(committee, chair)
 
 
 class _DecisionView:
@@ -819,13 +942,11 @@ def _board_decision_context(decision: Any) -> dict[str, Any]:
 def _ek1_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
     """EK-1 kurul kararı bağlamı — karar + anlatı alanları + kurul üyeleri (TAM-OTO)."""
     decision = case.decisions.filter(student_id=student.pk).first()
-    committee = selectors.committee_for_case(case)
     return {
         **_common_context(case),
         "student": _student_context(student),
         **_board_decision_context(decision),
-        "committee": committee,
-        "members": _signing_members(case, committee),
+        **_signing_panel(case),
     }
 
 
@@ -902,6 +1023,14 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
         chair = committee.chair if committee else None
         ctx["compiler_name"] = chair.full_name if chair else ""
         ctx["compiler_role"] = "Düzenleyen / Disiplin Kurulu Başkanı"
+        if committee is not None and services.committee.chair_conflicted(case, committee):
+            # S7/K3 (14.11.2026): şikâyetçi / zarar gören başkan dosyayı düzenleyen olarak da
+            # basılmaz (md. 191/2). Vekâletli toplantı kaydı varsa kurula başkanlık eden üye
+            # (md. 188 ifadesiyle); yoksa ad boş — şablon noktalı çizgi basar.
+            acting = _acting_chair_member(case)
+            ctx["compiler_name"] = acting.member_name if acting is not None else ""
+            if acting is not None:
+                ctx["compiler_role"] = f"Düzenleyen / {ACTING_CHAIR_ROLE}"
     else:
         ctx["compiler_name"] = ctx.get("principal_name", "")
         ctx["compiler_role"] = "Düzenleyen / Okul Müdürü"
@@ -909,9 +1038,12 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
 
 
 def _committee_context(case: DisciplineCase) -> dict[str, Any]:
-    """Tebliğ eden (müdür yrd. / kurul başkanı) için dosyanın kurulu (md. 185/4)."""
-    committee = selectors.committee_for_case(case)
-    return {"committee": committee}
+    """Tebliğ eden (müdür yrd. / kurul başkanı) için dosyanın kurulu (md. 185/4).
+
+    S7/K3: başkan dosyada şikâyetçi / zarar gören ise tebliğ eden hanesinin ad satırı boş
+    (noktalı) basılır — bkz. `_case_committee`.
+    """
+    return {"committee": _case_committee(case, acting=False)}
 
 
 def _penalty_notice_context(case: DisciplineCase, student: Any) -> dict[str, Any]:
@@ -1427,17 +1559,20 @@ def _non_compliance_context(
 
 
 def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
-    """Dosyanın kurulu + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni)."""
+    """Dosyanın kurulu + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni).
+
+    S7/K3: başkan dosyada şikâyetçi / zarar gören ise başkan hanesi `_case_committee`
+    kuralıyla basılır; üye listesi kurulun kendi listesidir.
+    """
     committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
-    return {"committee": committee, "members": members}
+    return {"committee": _case_committee(case), "members": members}
 
 
 def _committee_signers_context(case: DisciplineCase) -> dict[str, Any]:
     """Dosyanın kurulu + işlemi yapan HEYET — Form-11 "Savunmayı Alanlar" ve md. 195
-    tutanağı imza ızgarası (EK-1 ile aynı heyet; bkz. `_signing_members`)."""
-    committee = selectors.committee_for_case(case)
-    return {"committee": committee, "members": _signing_members(case, committee)}
+    tutanağı imza ızgarası (EK-1 ile aynı heyet; bkz. `_signing_members`, `_signing_panel`)."""
+    return _signing_panel(case)
 
 
 def _participant_context(participant: Any) -> dict[str, Any]:
@@ -1598,9 +1733,16 @@ def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> 
     ]
     student: dict[str, Any] | None = students[0] if students else None
     days = extension.requested_days if extension is not None else None
+    panel = _committee_with_members_context(case)
+    if isinstance(panel["committee"], _ActingCommittee):
+        # S7/K3: Form-12 imza ızgarasında başkan hanesine yazılan başkanlık eden üye, üye
+        # hanelerinde ikinci kez imzalamaz (EK-1 ile aynı kural — `_signing_members`).
+        acting = _acting_chair_member(case)
+        if acting is not None:
+            panel["members"] = [m for m in panel["members"] if m.pk != acting.pk]
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **panel,
         "extension": extension,
         "student": student,
         "students": students,
@@ -2082,6 +2224,21 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
     voting = [a for a in attendees if a.attendee_role == "VOTING_MEMBER"]
     invitees = [a for a in attendees if a.attendee_role == "NON_VOTING_INVITEE"]
     chair = next((a for a in voting if a.is_chair), None)
+    acting_note = ""
+    if (
+        chair is not None
+        and meeting.council_type == "DISCIPLINE"
+        and getattr(meeting, "chair_absent", False)
+    ):
+        # VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): başkan katılmadı; katılmayan
+        # başkan zaten katılımcı değildir (basılmaz). Başkan işaretli satır kurula başkanlık
+        # eden öğretmen üyedir — görevi md. 188 ifadesiyle basılır (katılanlar tablosu + imza
+        # ızgarası); kayıt DEĞİŞMEZ. K1: `acting_chair` şablondaki sabit "(Başkan)" işaretini
+        # kapatır, `chair_absence_note` tabloya tek cümle ekler. Vekâletsiz toplantıda bu
+        # anahtarlar bağlamda YOKTUR ve liste aynen kalır.
+        acting_note = _chair_absence_note(meeting, chair)
+        chair = _ActingChairAttendee(chair)
+        voting = [chair if a.is_chair else a for a in voting]
     dissenters = [a for a in attendees if (a.dissent_note or "").strip()]
     case = meeting.discipline_case if meeting.minutes_type == "CASE_REVIEW" else None
     case_decisions: list[dict[str, Any]] = []
@@ -2132,7 +2289,50 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
         "case_decisions": case_decisions,
         "agenda_items": _council_agenda_rows(meeting),
     }
+    if acting_note:
+        context["acting_chair"] = True
+        context["chair_absence_note"] = acting_note
     return context
+
+
+def _chair_absence_note(meeting: Any, acting: Any) -> str:
+    """Karar defterine düşülen vekâlet cümlesi (md. 188) — K1, kullanıcı kararı 14.11.2026.
+
+    Başkanın adı kurulun BUGÜNKÜ başkanından okunur (başkan değişikliğinin geçmişi tutulmaz —
+    bilinen sınır). Bugünkü başkan, o toplantıda kurula başkanlık eden kişinin kendisiyse
+    (sonradan başkan yapılmış öğretmen üye) ad yazılmaz: cümle kendisiyle çelişmesin.
+    """
+    from apps.disiplin.services.council import _name_key, meeting_committee
+
+    committee = meeting_committee(meeting)
+    chair_name = ""
+    if committee is not None:
+        same_person = (
+            acting.member_user_id == committee.chair_id
+            if acting.member_user_id is not None
+            else _name_key(acting.person_name) == _name_key(committee.chair.full_name)
+        )
+        if not same_person:
+            chair_name = f" {committee.chair.full_name}"
+    return (
+        f"Kurul başkanı{chair_name} toplantıya katılmamış; kurula öğretmen üye "
+        f"{acting.person_name} başkanlık etmiştir (md. 188)."
+    )
+
+
+class _ActingChairAttendee:
+    """Karar defterinde kurula başkanlık eden öğretmen üyeyi md. 188 unvanıyla sunan vekil.
+
+    Yalnız `title` farklıdır: öteki belgelerle AYNI ifade (`ACTING_CHAIR_ROLE`); diğer
+    alanlar katılımcı kaydına devredilir.
+    """
+
+    def __init__(self, attendee: Any) -> None:
+        self._attendee = attendee
+        self.title = ACTING_CHAIR_ROLE
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._attendee, name)
 
 
 # Karar defteri imza ızgarasında satır başına hane. 5: ÖDK ve Onur Kurulu (başkan + 4

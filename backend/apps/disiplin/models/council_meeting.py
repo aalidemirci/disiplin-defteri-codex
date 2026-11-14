@@ -140,6 +140,14 @@ class CouncilMeeting(BaseModel):
         related_name="council_meetings",
         verbose_name="onur kurulu (kaynak)",
     )
+    # VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): yalnız Ödül ve Disiplin Kurulunda.
+    # Başkan (müdür yardımcısı) katılmadı; `is_chair` işaretli katılımcı, kurula başkanlık
+    # eden öğretmen üyedir (md. 188). Varsayılan False — eski kayıtlar "başkan katıldı".
+    chair_absent = models.BooleanField(
+        "başkan katılmadı",
+        default=False,
+        help_text="Kurul başkanı toplantıya katılmadı; öğretmen üye başkanlık etti (md. 188).",
+    )
 
     class Meta:
         verbose_name = "kurul toplantı tutanağı"
@@ -172,6 +180,13 @@ class CouncilMeeting(BaseModel):
 
     def clean(self) -> None:
         """Kaynak kurul FK'sı ↔ kurul türü ve tutanak türü ↔ dosya tutarlılığını doğrular."""
+        if self.chair_absent and self.council_type != CouncilType.DISCIPLINE:
+            raise ValidationError(
+                {
+                    "chair_absent": "Başkan katılmadı kaydı yalnız Ödül ve Disiplin Kurulu "
+                    "toplantısında tutulur (md. 188)."
+                }
+            )
         if self.council_type == CouncilType.DISCIPLINE and self.honor_board_id is not None:
             raise ValidationError(
                 {"honor_board": "Disiplin kurulu toplantısı onur kuruluna bağlanamaz."}

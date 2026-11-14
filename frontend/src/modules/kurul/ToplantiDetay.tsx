@@ -32,11 +32,13 @@ import {
   OUTCOME_ACTION_TR,
   kurulApi,
 } from "./api";
-import type { AgendaItem, CouncilMeeting, DecisionBasis } from "./api";
+import type { ActingChairOptions, AgendaItem, CouncilMeeting, DecisionBasis } from "./api";
+import BaskanVekaleti from "./BaskanVekaleti";
 import BilesimUyarisi from "./BilesimUyarisi";
 import KatilimciEditor, { attendeeToRow, rowsToAttendees, validateRows } from "./KatilimciEditor";
 import type { AttendeeRow } from "./KatilimciEditor";
 import Textarea from "./Textarea";
+import VekaletUyarisi from "./VekaletUyarisi";
 
 interface Props {
   meetingId: number;
@@ -58,6 +60,9 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
   const [candidates, setCandidates] = useState<HonorCertificate[] | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  // VEKÂLET KAYDI (S7): katılımcı düzeltmesinde "Başkan toplantıya katılmadı" kutusu.
+  const [chairOptions, setChairOptions] = useState<ActingChairOptions | null>(null);
+  const [editingChairAbsent, setEditingChairAbsent] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -86,6 +91,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
   const favorableCount = items.filter((item) => item.outcome === "FAVORABLE").length;
   const quorum = meeting.quorum;
   const unmatched = quorum?.unmatched ?? [];
+  const chairSkipped = quorum?.chair_skipped ?? [];
   // Karar tarihi = toplantı tarihi: yapılmamış toplantının kararı yazılamaz (backend de reddeder).
   const notHeldYet = meeting.meeting_date > todayIso();
   // Karara bağlı maddesi olan toplantının tarihi değişmez (önce karar geri alınır).
@@ -125,15 +131,47 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
     if (ok) setCandidates(null);
   };
 
+  const startAttendeeEdit = async () => {
+    setEditingAttendees(meeting.attendees.map(attendeeToRow));
+    setEditingChairAbsent(meeting.chair_absent);
+    setChairOptions(null);
+    if (!isDiscipline) return;
+    try {
+      // Kayıtlı tutanak düzeltiliyor: başkan görüşülen dosyada şikâyetçi / zarar gören olsa da
+      // (md. 191/2) vekâlet ZORLANMAZ ve başkan satırı silinmez (14.11.2026) — S7 öncesi
+      // kayıt kendiliğinden değiştirilmez, kullanıcı başka bir satırı düzeltebilir; uygun
+      // öğretmen üye yoksa da kayıt kilitlenmez (§7.6). Durum kalıcı uyarıyla
+      // (`chair_warnings`) ve kutunun altındaki notla gösterilir. Zorlama yalnız yeni
+      // tutanakta (ToplantiForm) ve backend'in yeni kayıt denetimindedir.
+      setChairOptions(await kurulApi.actingChairOptions(meeting.discipline_case));
+    } catch {
+      // Bilgilendirme amaçlı; alınamazsa kayıt denetimi backend tarafında kalır.
+    }
+  };
+
   const saveAttendees = async () => {
     if (editingAttendees === null) return;
+    const vekalet = isDiscipline && chairOptions !== null;
+    // Başkanlık eden satırı hiç yoksa burada durdurulur. Satır var ama aday listesinde
+    // değilse (kayıtlı başkanlık eden sonradan kuruldan çıkarılmış) karar backend'indir:
+    // satır aynı kaldıkça düzeltme engellenmez (§7.6), değiştiyse md. 188 denetlenir.
+    if (vekalet && editingChairAbsent && !editingAttendees.some((r) => r.is_chair)) {
+      setError(
+        "Başkan toplantıya katılmadıysa kurula başkanlık eden öğretmen üyeyi seçin (md. 188).",
+      );
+      return;
+    }
     const rowError = validateRows(editingAttendees, councilType);
     if (rowError) {
       setError(rowError);
       return;
     }
     const ok = await run(
-      () => kurulApi.updateMeeting(meeting.id, { attendees: rowsToAttendees(editingAttendees) }),
+      () =>
+        kurulApi.updateMeeting(meeting.id, {
+          attendees: rowsToAttendees(editingAttendees),
+          ...(vekalet ? { chair_absent: editingChairAbsent } : {}),
+        }),
       "Katılımcılar güncellendi.",
     );
     if (ok) setEditingAttendees(null);
@@ -249,13 +287,22 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
             </p>
             {/* Kullanıcı kararı, 14.11.2026 — S13: sayılmayan satırlar adı ve nedeniyle
                 listelenir (md. 191/1: üye dışı çağrılanlar oy kullanamaz). Yoksa kart aynıdır. */}
-            {unmatched.length > 0 && (
+            {(unmatched.length > 0 || chairSkipped.length > 0) && (
               <div>
                 <p>Yeter sayıya girmeyen oy hakkı satırları:</p>
                 <ul className="list-inside list-disc">
                   {unmatched.map((name, index) => (
                     <li key={`${name}-${index}`}>
                       {name} kurul üyesi olarak kayıtlı değil; yeter sayıya katılmadı.
+                    </li>
+                  ))}
+                  {/* S7 (14.11.2026): "başkan katılmadı" kayıtlı toplantıda bugünkü başkanla
+                      eşleşen satır sessizce düşmez — nedeni yazılır. */}
+                  {chairSkipped.map((name, index) => (
+                    <li key={`baskan-${name}-${index}`}>
+                      {name} bugün kurul başkanı olarak kayıtlı; bu toplantı “başkan katılmadı”
+                      kayıtlı olduğundan yeter sayıya katılmadı (başkan değişikliğinin geçmişi
+                      tutulmaz). Bu satır yüzünden katılımcı düzeltmesi engellenmez.
                     </li>
                   ))}
                 </ul>
@@ -267,6 +314,8 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
 
       {/* Kullanıcı kararı, 14.11.2026 — S5: md. 185/1 bileşimi uyarılır, engellenmez. */}
       <BilesimUyarisi warnings={meeting.composition_warnings} />
+      {/* S7: yedek üye çağrılmamış / dosya toplantısı kaydıyla çelişki — uyarır, engellemez. */}
+      <VekaletUyarisi warnings={meeting.chair_warnings} />
 
       {notHeldYet && (
         <Card elevation={0} className="flex items-start gap-3 bg-surface-container-low p-4">
@@ -394,22 +443,29 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
             Katılanlar ({meeting.attendees.length})
           </h3>
           {editingAttendees === null && (
-            <Button
-              variant="text"
-              icon="edit"
-              onClick={() => setEditingAttendees(meeting.attendees.map(attendeeToRow))}
-            >
+            <Button variant="text" icon="edit" onClick={() => void startAttendeeEdit()}>
               Katılımcıları düzenle
             </Button>
           )}
         </div>
         {editingAttendees !== null ? (
           <div className="space-y-3">
+            {isDiscipline && chairOptions !== null && (
+              <BaskanVekaleti
+                options={chairOptions}
+                chairAbsent={editingChairAbsent}
+                onChairAbsentChange={setEditingChairAbsent}
+                rows={editingAttendees}
+                onRowsChange={setEditingAttendees}
+                existingRecord
+              />
+            )}
             <KatilimciEditor
               rows={editingAttendees}
               onChange={setEditingAttendees}
               idBase={idBase}
               councilType={councilType}
+              chairLocked={isDiscipline && chairOptions !== null && editingChairAbsent}
             />
             <div className="flex justify-end gap-2">
               <Button variant="text" onClick={() => setEditingAttendees(null)} disabled={busy}>
@@ -422,10 +478,23 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
           </div>
         ) : (
           <ul className="space-y-1">
+            {/* VEKÂLET KAYDI (S7, 14.11.2026): yalnız başkanın katılmadığı toplantıda. */}
+            {meeting.chair_absent && (
+              <li className="flex items-start gap-1 text-body-medium text-on-surface-variant">
+                <Icon name="info" size="sm" />
+                <span>
+                  Başkan katılmadı;{" "}
+                  {meeting.attendees.find((a) => a.is_chair)?.person_name ?? "öğretmen üye"}{" "}
+                  başkanlık etti (md. 188).
+                </span>
+              </li>
+            )}
             {meeting.attendees.map((a) => (
               <li key={a.id ?? a.person_name} className="text-body-medium text-on-surface">
                 {a.person_name}
-                {a.is_chair && <strong> (Başkan)</strong>}
+                {a.is_chair && (
+                  <strong>{meeting.chair_absent ? " (Başkanlık eden)" : " (Başkan)"}</strong>
+                )}
                 <span className="text-on-surface-variant">
                   {" "}
                   — {a.title || ATTENDEE_ROLE_TR[a.attendee_role]}

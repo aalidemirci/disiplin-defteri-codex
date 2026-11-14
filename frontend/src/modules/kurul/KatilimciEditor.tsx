@@ -98,9 +98,21 @@ interface Props {
   idBase: string;
   /** Kurul türü: başkan atfını ve elle eklenen satırın varsayılan rolünü belirler. */
   councilType?: CouncilType;
+  /**
+   * VEKÂLET KAYDI (S7): başkan katılmadıysa başkan satırını "Başkanlık eden" seçimi
+   * belirler (BaskanVekaleti — yalnız asıl öğretmen üyeler, md. 188); satırdaki başkan
+   * düğmeleri kilitlenir.
+   */
+  chairLocked?: boolean;
 }
 
-export default function KatilimciEditor({ rows, onChange, idBase, councilType }: Props) {
+export default function KatilimciEditor({
+  rows,
+  onChange,
+  idBase,
+  councilType,
+  chairLocked = false,
+}: Props) {
   const isDiscipline = councilType === "DISCIPLINE";
   const updateRow = (key: string, patch: Partial<AttendeeRow>) => {
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -148,11 +160,11 @@ export default function KatilimciEditor({ rows, onChange, idBase, councilType }:
                 type="radio"
                 name={`${idBase}-chair`}
                 checked={!!r.is_chair}
-                disabled={r.attendee_role !== "VOTING_MEMBER"}
+                disabled={chairLocked || r.attendee_role !== "VOTING_MEMBER"}
                 onChange={() => setChair(r.key)}
                 className="size-5 accent-primary"
               />
-              Başkan ({chairArticle(councilType)})
+              {chairLocked ? "Başkanlık eden (md. 188)" : `Başkan (${chairArticle(councilType)})`}
             </label>
           </div>
           {r.attendee_role === "VOTING_MEMBER" && (

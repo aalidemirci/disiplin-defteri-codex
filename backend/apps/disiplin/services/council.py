@@ -209,6 +209,110 @@ def _validate_attendees(
         )
 
 
+def _is_person(attendee: dict[str, Any], *, user_id: int | None, name: object) -> bool:
+    """Katılımcı satırı verilen kişi mi? Kayıt bağı (personel) varsa ona, yoksa ada bakılır."""
+    row_user = attendee.get("member_user_id")
+    if row_user is not None and user_id is not None:
+        return bool(row_user == user_id)
+    return _name_key(attendee.get("person_name")) == _name_key(name)
+
+
+def _validate_chair_record(
+    attendees: list[dict[str, Any]],
+    *,
+    council_type: str,
+    committee: DisciplineCommittee | None,
+    chair_absent: bool,
+    case: DisciplineCase | None = None,
+    legacy_chair: str | None = None,
+    recorded_names: frozenset[str] = frozenset(),
+) -> None:
+    """VEKÂLET KAYDI denetimi (kullanıcı kararı, 14.11.2026 — S7) — md. 188, 191/2.
+
+    Yalnız Ödül ve Disiplin Kurulu toplantısında (Onur Kurulu başkanı md. 182 — kapsam dışı):
+
+    - Başkan katıldıysa (`chair_absent=False`) başkan işaretli satır kurulun başkanıdır
+      (md. 188: başkan müdürün görevlendirdiği müdür yardımcısı). Dosya görüşme tutanağında
+      başkan o dosyada şikâyetçi / zarar gören ise toplantı böyle kaydedilemez (md. 191/2).
+    - Başkan katılmadıysa kurul başkanı katılımcı listesinde yer almaz ve başkan işaretli
+      satır kurulun asıl öğretmen üyelerinden biridir (md. 188).
+
+    `legacy_chair` / `recorded_names` yalnız mevcut toplantının DÜZELTİLMESİNDE ve vekâlet
+    durumu DEĞİŞMİYORKEN verilir (kayıtlı başkan satırının ve kayıtlı tüm katılımcıların ad
+    anahtarları). Kurul bugünkü hâliyle denetlenir, oysa başkan değişikliğinin geçmişi
+    tutulmaz ve üyeler kuruldan çıkarılabilir; bu yüzden başkan satırı aynen korunuyorsa
+    kişi denetimi yapılmaz — yoksa geçmiş toplantıda hiçbir katılımcı düzeltilemezdi (§7.6):
+    başkanı sonradan değişmiş kurulun eski tutanağı, başkanlık edeni sonradan kuruldan
+    çıkarılmış vekâletli tutanak, S7 öncesi kayıt. Başkan satırı DEĞİŞTİRİLİRSE kural uygulanır.
+    """
+    from apps.disiplin.services.committee import (
+        acting_chair_candidates,
+        acting_chair_rule_message,
+        chair_conflict_message,
+        chair_conflicted,
+        conflicted_ids,
+    )
+
+    if council_type != CouncilType.DISCIPLINE:
+        if chair_absent:
+            raise ValueError(
+                "'Başkan toplantıya katılmadı' kaydı yalnız Ödül ve Disiplin Kurulu toplantısında "
+                "tutulur (md. 188); Onur Kurulu toplantısında kullanılamaz."
+            )
+        return
+    if committee is None:
+        if chair_absent:
+            raise ValueError(
+                "Bu ders yılı için Ödül ve Disiplin Kurulu tanımlı değil; 'Başkan toplantıya "
+                "katılmadı' kaydı tutulamaz. Önce kurulu (başkan ve üyeler) tanımlayın."
+            )
+        return
+    chair_row = next(a for a in attendees if a.get("is_chair"))  # `_validate_attendees` güvencesi
+    chair_row_name = str(chair_row.get("person_name", "")).strip()
+    chair_name = committee.chair.full_name
+    candidates = acting_chair_candidates(committee, case)
+    chair_row_kept = legacy_chair is not None and _name_key(chair_row_name) == legacy_chair
+
+    if not chair_absent:
+        if chair_row_kept:
+            return
+        if case is not None and chair_conflicted(case, committee):
+            raise ValueError(
+                chair_conflict_message(committee, case, has_candidate=bool(candidates))
+            )
+        if not _is_person(chair_row, user_id=committee.chair_id, name=chair_name):
+            raise ValueError(
+                f"Başkan olarak işaretlenen {chair_row_name} kurul başkanı değil (md. 188). Kurul "
+                f"başkanı {chair_name} toplantıya katılmadıysa 'Başkan toplantıya katılmadı' "
+                "seçeneğini işaretleyip kurula başkanlık eden öğretmen üyeyi seçin."
+            )
+        return
+
+    # Kayıtlı satır muaf: bugünkü başkan o toplantıya (başkan olmadan önce) üye olarak katılmış
+    # olabilir; yeni eklenen satır için kural geçerlidir.
+    if any(
+        _is_person(a, user_id=committee.chair_id, name=chair_name)
+        and _name_key(a.get("person_name")) not in recorded_names
+        for a in attendees
+    ):
+        raise ValueError(
+            f"Kurul başkanı {chair_name} katılımcı listesinde; 'Başkan toplantıya katılmadı' "
+            "işaretliyken başkan katılımcı yazılamaz. Başkanı listeden çıkarın ya da işareti "
+            "kaldırın."
+        )
+    if chair_row_kept:
+        return
+    if not any(
+        _is_person(chair_row, user_id=m.member_user_id, name=m.member_name) for m in candidates
+    ):
+        conflicted = case is not None and (
+            chair_row.get("member_user_id") in conflicted_ids(case)[0]
+        )
+        raise ValueError(
+            acting_chair_rule_message(has_candidate=bool(candidates), conflicted=conflicted)
+        )
+
+
 def _validate_meeting_date(
     *, council_type: str, minutes_type: str, year: Any, meeting_date: date
 ) -> None:
@@ -292,8 +396,12 @@ def create_council_meeting(
     discipline_case_id: int | None = None,
     honor_meeting_kind: str = HonorMeetingKind.BOARD,
     honor_certificate_ids: list[int] | None = None,
+    chair_absent: bool = False,
 ) -> CouncilMeeting:
     """Bir kurulun genel toplantı kararını karar defterine yazar (md. 184/206).
+
+    `chair_absent` (S7, 14.11.2026 — yalnız Ödül ve Disiplin Kurulu): başkan katılmadı;
+    başkan işaretli katılımcı kurula başkanlık eden asıl öğretmen üyedir (md. 188).
 
     `meeting_no` ders yılı + kurul türü başına artar (silinmiş kayıtlar dahil —
     defter numarası tekrarlanmaz). CASE_REVIEW: kurula sevkli + kararlı bir
@@ -334,6 +442,13 @@ def create_council_meeting(
     )
     discipline_committee, honor_board = _resolve_source(council_type, honor_meeting_kind)
     _validate_attendees(attendees, council_type=council_type, committee=discipline_committee)
+    _validate_chair_record(
+        attendees,
+        council_type=council_type,
+        committee=discipline_committee,
+        chair_absent=chair_absent,
+        case=discipline_case,
+    )
 
     # Defter sırası: (yıl, tür) için en büyük no + 1 (silinmiş dahil; tekrar etmesin).
     last = (
@@ -359,6 +474,7 @@ def create_council_meeting(
         discipline_case=discipline_case,
         discipline_committee=discipline_committee,
         honor_board=honor_board,
+        chair_absent=chair_absent,
     )
     _create_attendees(meeting, attendees)
     if honor_certificate_ids:
@@ -376,8 +492,12 @@ def update_council_meeting(
     decision_basis: str | None = None,
     notes: str | None = None,
     attendees: list[dict[str, Any]] | None = None,
+    chair_absent: bool | None = None,
 ) -> CouncilMeeting:
     """Tutanak içeriğini düzeltir (meeting_no/kurul türü/tutanak türü/dosya SABİT).
+
+    `chair_absent` (S7): verilmezse kayıtlı vekâlet durumu korunur; verilirse katılımcı
+    listesi (yeni ya da kayıtlı) yeni duruma göre yeniden denetlenir (md. 188).
 
     Yanlış dosya seçildiyse tutanak silinip yeniden oluşturulur (meeting_no
     atlar — defter mantığıyla tutarlı). `attendees` verilirse mevcut katılımcılar
@@ -423,6 +543,50 @@ def update_council_meeting(
     if notes is not None:
         meeting.notes = notes
         fields.append("notes")
+    was_absent = meeting.chair_absent
+    now_absent = was_absent if chair_absent is None else bool(chair_absent)
+    if attendees is not None or now_absent != was_absent:
+        current = list(meeting.attendees.all())
+        rows = (
+            attendees
+            if attendees is not None
+            else [
+                {
+                    "person_name": a.person_name,
+                    "attendee_role": a.attendee_role,
+                    "is_chair": a.is_chair,
+                    "member_user_id": a.member_user_id,
+                    "member_student_id": a.member_student_id,
+                }
+                for a in current
+            ]
+        )
+        # `_validate_chair_record` tek başkan satırı varsayar. Yeni liste bunu sağlamıyorsa
+        # tam katılımcı denetimi (aşağıda, `_validate_attendees`) kendi iletisiyle reddeder.
+        if len([a for a in rows if a.get("is_chair")]) != 1:
+            _validate_attendees(rows, council_type=meeting.council_type)
+        # Arayüz `chair_absent`'i her kayıtta gönderir: muafiyet alanın gönderilmesine değil,
+        # vekâlet durumunun gerçekten DEĞİŞMEMESİNE bağlıdır.
+        unchanged = now_absent == was_absent
+        legacy = next((_name_key(a.person_name) for a in current if a.is_chair), None)
+        _validate_chair_record(
+            rows,
+            council_type=meeting.council_type,
+            committee=meeting_committee(meeting),
+            chair_absent=now_absent,
+            case=(
+                meeting.discipline_case
+                if meeting.minutes_type == CouncilMinutesType.CASE_REVIEW
+                else None
+            ),
+            legacy_chair=legacy if unchanged else None,
+            recorded_names=(
+                frozenset(_name_key(a.person_name) for a in current) if unchanged else frozenset()
+            ),
+        )
+    if now_absent != was_absent:
+        meeting.chair_absent = now_absent
+        fields.append("chair_absent")
     if fields:
         fields.append("updated_at")
         meeting.save(update_fields=fields)
@@ -443,8 +607,12 @@ def update_council_meeting(
         for old in meeting.attendees.all():
             old.delete()
         _create_attendees(meeting, attendees)
-        if decided and meeting.council_type == CouncilType.DISCIPLINE:
-            _require_quorum(meeting)
+    if (
+        decided
+        and meeting.council_type == CouncilType.DISCIPLINE
+        and (attendees is not None or now_absent != was_absent)
+    ):
+        _require_quorum(meeting, tolerate_chair_skip=True)
     return meeting
 
 
@@ -522,7 +690,9 @@ def meeting_quorum(meeting: CouncilMeeting) -> dict[str, Any] | None:
     detail = meeting_quorum_detail(meeting)
     if detail is None:
         return None
-    return {key: value for key, value in detail.items() if key != "unmatched"}
+    return {
+        key: value for key, value in detail.items() if key not in ("unmatched", "chair_skipped")
+    }
 
 
 def meeting_quorum_detail(meeting: CouncilMeeting) -> dict[str, Any] | None:
@@ -532,6 +702,14 @@ def meeting_quorum_detail(meeting: CouncilMeeting) -> dict[str, Any] | None:
     listesiyle (başkan, asıl, yedek) eşleşmediği için sayılmayan satırlar ekranda adlarıyla
     gösterilir (md. 191/1: "üyelerin dışında toplantıya çağrılanlar da oy kullanamazlar").
     Sayım kuralı DEĞİŞMEZ; md. 185/6 davetlileri listeye girmez. Sıra katılımcı sırasıdır.
+
+    `chair_skipped` (S7, 14.11.2026): "başkan katılmadı" kayıtlı toplantıda kurulun BUGÜNKÜ
+    başkanıyla eşleşen ve o gün üye olduğu da gösterilemeyen satırların adları. Başkan
+    değişikliğinin geçmişi tutulmadığı için toplantı tarihindeki başkan güvenilir biçimde
+    belirlenemez; bu yüzden (a) satır toplantı tarihindeki ÜYE listesiyle (asıl / yedek /
+    o günden sonra çıkarılmış) eşleşiyorsa üye olarak SAYILIR — vekâletli toplantıya üye
+    olarak katılıp sonradan başkan yapılan öğretmen yeter sayıdan düşmez; (b) eşleşmiyorsa
+    sayılmaz ama SESSİZCE de düşmez: adı bu listede, nedeniyle ekranda gösterilir.
     """
     from apps.disiplin.services.committee import committee_quorum
 
@@ -542,6 +720,7 @@ def meeting_quorum_detail(meeting: CouncilMeeting) -> dict[str, Any] | None:
     roster = _committee_roster(committee, as_of=meeting.meeting_date)
     matched: set[int] = set()
     unmatched: list[str] = []
+    chair_skipped: list[str] = []
     for attendee in meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER):
         index = _roster_index(
             roster,
@@ -549,11 +728,30 @@ def meeting_quorum_detail(meeting: CouncilMeeting) -> dict[str, Any] | None:
             student_id=attendee.member_student_id,
             name=attendee.person_name,
         )
+        if index == 0 and meeting.chair_absent:
+            # S7: katılmadığı kayıtlı başkan yeter sayıya girmez (md. 191/1). Kayıt denetimi
+            # başkanı listeye yazdırmaz; buraya düşen satır bugünkü başkanla eşleşen bir
+            # kayıttır (sonradan başkan yapılmış üye ya da eski/bozulmuş veri) — üye
+            # listesinde aranır, bulunamazsa nedeniyle `chair_skipped`'e yazılır.
+            as_member = _roster_index(
+                roster[1:],
+                user_id=attendee.member_user_id,
+                student_id=attendee.member_student_id,
+                name=attendee.person_name,
+            )
+            if as_member is None:
+                chair_skipped.append(attendee.person_name)
+                continue
+            index = as_member + 1
         if index is not None:
             matched.add(index)
         else:
             unmatched.append(attendee.person_name)
-    return {**committee_quorum(committee, len(matched)), "unmatched": unmatched}
+    return {
+        **committee_quorum(committee, len(matched)),
+        "unmatched": unmatched,
+        "chair_skipped": chair_skipped,
+    }
 
 
 def meeting_composition_warnings(meeting: CouncilMeeting) -> list[str]:
@@ -570,13 +768,117 @@ def meeting_composition_warnings(meeting: CouncilMeeting) -> list[str]:
     return committee_composition_warnings(committee)
 
 
-def _require_quorum(meeting: CouncilMeeting) -> None:
-    quorum = meeting_quorum(meeting)
+def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
+    """VEKÂLET KAYDI uyarıları (S7) — UYARIDIR, kaydı ve kararı engellemez (S5/S6 çizgisi).
+
+    Yalnız Ödül ve Disiplin Kurulu toplantısında:
+
+    - Başkan katılmadıysa ve oy hakkı olan katılımcılar arasında kurulun YEDEK üyesi yoksa:
+      md. 188 "Üyenin başkanlık yaptığı durumlarda yedek üye toplantıya katılır", md. 191/2
+      "Kurula katılmayan üyenin yerine yedek üye toplantıya çağrılır". Engel değildir: yedek
+      de mazeretli olabilir; yeter sayı (md. 191/1) ayrıca denetlenir.
+    - Dosya görüşme tutanağı, dosyanın SON kurul toplantısı kaydıyla (dosya detayı →
+      Toplantılar) başkanlık bakımından çelişiyorsa: EK-1, Form-11 ve md. 195 ızgarası dosya
+      toplantısı kaydına, karar defteri bu tutanağa göre basılır — iki resmî belgede farklı
+      başkan çıkmasın. Dosya toplantısı kaydı yoksa karşılaştırma yapılmaz.
+    """
+    from apps.disiplin.services.committee import NO_SUBSTITUTE_WARNING, chair_conflicted
+
+    committee = meeting_committee(meeting)
+    if committee is None:
+        return []
+    warnings: list[str] = []
+    if (
+        meeting.minutes_type == CouncilMinutesType.CASE_REVIEW
+        and meeting.discipline_case is not None
+        and not meeting.chair_absent
+        and chair_conflicted(meeting.discipline_case, committee)
+    ):
+        # K4 (14.11.2026): S7 öncesi kaydedilmiş tutanak. Yeni kayıt bu durumda reddedilir
+        # (`_validate_chair_record`); eski kayıt kendiliğinden DEĞİŞTİRİLMEZ ve karar defteri
+        # onu olduğu gibi basar — dosyanın EK-1'i ise başkan hanesini boş basar. Sessiz kalmaz.
+        warnings.append(
+            "Kurul başkanı bu tutanağın dosyasında şikâyetçi/zarar gören (md. 191/2) ama tutanak "
+            "başkan katılmış olarak kayıtlı. Karar defteri bu kaydı olduğu gibi basar; dosyanın "
+            "EK-1, Form-11 ve diğer kurul evrakında ise başkan hanesi boş basılır. Tutanağı "
+            "'Başkan toplantıya katılmadı' kaydıyla düzeltip kurula başkanlık eden öğretmen "
+            "üyeyi seçin (md. 188)."
+        )
+    voting = list(meeting.attendees.filter(attendee_role=CouncilAttendeeRole.VOTING_MEMBER))
+    if meeting.chair_absent:
+        # Silinmiş yedekler dahil: toplantıdan sonra kuruldan çıkarılan yedek o gün katılmıştı.
+        substitutes = list(
+            DisciplineCommitteeMember.all_objects.filter(committee=committee, is_substitute=True)
+        )
+        called = any(
+            _roster_index(
+                [(s.member_user_id, s.member_student_id, _name_key(s.member_name))],
+                user_id=a.member_user_id,
+                student_id=a.member_student_id,
+                name=a.person_name,
+            )
+            is not None
+            for a in voting
+            for s in substitutes
+        )
+        if not called:
+            warnings.append(NO_SUBSTITUTE_WARNING)
+    if meeting.minutes_type != CouncilMinutesType.CASE_REVIEW or meeting.discipline_case is None:
+        return warnings
+    case_meeting = meeting.discipline_case.meetings.first()
+    if case_meeting is None:
+        return warnings
+    on = f"{case_meeting.meeting_date:%d.%m.%Y}"
+    fix = (
+        "EK-1 imza heyeti dosya toplantısı kaydına, karar defteri bu tutanağa göre basılır; iki "
+        "kaydı aynı duruma getirin (md. 188)."
+    )
+    if meeting.chair_absent != case_meeting.chair_absent:
+        here, there = (
+            ("başkan katılmadı", "başkan katılmış")
+            if meeting.chair_absent
+            else ("başkan katıldı", "başkan katılmamış")
+        )
+        warnings.append(
+            f"Bu tutanakta {here} kayıtlı; dosyanın son kurul toplantısı kaydında ({on}) ise "
+            f"{there} görünüyor. {fix}"
+        )
+    elif meeting.chair_absent and case_meeting.acting_chair is not None:
+        acting = case_meeting.acting_chair
+        chair_row = next((a for a in voting if a.is_chair), None)
+        same = chair_row is not None and (
+            chair_row.member_user_id == acting.member_user_id
+            if chair_row.member_user_id is not None and acting.member_user_id is not None
+            else _name_key(chair_row.person_name) == _name_key(acting.member_name)
+        )
+        if chair_row is not None and not same:
+            warnings.append(
+                f"Kurula başkanlık eden üye bu tutanakta {chair_row.person_name}; dosyanın son "
+                f"kurul toplantısı kaydında ({on}) ise {acting.member_name}. {fix}"
+            )
+    return warnings
+
+
+def _require_quorum(meeting: CouncilMeeting, *, tolerate_chair_skip: bool = False) -> None:
+    """md. 191/1 yeter sayısı yoksa ValueError.
+
+    `tolerate_chair_skip` yalnız karara bağlı MEVCUT toplantının düzeltilmesinde verilir (S7):
+    yeter sayı eksiği yalnız `chair_skipped` satırlarından (bugünkü başkanla eşleştiği için
+    sayılamayan, başkan geçmişi tutulmadığından o günkü durumu belirlenemeyen kayıt)
+    kaynaklanıyorsa düzeltme reddedilmez — yoksa o toplantıda hiçbir katılımcı düzeltilemezdi
+    (§7.6). Yeni karar (`decide_agenda_item`) için hoşgörü yoktur.
+    """
+    quorum = meeting_quorum_detail(meeting)
     if quorum is None:
         raise ValueError(
             "Bu ders yılı için Ödül ve Disiplin Kurulu tanımlı değil; toplantı yeter sayısı "
             "denetlenemez (md. 191/1)."
         )
+    if (
+        tolerate_chair_skip
+        and quorum["present"] + len(quorum["chair_skipped"]) >= quorum["required"]
+    ):
+        return
     if not quorum["ok"]:
         raise ValueError(
             f"Toplantı yeter sayısı yok: kurul {quorum['full']} kişi, en az "

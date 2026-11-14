@@ -36,6 +36,7 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { okulApi } from "../okul/api";
 import type { Personnel } from "../okul/api";
+import VekaletUyarisi from "../kurul/VekaletUyarisi";
 import {
   ALL_CAPABILITIES,
   BRANCH_TR,
@@ -60,6 +61,7 @@ import {
   studentLookupApi,
 } from "./api";
 import type {
+  ActingChairOptions,
   AttachmentType,
   CaseStage,
   CaseStudent,
@@ -758,6 +760,9 @@ export default function DisiplinDetayPage() {
             {/* Evraklar: evrak üretimi + kütük + dosya ekleri */}
             {tab === "evraklar" && (
               <div className="space-y-6">
+                {/* S7/K4: belgelerde başkan hanesinin neden boş basıldığı evrak üretilirken
+                    de görünür. */}
+                <VekaletUyarisi warnings={data.chair_warnings} />
                 <DocumentsSection caseObj={data} canManage={canManageEvrak} />
                 {/* Auth yok: OYS'nin indirme rol kapısı (CAN_DOWNLOAD_DISCIPLINE_FILE)
                     evrak yetkisiyle aynı — sabit açık. */}
@@ -1697,6 +1702,14 @@ function MeetingsSection({
           </Button>
         )}
       </div>
+      {/* S7/K4 (14.11.2026): başkan dosyada şikâyetçi / zarar gören ve vekâlet kaydı yok —
+          kalıcı uyarı; eski kayıt kendiliğinden değiştirilmez. Toplantı vekâletle kaydedilince
+          dosya yeniden yüklenir (`onChanged`) ve uyarı kalkar. */}
+      {caseObj.chair_warnings && caseObj.chair_warnings.length > 0 && (
+        <div className="mt-3">
+          <VekaletUyarisi warnings={caseObj.chair_warnings} />
+        </div>
+      )}
       {canManage && !meetingEntryOpen && (
         <p className="mt-1 flex items-start gap-1 text-body-small text-on-surface-variant">
           <Icon name="info" size="sm" />
@@ -1764,6 +1777,21 @@ function MeetingsSection({
                   </ul>
                 )}
               </div>
+              {/* VEKÂLET KAYDI (S7, 14.11.2026): yalnız başkanın katılmadığı toplantıda. */}
+              {m.chair_absent && (
+                <p className="mt-2 flex items-start gap-1 text-body-small text-on-surface-variant">
+                  <Icon name="info" size="sm" />
+                  <span>
+                    Başkan katılmadı; {m.acting_chair_name || "öğretmen üye"} başkanlık etti (md.
+                    188).
+                  </span>
+                </p>
+              )}
+              {m.chair_warnings && m.chair_warnings.length > 0 && (
+                <div className="mt-2">
+                  <VekaletUyarisi warnings={m.chair_warnings} />
+                </div>
+              )}
               {m.notes && (
                 <p className="mt-2 whitespace-pre-wrap text-body-medium text-on-surface-variant">
                   {m.notes}
@@ -1806,6 +1834,14 @@ function RecordMeetingDialog({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): başkan bu formda katılımcı satırı
+  // değildir, katıldığı varsayılır. Katılmadıysa kutu işaretlenir ve kurula başkanlık eden
+  // asıl öğretmen üye seçilir (md. 188). Başkan dosyada şikâyetçi / zarar gören ise kurula
+  // katılamaz (md. 191/2): kutu zorunludur. Bilgi alınamazsa form kutusuz çalışır; backend
+  // kuralı yine uygular.
+  const [chairOptions, setChairOptions] = useState<ActingChairOptions | null>(null);
+  const [chairAbsentChosen, setChairAbsentChosen] = useState(false);
+  const [actingChairId, setActingChairId] = useState<number | null>(null);
   const snackbar = useSnackbar();
   const fieldIdBase = useId();
 
@@ -1817,10 +1853,39 @@ function RecordMeetingDialog({
       .finally(() => setLoadingCommittee(false));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const options = await disiplinApi.getActingChairOptions(caseObj.id);
+        if (!cancelled) setChairOptions(options);
+      } catch {
+        // Bilgilendirme amaçlı; alınamazsa kayıt denetimi backend'de kalır.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [caseObj.id]);
+
+  const chairForced = chairOptions?.chair_conflicted ?? false;
+  const chairAbsent = chairForced || chairAbsentChosen;
+  const eligible = chairOptions?.eligible ?? [];
+
   const toggle = (id: number) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  // Başkanlık eden üye toplantıya katılmıştır: seçilince katılanlar arasına alınır.
+  const chooseActingChair = (id: number | null) => {
+    setActingChairId(id);
+    if (id !== null) setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  };
+
   const submit = async () => {
+    if (chairAbsent && actingChairId === null) {
+      setError("Başkan toplantıya katılmadıysa kurula başkanlık eden öğretmen üyeyi seçin.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -1830,6 +1895,7 @@ function RecordMeetingDialog({
         meeting_date: meetingDate,
         attendee_member_ids: selectedIds,
         notes: notes.trim(),
+        ...(chairAbsent ? { chair_absent: true, acting_chair_member_id: actingChairId } : {}),
       });
       snackbar.success("Toplantı kaydedildi.");
       onDone();
@@ -1883,6 +1949,72 @@ function RecordMeetingDialog({
             onChange={(e) => setMeetingDate(e.target.value)}
           />
 
+          {chairOptions !== null && (
+            <div className="space-y-2 rounded-shape-sm bg-surface-container-low p-3">
+              <label className="flex min-h-12 items-center gap-3 text-body-medium text-on-surface">
+                <input
+                  type="checkbox"
+                  checked={chairAbsent}
+                  disabled={chairForced}
+                  aria-describedby={chairForced ? `${fieldIdBase}-chair-reason` : undefined}
+                  onChange={(e) => {
+                    setChairAbsentChosen(e.target.checked);
+                    if (!e.target.checked) setActingChairId(null);
+                  }}
+                  className="h-5 w-5 accent-primary"
+                />
+                <span>Başkan toplantıya katılmadı ({chairOptions.chair_name})</span>
+              </label>
+              {chairForced && (
+                <p
+                  id={`${fieldIdBase}-chair-reason`}
+                  className="flex items-start gap-1 text-body-small text-on-surface-variant"
+                >
+                  <Icon name="info" size="sm" />
+                  <span>
+                    Kurul başkanı bu dosyada şikâyetçi/zarar gören kişi olduğundan kurula katılamaz
+                    (md. 191/2); toplantıya öğretmen üyelerden biri başkanlık eder (md. 188).
+                  </span>
+                </p>
+              )}
+              {chairAbsent &&
+                (eligible.length === 0 ? (
+                  <p className="flex items-start gap-1 text-body-small text-error">
+                    <Icon name="error" size="sm" />
+                    <span>
+                      Kurulda bu toplantıya başkanlık edebilecek asıl öğretmen üye yok (md. 188,
+                      191/2). Asıl öğretmen üyeliği boşalmışsa bu üyelik sıraya göre yedek üyeyle
+                      doldurulur (md. 186); asıl ve yedek üyelikler boşaldığı için kurul
+                      kurulamıyorsa açık üyelikler için yeniden seçim yapılır (md. 187). Kurul kaydı{" "}
+                      <Link
+                        to="/odul-disiplin-kurulu?sekme=uyeler"
+                        className="text-primary underline"
+                      >
+                        Ödül ve Disiplin Kurulu
+                      </Link>{" "}
+                      sayfasında bu duruma getirilmeden toplantı kaydedilemez.
+                    </span>
+                  </p>
+                ) : (
+                  <Select
+                    label="Başkanlık eden öğretmen üye (md. 188)"
+                    value={actingChairId === null ? "" : String(actingChairId)}
+                    onChange={(e) =>
+                      chooseActingChair(e.target.value ? Number(e.target.value) : null)
+                    }
+                    options={[
+                      { value: "", label: "Seçin…" },
+                      ...eligible.map((c) => ({
+                        value: String(c.member_id),
+                        label: c.member_name,
+                      })),
+                    ]}
+                    helperText="Müdürün görevlendirdiği asıl öğretmen üye. Başkan yeter sayıya girmez; başkanın yerine çağrılan yedek üyeyi katılanlar arasında işaretleyin."
+                  />
+                ))}
+            </div>
+          )}
+
           <div>
             <p className="mb-1 text-label-large text-on-surface-variant">
               Katılan üyeler ({selectedIds.length} seçili)
@@ -1899,6 +2031,8 @@ function RecordMeetingDialog({
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(m.id)}
+                        // Başkanlık eden üye katılanlar arasında kalır (backend de ister).
+                        disabled={chairAbsent && actingChairId === m.id}
                         onChange={() => toggle(m.id)}
                         className="h-5 w-5 accent-primary"
                       />

@@ -165,6 +165,13 @@ class DisciplineMeeting(BaseModel):
 
     `attendees`: toplantıya katılan kurul üyeleri (md. 191 salt çoğunluk; şikâyetçi
     üye katılamaz → yerine yedek). Tutanak/PDF veriyi buradan çeker.
+
+    VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7): başkan (müdür yardımcısı, md. 188)
+    bu modelde katılımcı satırı DEĞİLDİR — toplantıya katıldığı varsayılır. `chair_absent`
+    başkanın toplantıya katılmadığını (izin/rapor ya da md. 191/2: şikâyetçi / zarar gören
+    başkan kurula katılamaz), `acting_chair` kurula başkanlık eden öğretmen üyeyi tutar
+    (md. 188: "Başkan bulunmadığında müdürün görevlendireceği öğretmen üyelerden biri kurula
+    başkanlık eder"). Varsayılan: başkan katıldı / vekil yok — eski kayıtlar böyle okunur.
     """
 
     case = models.ForeignKey(
@@ -189,6 +196,20 @@ class DisciplineMeeting(BaseModel):
         blank=True,
     )
     notes = models.TextField("toplantı notu", blank=True, default="")
+    chair_absent = models.BooleanField(
+        "başkan katılmadı",
+        default=False,
+        help_text="Kurul başkanı toplantıya katılmadı (md. 188, 191/2).",
+    )
+    acting_chair = models.ForeignKey(
+        DisciplineCommitteeMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chaired_meetings",
+        verbose_name="başkanlık eden üye",
+        help_text="Başkanın yokluğunda kurula başkanlık eden öğretmen üye (md. 188).",
+    )
 
     class Meta:
         verbose_name = "disiplin kurulu toplantısı"
@@ -200,3 +221,14 @@ class DisciplineMeeting(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.case_id} kurul toplantısı @ {self.meeting_date:%d.%m.%Y}"
+
+    def clean(self) -> None:
+        """Vekâlet kaydı tutarlılığı: başkan katılmadıysa başkanlık eden üye zorunlu (md. 188)."""
+        if self.chair_absent and self.acting_chair_id is None:
+            raise ValidationError(
+                {"acting_chair": "Başkan katılmadıysa başkanlık eden üye seçilmelidir (md. 188)."}
+            )
+        if not self.chair_absent and self.acting_chair_id is not None:
+            raise ValidationError(
+                {"acting_chair": "Başkanlık eden üye yalnız başkan katılmadığında kaydedilir."}
+            )

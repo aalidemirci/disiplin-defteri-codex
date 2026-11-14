@@ -327,14 +327,39 @@ class PrecautionSerializer(serializers.ModelSerializer[DisciplinePrecaution]):
 
 class MeetingSerializer(serializers.ModelSerializer[DisciplineMeeting]):
     attendee_names = serializers.SerializerMethodField()
+    acting_chair_name = serializers.SerializerMethodField()
+    chair_warnings = serializers.SerializerMethodField()
 
     class Meta:
         model = DisciplineMeeting
-        fields = ["id", "event", "meeting_date", "attendees", "attendee_names", "notes"]
-        read_only_fields = ["attendees"]
+        fields = [
+            "id",
+            "event",
+            "meeting_date",
+            "attendees",
+            "attendee_names",
+            "notes",
+            "chair_absent",
+            "acting_chair",
+            "acting_chair_name",
+            "chair_warnings",
+        ]
+        read_only_fields = ["attendees", "chair_absent", "acting_chair"]
 
     def get_attendee_names(self, obj: DisciplineMeeting) -> list[str]:
         return [a.member_name or str(a.pk) for a in obj.attendees.all()]
+
+    def get_acting_chair_name(self, obj: DisciplineMeeting) -> str:
+        """VEKÂLET KAYDI (S7): başkan katılmadıysa kurula başkanlık eden üyenin adı (md. 188)."""
+        if not obj.chair_absent or obj.acting_chair is None:
+            return ""
+        return obj.acting_chair.member_name or str(obj.acting_chair.pk)
+
+    def get_chair_warnings(self, obj: DisciplineMeeting) -> list[str]:
+        """VEKÂLET KAYDI uyarıları (S7): başkan katılmadı ama yedek üye yok (md. 188) — engel değil."""
+        from apps.disiplin.services.committee import meeting_chair_warnings
+
+        return meeting_chair_warnings(obj)
 
 
 class CaseStudentSerializer(serializers.Serializer[Any]):
@@ -377,6 +402,7 @@ class CaseDetailSerializer(CaseListSerializer):
     close_eligible = serializers.SerializerMethodField()
     close_eligible_on = serializers.SerializerMethodField()
     close_eligible_reason = serializers.SerializerMethodField()
+    chair_warnings = serializers.SerializerMethodField()
 
     class Meta(CaseListSerializer.Meta):
         fields = [
@@ -388,7 +414,15 @@ class CaseDetailSerializer(CaseListSerializer):
             "close_eligible",
             "close_eligible_on",
             "close_eligible_reason",
+            "chair_warnings",
         ]
+
+    def get_chair_warnings(self, obj: DisciplineCase) -> list[str]:
+        """VEKÂLET uyarısı (S7/K4): başkan dosyada şikâyetçi / zarar gören ve vekâlet kaydı
+        yok — belgelerde başkan hanesi boş basılır (md. 191/2). Uyarıdır, engellemez."""
+        from apps.disiplin.services.committee import case_chair_warnings
+
+        return case_chair_warnings(obj)
 
     def get_close_eligible(self, obj: DisciplineCase) -> bool:
         from apps.disiplin import selectors
@@ -736,6 +770,7 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
     agenda_items = CouncilAgendaItemSerializer(many=True, read_only=True)
     quorum = serializers.SerializerMethodField()
     composition_warnings = serializers.SerializerMethodField()
+    chair_warnings = serializers.SerializerMethodField()
     discipline_case_no = serializers.CharField(
         source="discipline_case.case_no", read_only=True, default=None
     )
@@ -766,17 +801,27 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
             "minutes_type",
             "discipline_case",
             "discipline_case_no",
+            "chair_absent",
             "attendees",
             "agenda_items",
             "quorum",
             "composition_warnings",
+            "chair_warnings",
         ]
-        read_only_fields = ["meeting_no", "council_type", "minutes_type", "discipline_case"]
+        read_only_fields = [
+            "meeting_no",
+            "council_type",
+            "minutes_type",
+            "discipline_case",
+            "chair_absent",
+        ]
 
     def get_quorum(self, obj: CouncilMeeting) -> dict[str, Any] | None:
         """Ödül ve Disiplin Kurulu yeter sayısı (md. 191/1); Onur Kurulunda None.
 
         `unmatched`: yeter sayıya girmeyen oy hakkı satırları (kullanıcı kararı, 14.11.2026 — S13).
+        `chair_skipped`: "başkan katılmadı" kayıtlı toplantıda bugünkü başkanla eşleştiği için
+        sayılmayan satırlar (S7) — ekranda nedeniyle gösterilir.
         """
         from apps.disiplin.services.council import meeting_quorum_detail
 
@@ -787,6 +832,13 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
         from apps.disiplin.services.council import meeting_composition_warnings
 
         return meeting_composition_warnings(obj)
+
+    def get_chair_warnings(self, obj: CouncilMeeting) -> list[str]:
+        """VEKÂLET KAYDI uyarıları (S7): yedek üye çağrılmamış (md. 188) ya da dosya görüşme
+        tutanağı dosya toplantısı kaydıyla başkanlık bakımından çelişiyor — engel değil."""
+        from apps.disiplin.services.council import council_chair_warnings
+
+        return council_chair_warnings(obj)
 
 
 class DecisionNarrativeSerializer(serializers.Serializer[dict[str, Any]]):

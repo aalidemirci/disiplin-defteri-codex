@@ -89,6 +89,10 @@ export interface DisciplineCase {
   close_eligible?: boolean | null;
   close_eligible_on?: string | null;
   close_eligible_reason?: string;
+  // VEKÂLET uyarısı (S7/K4, 14.11.2026 — yalnız detay): kurul başkanı bu dosyada şikâyetçi /
+  // zarar gören (md. 191/2) ve dosyanın son toplantı kaydı vekâletli değil — belgelerde
+  // başkan hanesi boş basılır. Metin sunucuda üretilir; uyarır, engellemez.
+  chair_warnings?: string[];
 }
 
 export interface DisciplineDecisionType {
@@ -221,6 +225,32 @@ export interface DisciplineMeeting {
   notes: string;
   attendees: number[]; // kurul üyesi id'leri
   attendee_names: string[];
+  // VEKÂLET KAYDI (S7, 14.11.2026 — md. 188): başkan toplantıya katılmadı; `acting_chair`
+  // kurula başkanlık eden öğretmen üyenin (kurul üyesi) id'si, `acting_chair_name` adı.
+  // Vekâletsiz toplantıda false / null / "".
+  chair_absent: boolean;
+  acting_chair: number | null;
+  acting_chair_name: string;
+  // Uyarır, engellemez: başkan katılmadı ama katılanlar arasında yedek üye yok (md. 188).
+  chair_warnings?: string[];
+}
+
+// Toplantı formları için vekâlet bilgisi (`/discipline/committee/acting-chair-options/`,
+// services.committee.acting_chair_options ile birebir).
+// `chair_conflicted`: başkan o dosyada şikâyetçi / zarar gören — kurula katılamaz (md. 191/2).
+// `eligible`: kurula başkanlık edebilecek asıl öğretmen üyeler (md. 188).
+export interface ActingChairCandidate {
+  member_id: number;
+  member_user: number | null;
+  member_name: string;
+  title: string;
+}
+
+export interface ActingChairOptions {
+  chair: number | null;
+  chair_name: string;
+  chair_conflicted: boolean;
+  eligible: ActingChairCandidate[];
 }
 
 // --- Kurul form payload'ları ---
@@ -248,6 +278,9 @@ export interface MeetingCreateBody {
   meeting_date: string; // YYYY-MM-DD
   attendee_member_ids: number[];
   notes?: string;
+  // VEKÂLET KAYDI (S7): başkan katılmadıysa true + başkanlık eden üyenin (kurul üyesi) id'si.
+  chair_absent?: boolean;
+  acting_chair_member_id?: number | null;
 }
 
 // =============================================================================
@@ -1306,6 +1339,16 @@ export const disiplinApi = {
 
   recordMeeting: (caseId: number, body: MeetingCreateBody) =>
     api.post<DisciplineMeeting>(`${BASE}/cases/${caseId}/meeting/`, body),
+
+  // VEKÂLET KAYDI (S7): başkan + başkan bu dosyada engelli mi + başkanlık edebilecek üyeler.
+  // Kurul tanımsızsa (204, boş gövde) null.
+  getActingChairOptions: async (caseId?: number): Promise<ActingChairOptions | null> => {
+    const qs = caseId === undefined ? "" : `?case=${caseId}`;
+    const options = await api.get<ActingChairOptions | undefined>(
+      `${BASE}/committee/acting-chair-options/${qs}`,
+    );
+    return options ?? null;
+  },
 
   // Yanlış girilen dosya toplantısı kaydını siler (kapalı dosyada backend reddeder).
   deleteMeeting: (caseId: number, meetingId: number) =>

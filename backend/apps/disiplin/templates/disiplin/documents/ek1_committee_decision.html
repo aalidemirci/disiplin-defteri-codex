@@ -3,7 +3,11 @@
 İçerik MEB yönetmeliği EK-1 formuyla BİREBİR (kanonik: data/sablonlar/disiplin-kurulu/
 ek1-odul-ve-disiplin-kurulu-karari.md). OYS verisinde olmayan öğrenci-bağlam alanları
 (yatılı/başarı/sağlık/aile/çevre…) boş bırakılır → kişisel dosya/rehberlik raporundan
-elle doldurulur. Başlıklar doğrudan büyük harf (Türkçe İ korunur).{% endcomment %}
+elle doldurulur. Başlıklar doğrudan büyük harf (Türkçe İ korunur).
+BİLİNÇLİ İSTİSNA (kullanıcı kararı, 14.11.2026 — S7): başkan hanesinin etiketi bağlamdan
+(`chair_role`) gelir — başkanın katılmadığı toplantıda "Kurula Başkanlık Eden Öğretmen Üye
+(md. 188)" (`documents._signing_panel`); verilmezse eski sabit metin "Başkan (Müdür Yrd.)"
+basılır, vekâletsiz çıktı bayt bayt aynıdır. Ad satırı yalnız adı taşır.{% endcomment %}
 {% block content %}
 <div class="doc-title">OKUL ÖĞRENCİ ÖDÜL VE DİSİPLİN KURULU KARARI</div>
 <div class="doc-subtitle">EK-1 · MEB Ortaöğretim Kurumları Yönetmeliği md. 163-170, md. 196</div>
@@ -109,7 +113,7 @@ elle doldurulur. Başlıklar doğrudan büyük harf (Türkçe İ korunur).{% end
   <tr>
     <td>
       <div class="name">{{ committee.chair.get_full_name|default:committee.chair.username }}</div>
-      <div class="role">Başkan (Müdür Yrd.)</div>
+      <div class="role">{{ chair_role|default:'Başkan (Müdür Yrd.)' }}</div>
     </td>
     {% for m in members %}{% if not m.is_substitute %}
       <td>

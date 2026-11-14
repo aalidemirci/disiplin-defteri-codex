@@ -163,24 +163,33 @@ def committee_quorum(committee: DisciplineCommittee, present: int) -> dict[str, 
     return {"full": full, "required": required, "present": present, "ok": present >= required}
 
 
-def _check_quorum(committee: DisciplineCommittee, attendee_count: int) -> None:
+def _check_quorum(
+    committee: DisciplineCommittee, attendee_count: int, *, chair_absent: bool = False
+) -> None:
     """md. 191/1: kurul üyelerin SALT ÇOĞUNLUĞUYLA toplanır.
 
-    Üye tam sayısı = başkan + asıl üyeler (md. 185/1). Başkan toplantıda sayılır
-    (yokluğunda md. 188 gereği öğretmen üye başkanlık eder, yedek katılır — o
-    yedek de katılımcı listesine girer).
+    Üye tam sayısı = başkan + asıl üyeler (md. 185/1) — vekâlette de DEĞİŞMEZ. Başkan
+    katıldıysa sayılır. Başkan katılmadıysa (`chair_absent`, S7) sayılmaz: md. 188 gereği
+    başkanlık eden öğretmen üye ve çağrılan yedek zaten katılımcı listesindedir.
     """
-    quorum = committee_quorum(committee, attendee_count + 1)
+    present = attendee_count + (0 if chair_absent else 1)
+    quorum = committee_quorum(committee, present)
     if attendee_count < 1 or not quorum["ok"]:
+        counted = (
+            "başkanlık eden üye dahil; katılmayan başkan sayılmaz"
+            if chair_absent
+            else "başkan dahil"
+        )
         raise ValueError(
             f"Toplantı yeter sayısı yok: kurul {quorum['full']} kişi, en az "
-            f"{quorum['required']} kişi (başkan dahil) katılmalı (md. 191/1 — üyelerin salt "
+            f"{quorum['required']} kişi ({counted}) katılmalı (md. 191/1 — üyelerin salt "
             "çoğunluğu)."
         )
 
 
-def _check_conflicts(case: DisciplineCase, members: Any) -> None:
-    """md. 191/2: şikâyetçi veya zarar gören üye kurula katılamaz (yerine yedek)."""
+def conflicted_ids(case: DisciplineCase) -> tuple[set[int], set[int]]:
+    """md. 191/2 kümesi: dosyada şikâyetçi / zarar gören (veya hakkında işlem yapılan)
+    kişilerin (personel id'leri, öğrenci id'leri)."""
     from apps.disiplin.models import ParticipantRole
 
     conflicted_users = set(
@@ -197,6 +206,173 @@ def _check_conflicts(case: DisciplineCase, members: Any) -> None:
         conflicted_users.add(case.petitioner_user_id)
     if case.petitioner_student_id is not None and case.petitioner_role == "OGRENCI":
         conflicted_students.add(case.petitioner_student_id)
+    return conflicted_users, conflicted_students
+
+
+# ---------------------------------------------------------------------------
+# VEKÂLET KAYDI (kullanıcı kararı, 14.11.2026 — S7) — md. 188, 191/2
+# ---------------------------------------------------------------------------
+def chair_conflicted(case: DisciplineCase, committee: DisciplineCommittee) -> bool:
+    """Kurul başkanı bu dosyada şikâyetçi ya da zarar gören mi? (md. 191/2)
+
+    Başkan da kurulun üyesidir (md. 185/1-a); "şikâyetçi olan veya zarar gören üye kurula
+    katılamaz" hükmü onu da kapsar.
+    """
+    return committee.chair_id in conflicted_ids(case)[0]
+
+
+def acting_chair_candidates(
+    committee: DisciplineCommittee, case: DisciplineCase | None = None
+) -> list[DisciplineCommitteeMember]:
+    """Başkanın yokluğunda kurula başkanlık edebilecek üyeler (md. 188).
+
+    md. 188/1: "Başkan bulunmadığında müdürün görevlendireceği ÖĞRETMEN ÜYELERDEN biri
+    kurula başkanlık eder." Dar yorum: kurulun ASIL öğretmen üyeleri (md. 185/1-b). Öğrenci
+    ve veli üye başkanlık edemez; yedek öğretmen üye metinde açıkça sayılmadığı için aday
+    değildir. Dosya verilirse o dosyada şikâyetçi / zarar gören öğretmen üye de çıkarılır
+    (md. 191/2 — kurula katılamayan üye başkanlık da edemez).
+    """
+    members = DisciplineCommitteeMember.objects.filter(
+        committee=committee,
+        member_type=CommitteeMemberType.TEACHER,
+        is_substitute=False,
+        member_user__isnull=False,
+    )
+    if case is None:
+        return list(members)
+    conflicted_users, _students = conflicted_ids(case)
+    return [m for m in members if m.member_user_id not in conflicted_users]
+
+
+def acting_chair_options(
+    committee: DisciplineCommittee, case: DisciplineCase | None = None
+) -> dict[str, Any]:
+    """Toplantı formları için vekâlet bilgisi: başkan, başkan bu dosyada engelli mi, adaylar."""
+    return {
+        "chair": committee.chair_id,
+        "chair_name": committee.chair.full_name,
+        "chair_conflicted": case is not None and chair_conflicted(case, committee),
+        "eligible": [
+            {
+                "member_id": m.pk,
+                "member_user": m.member_user_id,
+                "member_name": m.member_name,
+                "title": m.title,
+            }
+            for m in acting_chair_candidates(committee, case)
+        ],
+    }
+
+
+#: md. 188 son cümlesi + md. 191/2 — UYARI metni (engel değil; `meeting_chair_warnings`).
+NO_SUBSTITUTE_WARNING = (
+    "Başkan katılmadı ama katılanlar arasında yedek üye yok: üyenin başkanlık yaptığı "
+    "durumlarda yedek üye toplantıya katılır (md. 188); kurula katılmayan üyenin yerine yedek "
+    "üye çağrılır (md. 191/2). Yedek üye katıldıysa katılanlara ekleyin."
+)
+
+
+def meeting_chair_warnings(meeting: DisciplineMeeting) -> list[str]:
+    """Dosya toplantısının VEKÂLET KAYDI uyarıları (S7) — UYARIDIR, kaydı engellemez.
+
+    Başkan katılmadıysa ve katılanlar arasında yedek üye yoksa md. 188 son cümlesi hatırlatılır.
+    Engel değildir (S5/S6 çizgisi): yedek de mazeretli olabilir; yeter sayı ayrıca denetlenir.
+    """
+    if not meeting.chair_absent:
+        return []
+    if any(member.is_substitute for member in meeting.attendees.all()):
+        return []
+    return [NO_SUBSTITUTE_WARNING]
+
+
+#: Uygun asıl öğretmen üye yokken verilen ileti (kullanıcı kararı, 14.11.2026 — S7/K2).
+#: Vekil yalnız ASIL öğretmen üyedir (md. 188 — dar yorum kalır). İleti kurula öğretmen üye
+#: EKLEMEYİ önermez: kurulda iki öğretmen bulunur (md. 185/1-b), üçüncü asıl öğretmen üye
+#: tam sayıyı ve yeter sayıyı büyütür. Yalnız durum ve yönetmeliğin kendi yolu söylenir:
+#: md. 186 "Asıl üyeliğin boşalması veya üyenin özürlü ya da izinli bulunması hâlinde bu
+#: üyelik, sıraya göre yedek üyelerle doldurulur"; md. 187 "Asıl ve yedek üyeliklerin boşalması
+#: nedeniyle … kurulunun kurulamaması hâlinde açık bulunan üyelikler için yeniden gizli oyla
+#: seçim yapılır".
+_NO_CANDIDATE_HINT = (
+    "Kurulda bu toplantıya başkanlık edebilecek asıl öğretmen üye yok (md. 188: başkan "
+    "bulunmadığında kurula öğretmen üyelerden biri başkanlık eder; md. 191/2: şikâyetçi/zarar "
+    "gören üye kurula katılamaz). Asıl öğretmen üyeliği boşalmışsa bu üyelik sıraya göre yedek "
+    "üyeyle doldurulur (md. 186); asıl ve yedek üyelikler boşaldığı için kurul kurulamıyorsa "
+    "açık üyelikler için yeniden seçim yapılır (md. 187). Kurul kaydı bu duruma getirilmeden "
+    "toplantı kaydedilemez."
+)
+
+
+#: Başkanı şikâyetçi / zarar gören dosyada vekâlet kaydı yokken gösterilen KALICI uyarı
+#: (kullanıcı kararı, 14.11.2026 — S7/K4). Eski kayıt kendiliğinden değiştirilmez.
+_CHAIR_CONFLICT_CASE_WARNING = (
+    "Kurul başkanı bu dosyada şikâyetçi/zarar gören (md. 191/2); {action} — o zamana dek "
+    "belgelerde başkan hanesi boş basılır."
+)
+
+
+def case_chair_warnings(case: DisciplineCase) -> list[str]:
+    """Dosya ekranının VEKÂLET uyarısı (S7/K4) — UYARIDIR, hiçbir işlemi engellemez.
+
+    Kurula sevkli dosyada kurul başkanı şikâyetçi / zarar gören ise (md. 191/2) ve dosyanın
+    SON toplantı kaydı vekâletli değilse (toplantı kaydı yok ya da S7 öncesi / vekâletsiz
+    kayıt) kurul evrakında başkan hanesi boş basılır (`documents._signing_panel`,
+    `documents._case_committee`). Kayıt kendiliğinden DEĞİŞTİRİLMEZ; kullanıcı toplantıyı
+    "Başkan toplantıya katılmadı" kaydıyla (yeniden) kaydedince uyarı kalkar. Kurula sevk
+    edilmemiş dosyada kurul evrakı üretilmediğinden uyarı da yoktur.
+    """
+    from apps.disiplin.selectors import committee_for_case, committee_referred_on
+
+    if committee_referred_on(case) is None:
+        return []
+    committee = committee_for_case(case)
+    if committee is None or not chair_conflicted(case, committee):
+        return []
+    meeting = case.meetings.first()
+    if meeting is None:
+        action = "kurul toplantısını 'Başkan toplantıya katılmadı' kaydıyla kaydedin"
+    elif meeting.chair_absent and meeting.acting_chair_id is not None:
+        return []
+    else:
+        action = (
+            "toplantıyı 'Başkan toplantıya katılmadı' kaydıyla yeniden kaydedin (kaydı silip "
+            "doğrusunu girin)"
+        )
+    if case.closed_at is not None:
+        # Kapalı dosyada toplantı kaydı reddedilir; yapılamayan adımı önerme (§7.6).
+        action = f"önce dosyayı yeniden açın (aşama geri alma), sonra {action}"
+    return [_CHAIR_CONFLICT_CASE_WARNING.format(action=action)]
+
+
+def chair_conflict_message(
+    committee: DisciplineCommittee, case: DisciplineCase, *, has_candidate: bool
+) -> str:
+    """Şikâyetçi / zarar gören başkanın dosyasında vekâletsiz toplantı reddi (eyleme dönük)."""
+    message = (
+        f"Kurul başkanı {committee.chair.full_name} bu dosyada şikâyetçi/zarar gören kişi; "
+        "kurula katılamaz (md. 191/2). Toplantıyı 'Başkan toplantıya katılmadı' seçeneğiyle "
+        "kaydedin ve kurula başkanlık eden öğretmen üyeyi seçin (md. 188)."
+    )
+    return message if has_candidate else f"{message} {_NO_CANDIDATE_HINT}"
+
+
+def acting_chair_rule_message(*, has_candidate: bool, conflicted: bool = False) -> str:
+    """Başkanlık eden kişinin md. 188'e uymadığı durumun iletisi."""
+    reason = (
+        " Seçilen üye bu dosyada şikâyetçi/zarar gören olduğundan kurula katılamaz (md. 191/2)."
+        if conflicted
+        else ""
+    )
+    message = (
+        "Kurula başkanlık eden kişi kurulun asıl öğretmen üyelerinden biri olmalıdır (md. 188: "
+        f"başkan bulunmadığında müdürün görevlendireceği öğretmen üyelerden biri).{reason}"
+    )
+    return message if has_candidate else f"{message} {_NO_CANDIDATE_HINT}"
+
+
+def _check_conflicts(case: DisciplineCase, members: Any) -> None:
+    """md. 191/2: şikâyetçi veya zarar gören üye kurula katılamaz (yerine yedek)."""
+    conflicted_users, conflicted_students = conflicted_ids(case)
     names = [
         m.member_name
         for m in members
@@ -218,11 +394,19 @@ def record_meeting(
     attendee_member_ids: list[int],
     notes: str = "",
     event: DisciplineEvent | None = None,
+    chair_absent: bool = False,
+    acting_chair_member_id: int | None = None,
 ) -> DisciplineMeeting:
     """Bir dosya için kurul toplantısı kaydeder; katılanlar kurul üyelerinden seçilir.
 
     Katılımcılar aktif kurulun üyeleri olmalı (md. 191). Tutanak/PDF veriyi
     buradan çeker.
+
+    VEKÂLET KAYDI (S7, 14.11.2026): başkan bu kayıtta katılımcı satırı değildir, katıldığı
+    varsayılır. `chair_absent=True` ise başkan katılmamıştır ve `acting_chair_member_id`
+    kurula başkanlık eden asıl öğretmen üyedir (md. 188) — katılanlar arasında olmalıdır.
+    Başkan dosyada şikâyetçi / zarar gören ise toplantı ANCAK böyle kaydedilir (md. 191/2).
+    Yeter sayıda katılmayan başkan sayılmaz (md. 191/1).
     """
     from apps.disiplin.selectors import committee_referred_on, get_active_committee
 
@@ -255,10 +439,41 @@ def record_meeting(
     unknown = set(attendee_member_ids) - valid_ids
     if unknown:
         raise ValueError("Katılımcılar aktif kurulun üyeleri arasından seçilmelidir.")
-    _check_quorum(committee, len(valid_ids))
+    candidates = acting_chair_candidates(committee, case)
+    if not chair_absent:
+        if acting_chair_member_id is not None:
+            raise ValueError(
+                "Başkanlık eden üye yalnız 'Başkan toplantıya katılmadı' işaretliyken seçilir."
+            )
+        if chair_conflicted(case, committee):
+            raise ValueError(
+                chair_conflict_message(committee, case, has_candidate=bool(candidates))
+            )
     _check_conflicts(case, committee.members.filter(pk__in=valid_ids))
+    if chair_absent:
+        if acting_chair_member_id is None:
+            hint = "" if candidates else f" {_NO_CANDIDATE_HINT}"
+            raise ValueError(
+                "Başkan toplantıya katılmadıysa kurula başkanlık eden öğretmen üye seçilmelidir "
+                f"(md. 188).{hint}"
+            )
+        if acting_chair_member_id not in {m.pk for m in candidates}:
+            raise ValueError(acting_chair_rule_message(has_candidate=bool(candidates)))
+        if acting_chair_member_id not in valid_ids:
+            raise ValueError(
+                "Başkanlık eden üye toplantıya katılanlar arasında olmalıdır; katılan üyeler "
+                "listesinde işaretleyin."
+            )
+    _check_quorum(committee, len(valid_ids), chair_absent=chair_absent)
 
-    meeting = DisciplineMeeting(case=case, event=event, meeting_date=meeting_date, notes=notes)
+    meeting = DisciplineMeeting(
+        case=case,
+        event=event,
+        meeting_date=meeting_date,
+        notes=notes,
+        chair_absent=chair_absent,
+        acting_chair_id=acting_chair_member_id if chair_absent else None,
+    )
     meeting.full_clean(exclude=["event"])
     meeting.save()
     if valid_ids:

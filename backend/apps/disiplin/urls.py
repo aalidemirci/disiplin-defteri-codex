@@ -29,6 +29,11 @@ urlpatterns = [
         name="discipline-committee",
     ),
     path(
+        "discipline/committee/acting-chair-options/",
+        views.DisciplineCommitteeActingChairOptionsView.as_view(),
+        name="discipline-committee-acting-chair-options",
+    ),
+    path(
         "discipline/committee/chair/",
         views.DisciplineCommitteeChairView.as_view(),
         name="discipline-committee-chair",

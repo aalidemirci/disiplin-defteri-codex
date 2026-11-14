@@ -50,7 +50,14 @@
    bloğu bölünmez, kutu en az 4 cm; boş mod ve "Yer" varsayılanı DEĞİŞMEDİ) değiştirildi.
    Karar defterinde (dosya görüşme tutanağı) kararlar KARAR NUMARASI sırasıyla dizilir ve
    uzaklaştırmada gün sayısı basılır (`documents._council_minutes_context`; dosyasız tutanak
-   etkilenmez). `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
+   etkilenmez).
+   **Kullanıcı kararı 14.11.2026 (S7 — vekâlet) — OYS'ye "geri döndürme":**
+   `ek1_committee_decision` ve `_defense_record_committee_grid` (Form-11 / md. 195 ızgarası)
+   başkan hanesi etiketini bağlamdan alır (`chair_role`; verilmezse eski sabit "Başkan
+   (Müdür Yrd.)"); `council_meeting_minutes` başkanın katılmadığı toplantıda "(Başkan)"
+   işaretini basmaz (`acting_chair`) ve katılanlar tablosunun altına `chair_absence_note`
+   cümlesini ekler. Vekâletsiz çıktı üçünde de bayt bayt aynıdır (testli) — kaldırma.
+   `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.
 4. **Test/lint sadece Docker'da koşar.** Host'ta Python veya Node yok (§4).
@@ -316,6 +323,22 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   `selectors.decisions.PENALTY_SEVERITY`. Cezasız karar kural dışı.
 - Dosya başına öğrenciye **tek canlı karar**. Puan ve onay/itiraz mercii cezadan
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
+- **Vekâlet kaydı (md. 188, 191/2 — S7, 14.11.2026):** kurul başkanı toplantıya katılmadıysa
+  toplantı `chair_absent` ile kaydedilir ve kurula kurulun ASIL ÖĞRETMEN üyelerinden biri
+  başkanlık eder (`services.committee.acting_chair_candidates`; yedek, veli ve öğrenci üye
+  başkanlık edemez — dar yorum, kullanıcı kararı). Uygun üye yoksa ileti kurula üye eklemeyi
+  ÖNERMEZ, md. 186-187'yi söyler. Başkan dosyada şikâyetçi / zarar gören ise o dosyanın YENİ
+  toplantısı (dosya toplantısı ve dosya görüşme tutanağı) ancak vekâletle kaydedilir; kayıtlı
+  tutanağın düzeltilmesinde vekâlet zorlanmaz (eski tutanak kilitlenmez). Katılmayan başkan
+  yeter sayıya girmez (tam sayı değişmez); sayılamayan "bugünkü başkan" satırı `chair_skipped`
+  ile gösterilir ve mevcut toplantının düzeltilmesini engellemez. Belgeler: vekâletli
+  toplantıda EK-1, Form-11, md. 195 tutanağı ve karar defteri başkanlık eden üyeyi TEK
+  ifadeyle basar (`documents.ACTING_CHAIR_ROLE`). Şikâyetçi / zarar gören başkan dosyanın
+  BÜTÜN kurul evrakından çıkar (`documents._signing_panel`, `documents._case_committee`):
+  vekâletli toplantı kaydı varsa başkanlık eden üye, yoksa boş (noktalı) hane; ceza
+  tebliğlerinde tebliğ eden hanesi her durumda boş. Başkan şikâyetçi / zarar gören değilse
+  bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
+  (`case_chair_warnings`, `council_chair_warnings`). Onur Kurulu (md. 182) kapsam dışıdır.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
   iade eder / (iade sonrası) ilçeye sevk eder.
 - **Özgün ceza ve iade tarihi saklanır** (S11b — 14.11.2026): ceza üst kurulca (onayda)
@@ -435,8 +458,9 @@ Etki × yoğunluk sırasıyla:
 - **Yeni Python bağımlılığı eklersen** `packaging/pyinstaller/disiplin_defteri.spec`
   içindeki `hiddenimports`'u da güncelle (borç K7) — yoksa paket açılmaz, testler
   bunu yakalamaz.
-- **Migration:** `okul` 0006'da, `disiplin` 0016'da (0014 dosya numarası sayacı, 0015
-  md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi). Veri göçleri
+- **Migration:** `okul` 0006'da, `disiplin` 0017'de (0014 dosya numarası sayacı, 0015
+  md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi, 0017 toplantıda
+  başkana vekâlet — yalnız şema). Veri göçleri
   yalnız DÜZ alan okur: parola kuruluysa açılışta `migrate` koşarken anahtar henüz yoktur —
   şifreli alan okuyan/yazan göç yazma (kilitli kip testi:
   `test_s11_gocleri_kilitli_kipte_sifreli_alana_dokunmadan_kosar`). Şema değişikliği şifreli

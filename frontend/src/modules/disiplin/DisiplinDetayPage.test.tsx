@@ -38,6 +38,8 @@ const dapi = vi.hoisted(() => ({
   addEvent: vi.fn(),
   deleteWarning: vi.fn(),
   deleteMeeting: vi.fn(),
+  recordMeeting: vi.fn(),
+  getActingChairOptions: vi.fn(),
 }));
 // "Kurul & Karar" sekmesindeki komşu bölümler kendi testlerinde sınanır; burada
 // yalnız kaç kez (yeniden) bağlandıkları izlenir — toplantı silinince karar bölümü
@@ -76,6 +78,8 @@ vi.mock("./DecisionsSection", async () => {
   };
 });
 vi.mock("./PeriodsSection", () => ({ default: () => <div data-testid="sureler-bolumu" /> }));
+// Evrak bölümü kendi testinde sınanır; burada yalnız sekmenin üstündeki uyarı izlenir (K4).
+vi.mock("./DocumentsSection", () => ({ default: () => <div data-testid="evrak-bolumu" /> }));
 
 import DisiplinDetayPage from "./DisiplinDetayPage";
 
@@ -450,6 +454,9 @@ const TOPLANTI: DisciplineMeeting = {
   notes: "",
   attendees: [1, 2],
   attendee_names: ["Kemal Aksoy", "Selin Rehber"],
+  chair_absent: false,
+  acting_chair: null,
+  acting_chair_name: "",
 };
 
 function bosListeler() {
@@ -591,6 +598,189 @@ describe("DisiplinDetayPage — dosya toplantısı (A2)", () => {
     // …EK-1/karar bölümü verisi (yeniden bağlanarak) ve dosya detayı da tazelenir.
     await waitFor(() => expect(bolum.decisionsMounted).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(dapi.getCase).toHaveBeenCalledTimes(2));
+  });
+});
+
+// Kullanıcı kararı, 14.11.2026 — S7 (VEKÂLET KAYDI): başkan katılmadıysa kurula öğretmen
+// üyelerden biri başkanlık eder (md. 188); şikâyetçi / zarar gören başkan kurula katılamaz
+// (md. 191/2) — o dosyada kutu zorunludur.
+describe("DisiplinDetayPage — toplantıda başkan vekâleti (S7)", () => {
+  const KURUL = {
+    id: 1,
+    school_year: 1,
+    chair: 70,
+    chair_name: "Ayşe Başkan",
+    notes: "",
+    members: [
+      {
+        id: 11,
+        member_type: "TEACHER",
+        member_type_display: "Öğretmen",
+        is_substitute: false,
+        order: 0,
+        title: "",
+        member_name: "İpek Öğretmen",
+        member_user: 71,
+        member_student: null,
+      },
+      {
+        id: 12,
+        member_type: "TEACHER",
+        member_type_display: "Öğretmen",
+        is_substitute: false,
+        order: 1,
+        title: "",
+        member_name: "Ilgaz Şahin",
+        member_user: 72,
+        member_student: null,
+      },
+    ],
+  };
+  const SECENEKLER = {
+    chair: 70,
+    chair_name: "Ayşe Başkan",
+    chair_conflicted: false,
+    eligible: [
+      { member_id: 11, member_user: 71, member_name: "İpek Öğretmen", title: "" },
+      { member_id: 12, member_user: 72, member_name: "Ilgaz Şahin", title: "" },
+    ],
+  };
+
+  async function dialogAc(user: ReturnType<typeof userEvent.setup>) {
+    bosListeler();
+    dapi.getCommittee.mockResolvedValue({ committee: KURUL });
+    dapi.recordMeeting.mockResolvedValue({ ...TOPLANTI, id: 62 });
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    await user.click(await screen.findByRole("button", { name: /Toplantı kaydet/ }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByRole("checkbox", { name: /İpek Öğretmen/ });
+    return dialog;
+  }
+
+  it("şikâyetçi başkanda kutu zorunlu ve nedeni yazılıdır; vekil seçilmeden kaydedilmez", async () => {
+    const user = userEvent.setup();
+    dapi.getActingChairOptions.mockResolvedValue({ ...SECENEKLER, chair_conflicted: true });
+    const dialog = await dialogAc(user);
+
+    const kutu = await within(dialog).findByRole("checkbox", {
+      name: /Başkan toplantıya katılmadı/,
+    });
+    expect(kutu).toBeChecked();
+    expect(kutu).toBeDisabled();
+    expect(within(dialog).getByText(/kurula katılamaz \(md\. 191\/2\)/)).toBeInTheDocument();
+    expect(dapi.getActingChairOptions).toHaveBeenCalledWith(5);
+
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+    expect(dapi.recordMeeting).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/başkanlık eden öğretmen üyeyi seçin/)).toBeInTheDocument();
+
+    await user.selectOptions(
+      within(dialog).getByLabelText(/Başkanlık eden öğretmen üye/),
+      "İpek Öğretmen",
+    );
+    // Başkanlık eden üye katılanlar arasına alınır ve çıkarılamaz.
+    const vekilKutusu = within(dialog).getByRole("checkbox", { name: /İpek Öğretmen/ });
+    expect(vekilKutusu).toBeChecked();
+    expect(vekilKutusu).toBeDisabled();
+    await user.click(within(dialog).getByRole("checkbox", { name: /Ilgaz Şahin/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(dapi.recordMeeting).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({
+          attendee_member_ids: [11, 12],
+          chair_absent: true,
+          acting_chair_member_id: 11,
+        }),
+      ),
+    );
+  });
+
+  it("başkan engelli değilken kutu isteğe bağlıdır; işaretsiz kayıt vekâlet alanı göndermez", async () => {
+    const user = userEvent.setup();
+    dapi.getActingChairOptions.mockResolvedValue(SECENEKLER);
+    const dialog = await dialogAc(user);
+
+    const kutu = await within(dialog).findByRole("checkbox", {
+      name: /Başkan toplantıya katılmadı/,
+    });
+    expect(kutu).not.toBeChecked();
+    expect(kutu).toBeEnabled();
+    expect(within(dialog).queryByLabelText(/Başkanlık eden öğretmen üye/)).toBeNull();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /İpek Öğretmen/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(dapi.recordMeeting).toHaveBeenCalledTimes(1));
+    const body = dapi.recordMeeting.mock.calls[0][1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty("chair_absent");
+    expect(body).not.toHaveProperty("acting_chair_member_id");
+  });
+
+  // K4 (14.11.2026): eski kayıtta boş hane kalır + kalıcı uyarı (sunucudan gelen alan).
+  it("başkanı şikâyetçi dosyada vekâlet kaydı yoksa Kurul ve Evraklar sekmesinde kalıcı uyarı", async () => {
+    bosListeler();
+    const user = userEvent.setup();
+    const UYARI =
+      "Kurul başkanı bu dosyada şikâyetçi/zarar gören (md. 191/2); toplantıyı 'Başkan toplantıya katılmadı' kaydıyla yeniden kaydedin — o zamana dek belgelerde başkan hanesi boş basılır.";
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI], chair_warnings: [UYARI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    const kurulda = await screen.findByText(UYARI);
+    expect(kurulda.closest('[role="status"]')).not.toBeNull();
+    await user.click(screen.getByRole("tab", { name: /Evraklar/ }));
+    const evrakta = await screen.findByText(UYARI);
+    expect(evrakta.closest('[role="status"]')).not.toBeNull();
+  });
+
+  it("uyarı alanı boşsa vekâlet uyarısı gösterilmez", async () => {
+    bosListeler();
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI], chair_warnings: [] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    await screen.findByText(/Henüz kurul toplantısı kaydedilmedi/);
+    expect(screen.queryByText(/başkan hanesi boş basılır/)).toBeNull();
+  });
+
+  it("uygun öğretmen üye yoksa durumu ve dayanağı söyler; üye eklemeyi önermez (K2)", async () => {
+    const user = userEvent.setup();
+    dapi.getActingChairOptions.mockResolvedValue({
+      ...SECENEKLER,
+      chair_conflicted: true,
+      eligible: [],
+    });
+    const dialog = await dialogAc(user);
+    expect(
+      await within(dialog).findByText(/başkanlık edebilecek asıl öğretmen üye yok/),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/md\. 186/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/üye ekleyin/)).toBeNull();
+  });
+
+  it("toplantı ayrıntısında 'Başkan katılmadı; … başkanlık etti (md. 188)' satırı görünür", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([
+      {
+        ...TOPLANTI,
+        chair_absent: true,
+        acting_chair: 11,
+        acting_chair_name: "İpek Öğretmen",
+        chair_warnings: ["Başkan katılmadı ama katılanlar arasında yedek üye yok."],
+      },
+      { ...TOPLANTI, id: 63, meeting_date: "2026-05-25" },
+    ]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    // Yalnız vekâletli toplantıda bir kez.
+    expect(
+      await screen.findAllByText(/Başkan katılmadı; İpek Öğretmen başkanlık etti \(md\. 188\)/),
+    ).toHaveLength(1);
+    // md. 188 son cümlesi: yedek çağrılmadıysa uyarılır (engel değil).
+    expect(screen.getAllByText(/katılanlar arasında yedek üye yok/)).toHaveLength(1);
   });
 });
 
