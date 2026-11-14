@@ -106,7 +106,7 @@ yazıldığını anlamıyorsan cevap çoğu kez "OYS'de öyleydi ve pariteyi kor
 
 **Durum:** F0-F5 fazlarının hepsi tamamlandı. CI'da Linux `.deb` (debian:11 ve
 debian:12'ye temiz kurulum) ve Windows `setup.exe` + `portable.zip` uçtan uca
-yeşil koştu. Sürüm: `VERSION` → `2026.10.0-beta.2` (CalVer; ekim 2026 kurul işleyişi Aşama 1 + öğrenci aktarımı saha düzeltmeleri).
+yeşil koştu. Sürüm: `VERSION` → `2026.11.0-beta.1` (CalVer; kasım 2026 yedekleme düzeltmesi + 14.11.2026 saha denemesi kararları S1-S13: vekâlet kaydı, toplantı zorunluluğu, şema göçleri 0014-0017).
 
 ---
 
