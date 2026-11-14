@@ -596,6 +596,21 @@ class DisciplineCaseViewSet(viewsets.GenericViewSet[DisciplineCase]):
             update_decision_narrative(decision, fields=data, **kwargs)
         return Response(DecisionSerializer(decision).data)
 
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"decisions/(?P<did>[0-9]+)/recompile-prior-penalties",
+    )
+    def decision_recompile_prior_penalties(
+        self, request: Request, pk: str | None = None, did: str = ""
+    ) -> Response:
+        """S11c — EK-1 "önceki cezalar" özetini güncel durumdan yeniden derler (açık dosya)."""
+        case = _get_case_or_404(pk)
+        decision = _get_decision_or_404(case, did)
+        with _service_errors():
+            services.recompile_prior_penalties(decision)
+        return Response(DecisionSerializer(decision).data)
+
     @action(detail=True, methods=["get", "post"], url_path=r"decisions/(?P<did>[0-9]+)/appeals")
     def decision_appeals(self, request: Request, pk: str | None = None, did: str = "") -> Response:
         case = _get_case_or_404(pk)

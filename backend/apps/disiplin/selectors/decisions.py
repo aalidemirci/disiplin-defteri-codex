@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from django.db.models import QuerySet, Sum
+from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 
 from apps.disiplin import discipline_periods
@@ -46,6 +46,76 @@ def penalties_in_force(qs: QuerySet[DisciplineDecision]) -> QuerySet[DisciplineD
         .exclude(penalty_type=PenaltyType.NO_PENALTY)
         .exclude(pk__in=overturned)
     )
+
+
+def compile_prior_penalties(
+    student_id: int,
+    *,
+    exclude_case_id: int,
+    on: date,
+    before: DisciplineDecision | None = None,
+    signature: bool = False,
+) -> str:
+    """EK-1 'şimdiye kadar aldığı cezalar' — öğrencinin YÜRÜRLÜKTEKİ önceki cezaları.
+
+    Onaysız, "ceza verilmesine yer olmadığı", itirazla bozulmuş ve md. 171/2 ile
+    kaldırılmış kararlar yazılmaz — md. 171/3: kaldırılan ceza için "disiplin
+    cezası bulunmadığı bildirilir". Aynı dosyanın kararları hariçtir.
+
+    "Önce"lik TARİH + KAYIT SIRASIDIR (S11c): `on` (kararın tarihi) gününden önce
+    verilmiş cezalar ile aynı gün verilip `before` kararından ÖNCE kaydedilmiş
+    (`created_at`, eşitse `pk`) cezalar derlenir. Sonradan verilen ceza "şimdiye kadar
+    aldığı" ceza değildir ve eski kararın özetini bayatlatmaz; aynı toplantıda karara
+    bağlanan iki dosya birbirini karşılıklı "önceki ceza" sayamaz. `before` verilmezse
+    (karar henüz kaydedilmedi) aynı günün mevcut kararlarının hepsi öncedir.
+
+    `signature=True`: karar NO'SUZ imza ("gg.aa.yyyy — Ceza türü") — bayatlık izi budur
+    (`prior_penalties_compiled`). Karar numarası evrak üretiminde sonradan atanabilir
+    (`ensure_decision_no`); numaranın gelmesi cezanın değiştiği anlamına gelmez.
+    """
+    earlier = Q(decision_date__lt=on)
+    if before is None or before.pk is None:
+        earlier |= Q(decision_date=on)
+    else:
+        earlier |= Q(decision_date=on) & (
+            Q(created_at__lt=before.created_at) | Q(created_at=before.created_at, pk__lt=before.pk)
+        )
+    prior = penalties_in_force(
+        DisciplineDecision.objects.filter(earlier, student_id=student_id).exclude(
+            case_id=exclude_case_id
+        )
+    ).order_by("decision_date", "created_at", "pk")
+    lines = [
+        f"{d.decision_date:%d.%m.%Y} — {d.get_penalty_type_display()}"
+        + (f" (karar no {d.decision_no})" if d.decision_no and not signature else "")
+        for d in prior
+    ]
+    return "\n".join(lines)
+
+
+def prior_penalties_summary_is_stale(decision: DisciplineDecision) -> bool:
+    """EK-1 "önceki cezalar" özeti güncel durumu yansıtmıyor mu (S11c, 14.11.2026).
+
+    Özet (`prior_penalties_summary`) karar anında derlenen, kullanıcının düzenleyebildiği
+    bir ANLIK KOPYADIR; sonradan itirazla bozulan, md. 171/2 ile kaldırılan, değişen ya
+    da onaylanan bir önceki ceza kopyaya yansımaz. Ölçüt kullanıcının metni DEĞİLDİR:
+    kopyanın derlendiği andaki karar no'suz imza (`prior_penalties_compiled`) güncel
+    imzadan farklıysa bayattır — serbest düzenleme ve önceki karara sonradan numara
+    atanması tek başına bayatlatmaz. Bu kararın TARİHİ düzenlenirse (`update_decision`)
+    iz bilinçli olarak yenilenmez: "önceki" kümesi yeni tarihe göre değiştiyse uyarı
+    çıkar. Otomatik yeniden derleme yoktur (`services.recompile_prior_penalties`
+    kullanıcı onayıyla). Silinmiş (çöp kutusundaki) karar için uyarı üretilmez.
+    """
+    if decision.deleted_at is not None:
+        return False
+    current = compile_prior_penalties(
+        decision.student_id,
+        exclude_case_id=decision.case_id,
+        on=decision.decision_date,
+        before=decision,
+        signature=True,
+    )
+    return current != decision.prior_penalties_compiled
 
 
 # md. 166 "bir derece ağır ceza" sıralaması (md. 164 fıkra sırası). Cezasız karar yok.

@@ -8,8 +8,10 @@ OYS `services/discipline_cases.py`'den temizlenerek taşındı (tasarım §4.4):
   `is_override` + `override_reason` izini taşımaya devam eder).
 - `petitioner_parent` yolu kalktı: VELI rolü ilgili öğrenci FK'sına bağlanır.
 - `assigned_guidance` FK → `assigned_guidance_name` metni (sinyalsiz rehberlik).
-- `generate_case_no` AYNEN (aktif ders yılı prefix'i + select_for_update —
-  SQLite'ta kilit no-op'tur; tek yazar olduğundan kabul, tasarım §4.2).
+- `generate_case_no`: aktif ders yılı prefix'i + select_for_update (SQLite'ta kilit
+  no-op'tur; tek yazar olduğundan kabul, tasarım §4.2). Kullanıcı kararı 14.11.2026
+  (S11a): sıra artık mevcut dosyalardan DEĞİL ders yılının kalıcı sayacından gelir
+  (`CaseNumberCounter`) — imha edilen dosyanın numarası yeniden verilmez.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.disiplin.models import (
+    CaseNumberCounter,
     CaseStage,
     DisciplineAttachment,
     DisciplineCase,
@@ -42,13 +45,21 @@ _WARNING_BLOCK_MARK = "md. 157/7-e engeli aşıldı: "
 _OVERRIDE_REASON_MAX = 255  # DisciplineEvent.override_reason max_length
 
 
+@transaction.atomic
 def generate_case_no() -> str:
     """Sıradaki dosya no: '{ders yılı adı}-{4 haneli sıra}' (örn. 2025-2026-0001).
 
-    Numara AKTİF ders yılına bağlıdır; eski biçimli numaralar regex filtresiyle
-    izole edilir. Soft-delete edilmiş kayıtlar da sırayı tükettiğinden (case_no
-    UNIQUE) `all_objects` üzerinden bakılır. Transaction içinde (create_case)
-    çağrılmalıdır.
+    Numara AKTİF ders yılına bağlıdır. Sıra, ders yılının KALICI sayacından gelir
+    (`CaseNumberCounter`, kullanıcı kararı 14.11.2026 — S11a): sayaç aynı işlemde
+    artırılır ve yalnız ileri gider; md. 157/7 imhası (hard-delete) ve soft-delete
+    sayaca dokunmadığından kullanılmış numara bir daha verilmez. Her ders yılı kendi
+    sayacından bağımsız sayar; yıl devrinde açılan yeni yılın sayacı ilk dosyada 0'dan
+    oluşur (ders yılı adı değiştirilemez, ders yılı silinemez — uçları yok).
+
+    Sigorta: sayaç, tablodaki en büyük numaranın gerisindeyse (elle düzeltilmiş veri,
+    aynı adla yeniden açılmış yıl) tabloya yetişir — `case_no` UNIQUE çakışması olmaz.
+    Soft-delete edilmiş dosyalar da sayılır (`all_objects`). Çağıran işlem geri
+    sarılırsa (dosya açılamadı) sayaç artışı da geri sarılır; numara tüketilmez.
     """
     year = okul_selectors.active_school_year()
     if year is None:
@@ -57,14 +68,18 @@ def generate_case_no() -> str:
             "Ayarlar'dan bir ders yılını etkinleştirin."
         )
     prefix = f"{year.name}-"
+    counter, _created = CaseNumberCounter.objects.select_for_update().get_or_create(
+        school_year=year
+    )
     last = (
-        DisciplineCase.all_objects.select_for_update()
-        .filter(case_no__regex=rf"^{re.escape(prefix)}\d{{4}}$")
+        DisciplineCase.all_objects.filter(case_no__regex=rf"^{re.escape(prefix)}\d{{4}}$")
         .order_by("-case_no")
         .first()
     )
-    seq = (int(last.case_no.rsplit("-", 1)[1]) + 1) if last else 1
-    return f"{prefix}{seq:04d}"
+    existing = int(last.case_no.rsplit("-", 1)[1]) if last else 0
+    counter.last_seq = max(counter.last_seq, existing) + 1
+    counter.save(update_fields=["last_seq"])
+    return f"{prefix}{counter.last_seq:04d}"
 
 
 @transaction.atomic

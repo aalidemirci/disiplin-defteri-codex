@@ -366,3 +366,35 @@ class DisciplineAttachment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.original_filename} ({self.get_file_type_display()})"
+
+
+class CaseNumberCounter(models.Model):
+    """Ders yılı başına KALICI dosya numarası sayacı (kullanıcı kararı 14.11.2026 — S11a).
+
+    `last_seq`, o ders yılında bugüne dek VERİLMİŞ en büyük sıra numarasıdır. Yalnız
+    ileri gider: md. 157/7 imhası (hard-delete) ve soft-delete sayaca dokunmaz, böylece
+    kullanılmış bir dosya numarası bir daha verilmez (`services.generate_case_no`).
+
+    Bilinçli olarak `BaseModel` DEĞİL: soft-delete edilebilen bir sayaç varsayılan
+    yöneticiden gizlenir ve numaralar baştan verilirdi. Ders yılı PROTECT ile bağlıdır;
+    ders yılı silme ucu yoktur, sayaç yılla birlikte yaşar.
+    """
+
+    school_year = models.OneToOneField(
+        "okul.SchoolYear",
+        on_delete=models.PROTECT,
+        related_name="case_number_counter",
+        verbose_name="ders yılı",
+    )
+    last_seq = models.PositiveIntegerField(
+        "verilen son sıra no",
+        default=0,
+        help_text="Bu ders yılında verilmiş en büyük dosya sıra numarası; imhada azalmaz.",
+    )
+
+    class Meta:
+        verbose_name = "dosya numarası sayacı"
+        verbose_name_plural = "dosya numarası sayaçları"
+
+    def __str__(self) -> str:
+        return f"{self.school_year_id}: {self.last_seq}"

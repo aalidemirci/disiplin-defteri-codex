@@ -8,6 +8,7 @@ honors LITE'dır (ProposalWindow/FormDeliveryStatus alınmadı — tasarım §4.
 
 from apps.disiplin.models.cases import (
     AttachmentType,
+    CaseNumberCounter,
     CaseStage,
     DisciplineAttachment,
     DisciplineCase,
@@ -80,6 +81,7 @@ __all__ = [
     "AppealResult",
     "ApprovalAuthority",
     "AttachmentType",
+    "CaseNumberCounter",
     "CaseStage",
     "CommitteeMemberType",
     "CouncilAgendaItem",

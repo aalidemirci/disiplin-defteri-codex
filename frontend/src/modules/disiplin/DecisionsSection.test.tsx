@@ -21,6 +21,7 @@ const dapi = vi.hoisted(() => ({
   deleteDecision: vi.fn(),
   restoreDecision: vi.fn(),
   updateDecisionNarrative: vi.fn(),
+  recompilePriorPenalties: vi.fn(),
   approveDecision: vi.fn(),
   confirmESchoolEntry: vi.fn(),
   createDecision: vi.fn(),
@@ -181,6 +182,253 @@ describe("DecisionsSection — EK-1 anlatı", () => {
     expect(screen.getByLabelText(/Doğum tarihi/)).toBeDisabled();
     expect(screen.getByLabelText(/Kurul kanaati/)).toBeDisabled();
     expect(screen.queryByRole("button", { name: /Anlatıyı kaydet/ })).not.toBeInTheDocument();
+  });
+});
+
+// S11c (kullanıcı kararı 14.11.2026): EK-1 "önceki cezalar" özeti anlık kopyadır;
+// kaynak cezalar değişince uyarı + onaylı "Yeniden derle" — otomatik derleme yok.
+describe("DecisionsSection — önceki cezalar özeti güncel değil (S11c)", () => {
+  const bayat = {
+    prior_penalties_summary: "22.05.2026 — Kınama\nGenel durumu iyidir.",
+    prior_penalties_stale: true,
+  };
+  const ozetAlani = () =>
+    screen.getByLabelText(/Şimdiye kadar aldığı cezalar ve genel durumu/) as HTMLTextAreaElement;
+
+  it("bayat özette uyarı çıkar; onaylanınca yeniden derlenir, alan ve liste tazelenir", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    dapi.recompilePriorPenalties.mockResolvedValue(
+      makeDecision({ prior_penalties_summary: "", prior_penalties_stale: false }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/Özet güncel değil/);
+    await user.click(screen.getByRole("button", { name: "Yeniden derle" }));
+    // Onay sorulmadan sunucuya gidilmez: elle düzenleme silinecek.
+    const onay = await screen.findByRole("dialog");
+    expect(onay).toHaveTextContent(/[Ee]lle yaptığınız düzenlemeler silinir/);
+    expect(dapi.recompilePriorPenalties).not.toHaveBeenCalled();
+    await user.click(within(onay).getByRole("button", { name: "Yeniden derle" }));
+
+    await waitFor(() => expect(dapi.recompilePriorPenalties).toHaveBeenCalledWith(1, 5));
+    await waitFor(() => expect(ozetAlani().value).toBe(""));
+    expect(screen.queryByText(/Özet güncel değil/)).not.toBeInTheDocument();
+    // §7.5: karar verisi tazelenir (ilk yükleme + yeniden derleme sonrası).
+    await waitFor(() => expect(dapi.listDecisions).toHaveBeenCalledTimes(2));
+    // Panel açık kalır; yeniden derlenen metin oto-kayıtla geri ezilmez.
+    expect(screen.getByRole("button", { name: /Anlatıyı kaydet/ })).toBeInTheDocument();
+    expect(dapi.updateDecisionNarrative).not.toHaveBeenCalled();
+  });
+
+  it("onay verilmezse özet değişmez", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+    await user.click(screen.getByRole("button", { name: "Yeniden derle" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: /Vazgeç|İptal/ }),
+    );
+
+    expect(dapi.recompilePriorPenalties).not.toHaveBeenCalled();
+    expect(ozetAlani().value).toBe(bayat.prior_penalties_summary);
+    expect(screen.getByRole("status")).toHaveTextContent(/Özet güncel değil/);
+  });
+
+  it("sunucu reddederse hata gösterilir, uyarı kalır", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    dapi.recompilePriorPenalties.mockRejectedValue(
+      new ApiError(400, "invalid", "Dosya kapalı: özet yeniden derlenemez."),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+    await user.click(screen.getByRole("button", { name: "Yeniden derle" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Yeniden derle" }),
+    );
+
+    expect(await screen.findByText(/Dosya kapalı: özet yeniden derlenemez\./)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Özet güncel değil/);
+    expect(ozetAlani().value).toBe(bayat.prior_penalties_summary);
+  });
+
+  it("güncel özette uyarı ve düğme yoktur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ prior_penalties_stale: false })],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+
+    expect(screen.queryByText(/Özet güncel değil/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yeniden derle" })).not.toBeInTheDocument();
+  });
+
+  it("kapalı dosyada yalnız bilgi verilir, düğme yoktur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    const user = userEvent.setup();
+    renderSection(makeCase({ closed_at: "2026-04-01", current_stage: "CLOSED" }));
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/Özet güncel değil/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Dosya kapalı/);
+    expect(screen.queryByRole("button", { name: "Yeniden derle" })).not.toBeInTheDocument();
+  });
+
+  // Gözden geçirme 14.11.2026: EK-1, anlatı paneli hiç açılmadan Evrak bölümünden
+  // üretilebilir — uyarı yalnız panelde kalırsa kullanıcı bayat özeti görmeden basar.
+  it("bayat özet karar KARTINDA da uyarılır (panel açılmadan)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    renderSection();
+
+    await screen.findByText("Zeynep Yılmaz"); // yükleme iskeleti de role=status taşır
+    const uyari = screen.getByRole("status");
+    expect(uyari).toHaveTextContent(/önceki cezalar.*özeti güncel değil/);
+    expect(uyari).toHaveTextContent(/EK-1 anlatı.*panelinden yeniden derleyebilirsiniz/);
+  });
+
+  it("özet boşken de (sonradan onaylanan önceki ceza) kart uyarısı çıkar", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ prior_penalties_summary: "", prior_penalties_stale: true })],
+      behavior_points: {},
+    });
+    renderSection();
+
+    await screen.findByText("Zeynep Yılmaz");
+    expect(screen.getByRole("status")).toHaveTextContent(/özeti güncel değil/);
+  });
+
+  it("kapalı dosyada kart uyarısı yalnız bilgidir", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    renderSection(makeCase({ closed_at: "2026-04-01", current_stage: "CLOSED" }));
+
+    await screen.findByText("Zeynep Yılmaz"); // yükleme iskeleti de role=status taşır
+    const uyari = screen.getByRole("status");
+    expect(uyari).toHaveTextContent(/Dosya kapalı olduğundan özet yeniden derlenemez/);
+    expect(uyari).not.toHaveTextContent(/yeniden derleyebilirsiniz/);
+  });
+
+  it("güncel özette kart uyarısı yoktur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ prior_penalties_stale: false })],
+      behavior_points: {},
+    });
+    renderSection();
+
+    await screen.findByText("Zeynep Yılmaz");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("panel açıkken liste tazelenip özet bayatlarsa panel uyarısı belirir (§7.5)", async () => {
+    // İki karar: birinin anlatı paneli açık; diğeri silinince liste yeniden çekilir ve
+    // açık paneldeki karar artık bayat döner — yerel durum prop'a eşitlenmeli.
+    const acik = makeDecision({ prior_penalties_stale: false });
+    const diger = makeDecision({ id: 6, student: 4, student_name: "Emre Kaya" });
+    dapi.listDecisions
+      .mockResolvedValueOnce({ decisions: [acik, diger], behavior_points: {} })
+      .mockResolvedValue({
+        decisions: [makeDecision({ prior_penalties_stale: true })],
+        behavior_points: {},
+      });
+    dapi.listDeletedDecisions.mockResolvedValue([]);
+    dapi.deleteDecision.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection(
+      makeCase({
+        students: [
+          { id: 3, full_name: "Zeynep Yılmaz", student_number: "123", class_label: "10-A" },
+          { id: 4, full_name: "Emre Kaya", student_number: "124", class_label: "10-A" },
+        ],
+      }),
+    );
+
+    await user.click((await screen.findAllByRole("button", { name: /EK-1 anlatı/ }))[0]);
+    expect(screen.queryByText(/Özet güncel değil/)).not.toBeInTheDocument();
+
+    // Paneli açık kartın eylem çubuğu gizlidir: kalan tek "Sil" diğer kararındır.
+    await user.click(screen.getByRole("button", { name: "Sil" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Sil" }),
+    );
+
+    await waitFor(() => expect(dapi.deleteDecision).toHaveBeenCalledWith(1, 6));
+    expect(await screen.findByText(/Özet güncel değil/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yeniden derle" })).toBeInTheDocument();
+  });
+
+  it("bekleyen oto-kayıt yazılamazsa yeniden derleme durur, hata gösterilir", async () => {
+    // Yoksa hook'ta bekleyen ESKİ özet bir sonraki oto-kayıtta yeni derlemeyi ezerdi.
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    dapi.updateDecisionNarrative.mockRejectedValue(new ApiError(500, "error", "Sunucu hatası."));
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+    await user.type(ozetAlani(), " Elle not.");
+
+    await user.click(screen.getByRole("button", { name: "Yeniden derle" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Yeniden derle" }),
+    );
+
+    expect(
+      await screen.findByText(
+        /Bekleyen değişiklikler kaydedilemediği için özet yeniden derlenmedi/,
+      ),
+    ).toBeInTheDocument();
+    expect(dapi.updateDecisionNarrative).toHaveBeenCalled();
+    expect(dapi.recompilePriorPenalties).not.toHaveBeenCalled();
+    expect(ozetAlani().value).toBe(`${bayat.prior_penalties_summary} Elle not.`);
+    expect(screen.getByText(/Özet güncel değil/)).toBeInTheDocument();
+  });
+
+  it("bekleyen oto-kayıt yazılabilirse önce o yazılır, sonra yeniden derlenir", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision(bayat)],
+      behavior_points: {},
+    });
+    dapi.updateDecisionNarrative.mockResolvedValue({});
+    dapi.recompilePriorPenalties.mockResolvedValue(
+      makeDecision({ prior_penalties_summary: "", prior_penalties_stale: false }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /EK-1 anlatı/ }));
+    await user.type(ozetAlani(), "!");
+    await user.click(screen.getByRole("button", { name: "Yeniden derle" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Yeniden derle" }),
+    );
+
+    await waitFor(() => expect(dapi.recompilePriorPenalties).toHaveBeenCalledWith(1, 5));
+    expect(dapi.updateDecisionNarrative.mock.invocationCallOrder[0]).toBeLessThan(
+      dapi.recompilePriorPenalties.mock.invocationCallOrder[0],
+    );
+    await waitFor(() => expect(ozetAlani().value).toBe(""));
   });
 });
 
@@ -649,6 +897,99 @@ describe("DecisionsSection — 14.11.2026 saha testi bulguları", () => {
     renderSection();
     expect(
       await screen.findByText(/İtiraz edilen ceza: Okuldan kısa süreli uzaklaştırma \(5 gün\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("üst kurulca değişmiş kararda kurulun verdiği ceza gün sayısıyla görünür (S11b)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approved_at: "2026-03-20",
+          referred_to_district: true,
+          board_penalty_type: "SHORT_TERM_SUSPENSION",
+          board_suspension_days: 5,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(
+      await screen.findByText(/Kurulun verdiği ceza: Okuldan kısa süreli uzaklaştırma \(5 gün\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("cezası değişmemiş kararda kurulun verdiği ceza satırı görünmez (S11b)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ board_penalty_type: "", board_suspension_days: null })],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText("Zeynep Yılmaz");
+    expect(screen.queryByText(/Kurulun verdiği ceza/)).toBeNull();
+  });
+
+  it("ceza kurulun verdiğine geri döndüyse kurulun verdiği ceza satırı görünmez (S11b)", async () => {
+    // Özgün ceza kayıtta kalıcıdır (onayda değişiklik → itirazla özgün cezaya dönüş);
+    // yürürlükteki cezayla aynıysa gösterilecek fark yoktur.
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approved_at: "2026-03-20",
+          referred_to_district: true,
+          penalty_type: "SHORT_TERM_SUSPENSION",
+          penalty_type_display: "Okuldan kısa süreli uzaklaştırma",
+          suspension_days: 3,
+          board_penalty_type: "SHORT_TERM_SUSPENSION",
+          board_suspension_days: 3,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText("Zeynep Yılmaz");
+    expect(screen.queryByText(/Kurulun verdiği ceza/)).toBeNull();
+  });
+
+  it("yalnız gün sayısı farklıysa kurulun verdiği ceza satırı görünür (S11b)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          approved_at: "2026-03-20",
+          referred_to_district: true,
+          penalty_type: "SHORT_TERM_SUSPENSION",
+          penalty_type_display: "Okuldan kısa süreli uzaklaştırma",
+          suspension_days: 5,
+          board_penalty_type: "SHORT_TERM_SUSPENSION",
+          board_suspension_days: 3,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(
+      await screen.findByText(/Kurulun verdiği ceza: Okuldan kısa süreli uzaklaştırma \(3 gün\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("ilçeye sevk edilmiş kararda kurula iade tarihi de görünür (S11b)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "REFERRED",
+          referred_to_district: true,
+          return_reason: "Ağır.\n\nİlçeye sevk: Israr.",
+          returned_at: "2026-03-16",
+          first_returned_at: "2026-03-11",
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(
+      await screen.findByText(/İlçeye sevk gerekçesi · 16\.03\.2026 · kurula iade: 11\.03\.2026/),
     ).toBeInTheDocument();
   });
 

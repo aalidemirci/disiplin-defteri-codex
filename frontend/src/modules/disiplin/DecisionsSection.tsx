@@ -422,6 +422,15 @@ type CardPanel =
   | "remove"
   | null;
 
+/** S11b: kayıttaki özgün ceza (kurulun verdiği) yürürlükteki cezadan FARKLI mı. */
+function boardPenaltyDiffers(d: DisciplineDecision): boolean {
+  if (!d.board_penalty_type) return false;
+  return (
+    d.board_penalty_type !== d.penalty_type ||
+    (d.board_suspension_days ?? null) !== (d.suspension_days ?? null)
+  );
+}
+
 function DecisionCard({
   caseObj,
   decision: d,
@@ -587,11 +596,26 @@ function DecisionCard({
           <div className="mt-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container">
             <p className="text-label-small">
               {d.approval_status === "REFERRED" ? "İlçeye sevk gerekçesi" : "Kurula iade gerekçesi"}
-              {d.returned_at && ` · ${formatDate(d.returned_at)}`} (md. 197)
+              {d.returned_at && ` · ${formatDate(d.returned_at)}`}
+              {d.approval_status === "REFERRED" &&
+                d.first_returned_at &&
+                ` · kurula iade: ${formatDate(d.first_returned_at)}`}{" "}
+              (md. 197)
             </p>
             <p className="mt-0.5 whitespace-pre-wrap">{d.return_reason}</p>
           </div>
         )}
+
+      {/* S11b: ceza üst kurulca (onayda) ya da itirazla değiştiyse kart yürürlükteki
+          cezayı gösterir; okul kurulunun verdiği özgün ceza burada kalır. Özgün ceza
+          kayıtta kalıcıdır: ceza kurulun verdiğine geri döndüyse (onayda değişiklik →
+          itirazla dönüş) fark yoktur, satır gösterilmez. */}
+      {boardPenaltyDiffers(d) && d.board_penalty_type && (
+        <p className="mt-2 text-label-small text-on-surface-variant">
+          Kurulun verdiği ceza: {PENALTY_TYPE_TR[d.board_penalty_type]}
+          {d.board_suspension_days != null && ` (${d.board_suspension_days} gün)`}
+        </p>
+      )}
 
       {d.penalty_detail && (
         <p className="mt-2 whitespace-pre-wrap text-body-medium text-on-surface-variant">
@@ -624,6 +648,27 @@ function DecisionCard({
             ))}
           </div>
         </details>
+      )}
+
+      {/* S11c: "önceki cezalar" özeti bayatsa KARTTA da uyarılır — EK-1, anlatı paneli hiç
+          açılmadan Evrak bölümünden üretilebilir. Panel açıkken uyarı (ve "Yeniden derle")
+          paneldedir; aynı uyarı iki kez okunmasın diye kart satırı o sırada gizlenir. */}
+      {d.prior_penalties_stale === true && panel !== "narrative" && (
+        <p
+          role="status"
+          className="mt-3 flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container"
+        >
+          <Icon name="warning" size="sm" />
+          <span className="min-w-0 flex-1">
+            EK-1 “önceki cezalar” özeti güncel değil: özet derlendikten sonra öğrencinin önceki
+            cezaları ya da bu kararın tarihi değişti. EK-1 özeti olduğu gibi basar.{" "}
+            {caseOpen
+              ? canEditNarrative
+                ? "“EK-1 anlatı” panelinden yeniden derleyebilirsiniz."
+                : "Özeti kurul başkanı “EK-1 anlatı” panelinden yeniden derleyebilir."
+              : "Dosya kapalı olduğundan özet yeniden derlenemez."}
+          </span>
+        </p>
       )}
 
       {/* Eylem çubuğu */}
@@ -748,6 +793,7 @@ function DecisionCard({
           caseClosed={caseObj.closed_at !== null}
           decision={d}
           studentName={studentName}
+          onRefreshed={onChanged}
           onCancel={() => {
             // Otomatik kaydedilmiş alanlar kartta görünsün; aksi hâlde form yeniden
             // açılınca BAYAT değerler gelir ve "kaydet" sunucudaki metni ezerdi.
@@ -1692,6 +1738,7 @@ function NarrativeForm({
   caseClosed,
   decision: d,
   studentName,
+  onRefreshed,
   onCancel,
   onDone,
 }: {
@@ -1699,6 +1746,8 @@ function NarrativeForm({
   caseClosed: boolean;
   decision: DisciplineDecision;
   studentName: string;
+  /** Panel açık kalırken karar verisi değişti (yeniden derleme) — liste tazelensin. */
+  onRefreshed: () => void;
   onCancel: () => void;
   onDone: () => void;
 }) {
@@ -1745,6 +1794,53 @@ function NarrativeForm({
     } catch (err) {
       setError(asMessage(err, "Anlatı kaydedilemedi."));
       setBusy(false);
+    }
+  };
+
+  // S11c (kullanıcı kararı 14.11.2026): "önceki cezalar" özeti anlık kopyadır; kaynak
+  // cezalar sonradan değiştiyse sunucu `prior_penalties_stale` ile bildirir. Otomatik
+  // yeniden derleme YOK — kullanıcının elle düzenlemesi ezilmesin diye onay istenir.
+  // Yerel durum: yeniden derleme yanıtı uyarıyı liste tazelenmeden kaldırır. Prop
+  // DEĞİŞİNCE (panel açıkken liste tazelendi — ör. başka karttaki itiraz sonucu) yerel
+  // durum ona eşitlenir; yoksa panel eski bayrağı göstermeye devam ederdi (§7.5).
+  const [priorStale, setPriorStale] = useState(d.prior_penalties_stale === true);
+  useEffect(() => {
+    setPriorStale(d.prior_penalties_stale === true);
+  }, [d.prior_penalties_stale]);
+  const [recompiling, setRecompiling] = useState(false);
+  const recompilePriorPenalties = async () => {
+    if (
+      !(await confirm({
+        title: "Önceki cezalar özeti yeniden derlensin mi?",
+        message:
+          "Özet, öğrencinin yürürlükteki önceki cezalarından yeniden oluşturulur. Bu alanda elle yaptığınız düzenlemeler silinir.",
+        confirmLabel: "Yeniden derle",
+      }))
+    ) {
+      return;
+    }
+    setRecompiling(true);
+    setError(null);
+    try {
+      // Bekleyen oto-kayıt önce yazılsın: yoksa yeniden derlenen özeti sonradan ezerdi.
+      // Yazılamadıysa DUR: bekleyen (eski) özet hook'ta durur ve bir sonraki oto-kayıtta
+      // sunucudaki yeni derlemenin üstüne yazılırdı — ekranda yeni, sunucuda eski metin.
+      if (!(await autosave.flush())) {
+        setError(
+          "Bekleyen değişiklikler kaydedilemediği için özet yeniden derlenmedi. Önce kaydı yeniden deneyin, sonra yeniden derleyin.",
+        );
+        return;
+      }
+      const updated = await disiplinApi.recompilePriorPenalties(caseId, d.id);
+      // updateField DEĞİL: sunucudaki değer zaten bu — oto-kayda yeniden düşmesin.
+      setValues((prev) => ({ ...prev, prior_penalties_summary: updated.prior_penalties_summary }));
+      setPriorStale(updated.prior_penalties_stale === true);
+      snackbar.success("Önceki cezalar özeti yeniden derlendi.");
+      onRefreshed();
+    } catch (err) {
+      setError(asMessage(err, "Özet yeniden derlenemedi."));
+    } finally {
+      setRecompiling(false);
     }
   };
 
@@ -1837,6 +1933,32 @@ function NarrativeForm({
           onChange={(e) => updateField(f.key, e.target.value)}
           className="block w-full rounded-shape-xs border border-outline bg-surface px-4 py-3 text-body-medium text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary focus:border-primary"
         />
+        {f.key === "prior_penalties_summary" && priorStale && (
+          <div
+            role="status"
+            className="mt-2 flex flex-wrap items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-2 text-body-small text-on-tertiary-container"
+          >
+            <Icon name="warning" size="sm" />
+            <span className="min-w-0 flex-1">
+              Özet güncel değil: bu özet derlendikten sonra öğrencinin önceki cezaları (itiraz
+              sonucu, md. 171/2 ile kaldırma ya da onay) ya da bu kararın tarihi değişti. EK-1 bu
+              alandaki metni aynen basar; özet kendiliğinden değiştirilmez.
+              {caseClosed &&
+                " Dosya kapalı olduğundan özet yeniden derlenemez; düzeltme gerekiyorsa önce dosya yeniden açılmalıdır."}
+            </span>
+            {!caseClosed && (
+              <Button
+                type="button"
+                variant="text"
+                icon="refresh"
+                disabled={recompiling}
+                onClick={() => void recompilePriorPenalties()}
+              >
+                Yeniden derle
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
   };

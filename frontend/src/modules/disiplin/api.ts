@@ -416,6 +416,10 @@ export interface DecisionNarrative {
 }
 
 export interface DisciplineDecision extends DecisionNarrative {
+  // S11c (14.11.2026) — salt okur. EK-1 "önceki cezalar" özeti (anlık kopya) güncel
+  // durumu yansıtmıyor: derlendikten sonra önceki cezalardan biri bozuldu / kaldırıldı /
+  // değişti / onaylandı. Elle düzenleme tek başına bayat saymaz.
+  prior_penalties_stale?: boolean;
   id: number;
   student: number;
   md166_override_reason?: string;
@@ -438,8 +442,16 @@ export interface DisciplineDecision extends DecisionNarrative {
   approval_status_display: string;
   approved_at: string | null;
   // md. 197 — kurula iade / ilçeye sevk gerekçesi + tarihi (RETURNED/REFERRED durumları).
+  // `returned_at` SON md. 197 adımının (iade ya da sevk) tarihidir.
   return_reason: string;
   returned_at: string | null;
+  // S11b (14.11.2026) — salt okur. Kurula İADE tarihi: ilçeye sevkte korunur; eski
+  // (göç öncesi sevk edilmiş) kararda boştur.
+  first_returned_at?: string | null;
+  // Okul kurulunun VERDİĞİ ceza — yalnız ceza üst kurulca (onayda) ya da itirazla
+  // değiştiyse dolu; `penalty_type`/`suspension_days` her zaman yürürlükteki cezadır.
+  board_penalty_type?: PenaltyType | "";
+  board_suspension_days?: number | null;
   notified_at: string | null;
   notification_method: string;
   appeal_deadline: string | null;
@@ -1377,6 +1389,14 @@ export const disiplinApi = {
     api.post<DisciplineDecision>(
       `${BASE}/cases/${caseId}/decisions/${decisionId}/narrative/`,
       body,
+    ),
+
+  // S11c — EK-1 "önceki cezalar" özetini güncel durumdan yeniden derler (elle düzenleme
+  // silinir; kapalı dosyada sunucu reddeder). Yanıt güncel karardır.
+  recompilePriorPenalties: (caseId: number, decisionId: number) =>
+    api.post<DisciplineDecision>(
+      `${BASE}/cases/${caseId}/decisions/${decisionId}/recompile-prior-penalties/`,
+      {},
     ),
 
   // İtiraz LİSTESİ ayrı çekilmez: `listDecisions` her kararın `appeals` dizisini

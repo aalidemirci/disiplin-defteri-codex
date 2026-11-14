@@ -988,14 +988,14 @@ def test_siralanmamis_dosyada_kanonik_sira_korunur() -> None:
 # ---------------------------------------------------------------------------
 # Bulgu 24 — md. 197 iade yazısı ilçeye sevkten sonra (güvenli kısım)
 # ---------------------------------------------------------------------------
-def test_iade_yazisi_sevkten_sonra_tarih_uydurmaz(ctx: dict[str, Any]) -> None:
-    """REFER `returned_at`'i sevk tarihiyle ezer; ilk iade tarihi kayıtta KALMAZ.
+def test_iade_yazisi_sevkten_sonra_kayitli_iade_tarihini_basar(ctx: dict[str, Any]) -> None:
+    """Kullanıcı kararı 14.11.2026 — S11b (eski adı `…_sevkten_sonra_tarih_uydurmaz`):
+    iade tarihi artık `first_returned_at`'te SAKLANIR, sevk onu ezmez; sevkten sonra
+    yeniden üretilen iade yazısı ve ilçe yazısı İlgi (b) o tarihi basar.
 
-    Gözden geçirme E4: önceki tur iade tarihini kütükteki iade yazısının ÜRETİM
-    tarihinden alıyordu — güvenilir değil (yazı başka bir tarihle ya da sonradan
-    üretilmiş olabilir). Eski test (`…_iade_tarihini_korur`) bu yüzden gevşetildi:
-    sevkten sonra tarih UYDURULMAZ, noktalı basılır; sevk tarihi de iade tarihi diye
-    basılmaz."""
+    Değişmeyen kısım (gözden geçirme E4): kütükteki iade yazısının ÜRETİM tarihi kaynak
+    DEĞİLDİR; sevk tarihi de iade tarihi diye basılmaz. İade tarihi bilinmeyen eski
+    kayıtta noktalı basım sürer — `test_s11_sema.py`."""
     student = StudentFactory()
     case = _case(student)
     decision = services.record_decision(
@@ -1021,14 +1021,14 @@ def test_iade_yazisi_sevkten_sonra_tarih_uydurmaz(ctx: dict[str, Any]) -> None:
     _generate(
         case, DocumentType.RETURN_LETTER, student_id=student.pk, generated_on=date(2026, 5, 27)
     )
-    assert ctx["return_date_unknown"] is True
-    assert ctx["decision"].returned_at is None
+    assert ctx["return_date_unknown"] is False
+    assert ctx["decision"].returned_at == date(2026, 5, 21)
     assert ctx["return_reason_text"] == "Ceza hafif."
     html = _html(ctx)
-    assert '<td class="label">Tarih</td><td>…/…/202…</td>' in html
+    assert '<td class="label">Tarih</td><td>21.05.2026</td>' in html
     for wrong in ("23.05.2026", "26.05.2026", "27.05.2026"):  # kütük / sevk / üretim
         assert wrong not in html
-    # İlçe yazısı sevk tarihini basar; İlgi (b) iade yazısı tarihi noktalı kalır.
+    # İlçe yazısı sevk tarihini basar; İlgi (b) kayıtlı iade tarihini taşır.
     _generate(
         case,
         DocumentType.DISTRICT_REFERRAL_LETTER,
@@ -1036,8 +1036,8 @@ def test_iade_yazisi_sevkten_sonra_tarih_uydurmaz(ctx: dict[str, Any]) -> None:
         generated_on=date(2026, 5, 26),
     )
     assert ctx["decision"].returned_at == date(2026, 5, 26)
-    assert ctx["return_letter_date"] is None
-    assert "b) Müdürlüğümüzün …/…/202… tarihli kurula iade yazısı" in _html(ctx)
+    assert ctx["return_letter_date"] == date(2026, 5, 21)
+    assert "b) Müdürlüğümüzün 21.05.2026 tarihli kurula iade yazısı" in _html(ctx)
 
 
 # ---------------------------------------------------------------------------

@@ -318,6 +318,22 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   **otomatik** türer. Yalnız `PENDING` + tebliğsiz + itirazsız karar düzenlenebilir.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
   iade eder / (iade sonrası) ilçeye sevk eder.
+- **Özgün ceza ve iade tarihi saklanır** (S11b — 14.11.2026): ceza üst kurulca (onayda)
+  ya da itirazla İLK KEZ değişirken okul kurulunun verdiği ceza `board_penalty_type` /
+  `board_suspension_days` alanlarına yazılır (tek yer: `services.decisions._apply_penalty_change`)
+  ve ceza kurulun verdiğine geri dönse de BOŞALTILMAZ; "boş" yalnız "hiç değişmedi / S11
+  göçünden önce değişti" demektir (o eski kayıtta özgün ceza onay merciinden okunur:
+  `_legacy_board_penalty`). `penalty_type` her zaman YÜRÜRLÜKTEKİ cezadır — puan, yürürlük,
+  itiraz mercii ve tebliğler ondan türer; EK-1, karar defteri, Form-18, onaya sevk yazısı
+  kurulun verdiği cezayı basar. Üst kurul onayı "beklemede"ye geri alınırken itiraz kaydı
+  yoksa ceza kurulun verdiğine geri yüklenir (`_restore_board_penalty`).
+  `DisciplineAppeal.previous_*` ayrıdır: itiraza KONU ceza. `first_returned_at` kurula İADE
+  tarihidir, ilçeye sevk onu ezmez; `returned_at` son md. 197 adımının tarihidir.
+- **EK-1 "önceki cezalar" özeti anlık kopyadır** (S11c — 14.11.2026): `prior_penalties_summary`
+  karar anında yalnız bu karardan ÖNCEKİ `penalties_in_force` ile derlenir, kullanıcı
+  düzenleyebilir ve HİÇBİR ZAMAN kendiliğinden yeniden derlenmez. Bayatlık
+  `prior_penalties_compiled` iziyle ölçülür (`selectors.prior_penalties_summary_is_stale`;
+  elle düzenleme bayat sayılmaz). Yeniden derleme yalnız kullanıcı onayıyla ve açık dosyada.
 - **İtiraz:** tebliğsiz itiraz olmaz; süre dışı itiraz da kaydedilir (işaretli);
   sonuçlanmış itiraza yeniden itiraz ve sonuç değişikliği yok (md. 169/4).
   `OVERTURNED` → `REJECTED` + puan iadesi. Okul değiştirme cezasında süresinde
@@ -331,12 +347,15 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   kararların süreleri beklenir ve hakkında işlem yapılan her öğrencinin kararı girilmiş
   olmalıdır.
 - **Kapalı dosyada kapanış dayanağı kilitli:** onay, tebliğ, md. 197 iade/sevk ve
-  karar düzenleme/silme reddedilir; itiraz + sonucu, e-Okul, md. 171/2 serbest
+  karar düzenleme/silme ve EK-1 önceki cezalar özetinin yeniden derlenmesi reddedilir;
+  itiraz + sonucu, e-Okul, md. 171/2 serbest
   (`services.decisions._assert_case_open`). Kurula sevk tarihi = **son** müdür kararı
   (`committee_referred_on`; geri alınmış sevk/uyarı sayılmaz).
 - Okul değiştirme cezası onayla uygulanır; **süresinde itirazda itiraz sonuçlanana
   dek uygulanmaz** (md. 172/2-ç, `_enforced_state`).
 - `case_no` biçimi `{ders yılı adı}-NNNN`; **aktif ders yılı yoksa dosya açılamaz**.
+  Sıra ders yılının KALICI sayacından gelir (`CaseNumberCounter`, S11a — 14.11.2026):
+  imha (md. 157/7) ya da soft-delete edilen dosyanın numarası yeniden verilmez.
 - Ceza tebliğinde **itiraz son günü basılmaz** (yalnız "5 iş günü" metni).
 - **Yıl başına tek disiplin kurulu**, tek aktif `SchoolYear`. Kurul bileşimi (md. 185/1)
   UYARILIR, engellenmez (S5, 14.11.2026: `selectors.committee_composition_warnings`).
@@ -416,8 +435,12 @@ Etki × yoğunluk sırasıyla:
 - **Yeni Python bağımlılığı eklersen** `packaging/pyinstaller/disiplin_defteri.spec`
   içindeki `hiddenimports`'u da güncelle (borç K7) — yoksa paket açılmaz, testler
   bunu yakalamaz.
-- **Migration:** `okul` 0002'de, `disiplin` 0001'de. Şema değişikliği şifreli alan
-  geçişini etkileyebilir (`0002_encrypt_sensitive_fields`) — dikkat.
+- **Migration:** `okul` 0006'da, `disiplin` 0016'da (0014 dosya numarası sayacı, 0015
+  md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi). Veri göçleri
+  yalnız DÜZ alan okur: parola kuruluysa açılışta `migrate` koşarken anahtar henüz yoktur —
+  şifreli alan okuyan/yazan göç yazma (kilitli kip testi:
+  `test_s11_gocleri_kilitli_kipte_sifreli_alana_dokunmadan_kosar`). Şema değişikliği şifreli
+  alan geçişini etkileyebilir (`0002_encrypt_sensitive_fields`) — dikkat.
 - **KVKK:** `.gitignore` `data/`, `media/`, `*.xlsx` girişlerini engelliyor. Gerçek
   öğrenci verisi, e-Okul ihracı veya TCKN içeren fixture **depoya girmez**.
 

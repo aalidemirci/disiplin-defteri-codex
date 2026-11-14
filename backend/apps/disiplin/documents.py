@@ -698,16 +698,62 @@ def _appealed_penalty(decision: Any) -> tuple[str, int | None] | None:
     return appeal.previous_penalty_type, days
 
 
+def _stored_board_penalty(decision: Any) -> tuple[str, int | None, str] | None:
+    """Kayıttaki özgün ceza (`board_penalty_*`): (tür, gün, değiştiren merci) ya da None.
+
+    Alan boşsa (bilinmiyor / hiç değişmedi) ya da yürürlükteki cezayla aynıysa (ceza
+    değişip kurulun verdiğine geri döndü — fark yok) None. İkisini çağıran ayırır:
+    `_board_penalty` alan DOLUYKEN tahmine inmez.
+    Değiştiren merci: itiraza KONU ceza (`DisciplineAppeal.previous_*`) kurulun
+    verdiğinden farklıysa ceza önce ONAYDA değişmiştir; itiraz yoksa yalnız onayda.
+    Onaylayan kurul md. 197 sevkinde ilçe kuruludur, değilse cezanın onay merciidir.
+    """
+    penalty_type = getattr(decision, "board_penalty_type", "")
+    if not penalty_type:
+        return None
+    days = decision.board_suspension_days
+    if penalty_type != PenaltyType.SHORT_TERM_SUSPENSION:
+        days = None
+    if penalty_type == decision.penalty_type and days == decision.suspension_days:
+        return None
+    authority = (
+        ApprovalAuthority.DISTRICT_BOARD
+        if decision.referred_to_district
+        else decision.approval_authority
+    )
+    approved_by = f"onay aşamasında {ApprovalAuthority(authority).label}nca"
+    appeal = _reduced_appeal(decision)
+    if appeal is None:
+        return penalty_type, days, approved_by
+    appealed_by = f"itiraz üzerine {ApprovalAuthority(appeal.appeal_authority).label}nca"
+    appealed_days = appeal.previous_suspension_days
+    same_as_board = appeal.previous_penalty_type == penalty_type and (
+        days is None or appealed_days is None or appealed_days == days
+    )
+    if same_as_board:
+        return penalty_type, days, appealed_by  # ceza yalnız itirazda değişti
+    return penalty_type, days, f"{approved_by}, ardından {appealed_by}"
+
+
 def _board_penalty(decision: Any) -> tuple[str, int | None, str] | None:
     """Okul kurulunun VERDİĞİ ceza, sonradan değiştiyse: (tür, gün, değiştiren merci).
 
-    Değişmediyse None. İki kaynak: (1) onay aşaması — yalnız onay mercii ilçe/il olan
-    cezada merciden türetilir; (2) itiraz — `DisciplineAppeal.previous_*`.
-    SINIR: md. 197 ile ilçeye giden kararda ilçe kurulunun onayda yaptığı değişiklik
-    kayıtta tutulmaz (şema gerekir) → o durumda güncel ceza basılmaya devam eder.
+    Değişmediyse None. ASIL kaynak kayıttır (kullanıcı kararı 14.11.2026 — S11b):
+    `decision.board_penalty_type` / `board_suspension_days` doluysa ONLAR basılır —
+    md. 197 ile ilçeye giden karar ve gün sayısı dahil (`_stored_board_penalty`).
+    Alan DOLUYSA tahmine HİÇ inilmez: ceza değişip kurulun verdiğine geri döndüyse
+    (onayda değişiklik → itirazla özgün cezaya dönüş) fark yoktur, None döner — tahmin
+    o durumda itiraza KONU cezayı "kurulun verdiği" diye basardı.
+    Alan boşsa (ceza S11 göçünden ÖNCE değişmiş) eski TAHMİNE geri dönülür:
+    (1) onay aşaması — yalnız onay mercii ilçe/il olan cezada merciden türetilir, gün
+    sayısı bilinmez; (2) itiraz — `DisciplineAppeal.previous_*`. Tahminin SINIRI: göçten
+    önce md. 197 ile ilçeye gidip onayda değişmiş kararda özgün ceza bilinemez → güncel
+    ceza basılmaya devam eder.
     """
     if decision is None:
         return None
+    if getattr(decision, "board_penalty_type", ""):
+        return _stored_board_penalty(decision)
     approved_penalty: str | None = None
     approved_by = ""
     if not decision.referred_to_district:
@@ -1905,25 +1951,30 @@ def _assert_process_letter_ready(
 def _apply_md197_dates(context: dict[str, Any], document_type: str) -> None:
     """md. 197 yazılarında İADE tarihi: bilinmiyorsa UYDURULMAZ (yalnız bağlam).
 
-    `record_principal_review` REFER'de `returned_at`'i SEVK tarihiyle ezer; ilk iade
-    tarihi karar kaydında KALMAZ (ayrı alan yok — şema gerekir). İade yazısı sevkten
-    sonra yeniden üretilince sevk tarihini taşıyordu (saha denetimi 14.11.2026). Evrak
+    `record_principal_review` REFER'de `returned_at`'i SEVK tarihiyle günceller (ilçe
+    yazısının tarihi odur). İADE tarihi `decision.first_returned_at`'te saklanır
+    (kullanıcı kararı 14.11.2026 — S11b) ve doluysa O basılır:
+    - iade yazısı: şablon `decision.returned_at` okuduğundan vekil (`_DecisionView`)
+      `returned_at` yerine iade tarihini verir — kayıt değişmez, şablona dokunulmaz;
+    - ilçeye gönderme yazısı İlgi (b): `return_letter_date` = iade tarihi.
+    Alan BOŞSA (S11 göçünden önce sevk edilmiş karar) tarih UYDURULMAZ: evrak
     kütüğündeki iade yazısının ÜRETİM tarihi güvenilir bir kaynak değildir (yazı sonradan,
-    başka bir tarih seçilerek ya da hiç üretilmeden iade kaydedilmiş olabilir) —
-    kullanılmaz. Bu yüzden sevkten sonra:
-    - iade yazısı: `return_date_unknown` → şablon tarihi noktalı basar (elle yazılır),
-      `decision.returned_at` vekilde None'dır (sevk tarihi iade tarihi diye basılmaz);
-    - ilçeye gönderme yazısı İlgi (b): `return_letter_date` None → noktalı kalır.
-    Sevk edilmemiş kararda iade tarihi kayıttadır (`decision.returned_at`).
+    başka bir tarih seçilerek ya da hiç üretilmeden iade kaydedilmiş olabilir). O durumda
+    sevkten sonra iade yazısı `return_date_unknown` ile noktalı basılır (vekilde
+    `returned_at` None — sevk tarihi iade tarihi diye basılmaz), İlgi (b) noktalı kalır.
+    Sevk edilmemiş eski kararda iade tarihi `decision.returned_at`'tir.
     """
     context["return_letter_date"] = None
     context["return_date_unknown"] = False
     decision = context.get("decision")
-    if (
-        document_type == DocumentType.RETURN_LETTER
-        and decision is not None
-        and decision.referred_to_district
-    ):
+    if decision is None:
+        return
+    first_returned_at = getattr(decision, "first_returned_at", None)
+    if document_type == DocumentType.DISTRICT_REFERRAL_LETTER:
+        context["return_letter_date"] = first_returned_at
+    elif first_returned_at is not None:
+        context["decision"] = _DecisionView(decision, returned_at=first_returned_at)
+    elif decision.referred_to_district:
         context["decision"] = _DecisionView(decision, returned_at=None)
         context["return_date_unknown"] = True
 

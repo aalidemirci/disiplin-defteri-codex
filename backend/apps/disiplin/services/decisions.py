@@ -114,26 +114,6 @@ def ensure_decision_no(decision: DisciplineDecision) -> DisciplineDecision:
     return decision
 
 
-def _compile_prior_penalties(student_id: int, exclude_case_id: int) -> str:
-    """EK-1 'şimdiye kadar aldığı cezalar' — öğrencinin YÜRÜRLÜKTEKİ önceki cezaları.
-
-    Onaysız, "ceza verilmesine yer olmadığı", itirazla bozulmuş ve md. 171/2 ile
-    kaldırılmış kararlar yazılmaz — md. 171/3: kaldırılan ceza için "disiplin
-    cezası bulunmadığı bildirilir".
-    """
-    from apps.disiplin.selectors import penalties_in_force
-
-    prior = penalties_in_force(
-        DisciplineDecision.objects.filter(student_id=student_id).exclude(case_id=exclude_case_id)
-    ).order_by("decision_date")
-    lines = [
-        f"{d.decision_date:%d.%m.%Y} — {d.get_penalty_type_display()}"
-        + (f" (karar no {d.decision_no})" if d.decision_no else "")
-        for d in prior
-    ]
-    return "\n".join(lines)
-
-
 @transaction.atomic
 def _check_md166(
     case: DisciplineCase,
@@ -244,6 +224,16 @@ def record_decision(
         override_reason=md166_override_reason,
     )
 
+    from apps.disiplin import selectors
+
+    # EK-1 "şimdiye kadar aldığı cezalar": anlık kopya + derleme izi (S11c — bayatlık
+    # denetimi kullanıcının sonradan düzenleyebildiği kopyaya değil bu ize bakar).
+    prior_summary = selectors.compile_prior_penalties(
+        student_id, exclude_case_id=case.pk, on=decision_date
+    )
+    prior_signature = selectors.compile_prior_penalties(
+        student_id, exclude_case_id=case.pk, on=decision_date, signature=True
+    )
     decision = DisciplineDecision(
         case=case,
         student_id=student_id,
@@ -259,7 +249,8 @@ def record_decision(
         behavior_point_deduction=discipline_periods.deduction_for(penalty_type),
         approval_authority=discipline_periods.approval_authority_for(penalty_type),
         approval_status=DecisionApprovalStatus.PENDING,
-        prior_penalties_summary=_compile_prior_penalties(student_id, case.pk),
+        prior_penalties_summary=prior_summary,
+        prior_penalties_compiled=prior_signature,
         notes=notes,
         md166_override_reason=md166_reason,
     )
@@ -322,6 +313,17 @@ def update_decision(
 
     Ceza türü değişirse davranış puanı indirimi + onay mercii yeniden türetilir.
     Uzaklaştırma alanları yalnız kısa süreli uzaklaştırmada saklanır.
+
+    Özgün ceza (S11b): düzenleme yalnız PENDING + tebliğsiz + itirazsız kararda açıktır
+    (`_assert_decision_editable`) ve o duruma geçiş (`set_decision_approval` → beklemede)
+    üst kurul değişikliğini zaten geri alıp kurulun verdiği cezayı geri yükler; form
+    kurulun GERÇEK cezasıyla açılır. Burada girilen ceza kurulun (yeniden görüşüp
+    verdiği) kararıdır ve geçerlidir — `board_penalty_*` izi taşınmaz.
+
+    EK-1 "önceki cezalar" (S11c): karar tarihi değişse de özet ve derleme izi YENİDEN
+    YAZILMAZ (kullanıcının düzenlemesi ezilmesin). "Önceki" cezalar kümesi yeni tarihe
+    göre değiştiyse `prior_penalties_summary_is_stale` uyarı verir; kullanıcı onayla
+    yeniden derler.
     """
     from apps.disiplin import selectors
 
@@ -358,6 +360,11 @@ def update_decision(
     decision.notes = notes
     decision.behavior_point_deduction = discipline_periods.deduction_for(penalty_type)
     decision.approval_authority = discipline_periods.approval_authority_for(penalty_type)
+    # Düzenleme kurulun KENDİ kararını yeniden yazar; girilen ceza kurulun cezasıdır.
+    # Onay beklemeye alınırken özgün ceza zaten geri yüklenip iz temizlenmiştir
+    # (`_restore_board_penalty`); buradaki temizlik yalnız savunmadır (S11b).
+    decision.board_penalty_type = ""
+    decision.board_suspension_days = None
     decision.full_clean(exclude=["event", "meeting"])
     decision.save()
     return decision
@@ -417,6 +424,11 @@ def set_decision_approval(
     örgün dışı → il; md. 197 ile ilçeye giden karar) kurul "onaylar veya
     DEĞİŞTİRİR" (md. 200/1-a, 202/1-a). Değiştirilen ceza türü + puan burada
     işlenir; itiraz mercii onaylayan kurulun bir üstü kalır.
+
+    Onayın GERİ ALINMASI (beklemede / ilçe kurulunda) üst kurulun yaptığı ceza
+    değişikliğini de geri alır (S11b — `_restore_board_penalty`): kararda itiraz kaydı
+    yoksa ve özgün ceza kayıtlıysa ceza, gün ve puan kurulun verdiğine döner, özgün
+    ceza alanları temizlenir. İtiraz kaydı varsa cezaya dokunulmaz.
     """
     _assert_case_open(decision)
     if approval_status not in {DecisionApprovalStatus.PENDING, DecisionApprovalStatus.APPROVED}:
@@ -474,12 +486,43 @@ def set_decision_approval(
                 "değiştirilemez (md. 197)."
             )
         fields += _apply_penalty_change(decision, modified_penalty_type, modified_suspension_days)
+    elif not approving:
+        fields += _restore_board_penalty(decision)
     decision.approval_status = approval_status
     decision.approved_at = approved_on
     decision.is_enforced = _enforced_state(decision)
     fields.append("is_enforced")
     decision.save(update_fields=fields)
     return decision
+
+
+# Onay mercii cezadan türer ve ceza sonradan değişse de DEĞİŞMEZ: mercii ilçe/il olan
+# ama cezası artık o olmayan karar, onay aşamasında değiştirilmiştir.
+_BOARD_PENALTY_BY_AUTHORITY: dict[str, str] = {
+    ApprovalAuthority.DISTRICT_BOARD: PenaltyType.SCHOOL_CHANGE,
+    ApprovalAuthority.PROVINCIAL_BOARD: PenaltyType.EXPULSION,
+}
+
+
+def _legacy_board_penalty(decision: DisciplineDecision) -> tuple[str, int | None]:
+    """Özgün ceza alanı BOŞKEN okul kurulunun verdiği cezayı belirler.
+
+    Olağan durumda o andaki cezadır (ceza ilk kez değişiyor). İstisna — S11 göçünden
+    ÖNCE onayda değiştirilmiş eski kayıt: ceza zaten üst kurulun cezasıdır, özgün ceza
+    hiç kaydedilmemiştir. O durumda o andaki cezayı "kurulun verdiği ceza" diye yazmak
+    yanlışı kalıcılaştırırdı (alan dolunca belgeler tahmine inmez). Md. 197 ile ilçeye
+    gitmemiş ve mercii ilçe/il olan kararda özgün ceza merciden okunur
+    (`documents._board_penalty` ile aynı ölçüt); md. 197 yolunda merciden okunamaz,
+    o andaki ceza yazılır.
+    """
+    implied = _BOARD_PENALTY_BY_AUTHORITY.get(decision.approval_authority)
+    if (
+        implied is not None
+        and not decision.referred_to_district
+        and decision.penalty_type != implied
+    ):
+        return implied, None
+    return decision.penalty_type, decision.suspension_days
 
 
 def _apply_penalty_change(
@@ -492,6 +535,19 @@ def _apply_penalty_change(
     yalnız kısa süreli uzaklaştırmada ve gün sayısı farklıysa — süre cezanın unsurudur
     (md. 164/2, 172/1-a), üst kurul yalnız günü değiştirmiş olabilir (md. 200/1-ç).
     Uzaklaştırma sürdükçe uygulama başlangıcı korunur; bitiş yeni günden hesaplanır.
+
+    Özgün ceza (kullanıcı kararı 14.11.2026 — S11b): ceza İLK KEZ değişirken okul
+    kurulunun VERDİĞİ ceza (tür + gün) `board_penalty_type` / `board_suspension_days`
+    alanlarına yazılır — onay yolunda da itiraz yolunda da tek yer burasıdır. Sonraki
+    değişiklikler (yanlış girilen üst kurul kararının düzeltilmesi, onaydan sonra
+    itiraz) özgün cezayı EZMEZ. Yeni ceza kurulun verdiğine GERİ DÖNSE de alanlar
+    BOŞALTILMAZ: "boş" yalnız "ceza hiç değişmedi / S11 göçünden önce değişti"
+    demektir; boşaltılsaydı belgeler (`documents._board_penalty`) eski tahmine düşüp
+    itiraza konu cezayı "kurulun verdiği ceza" diye basardı. Özgün ceza = yürürlükteki
+    ceza ise fark yoktur (belge ve ekran satır basmaz). Alanlar yalnız üst kurul onayı
+    geri alınırken (`_restore_board_penalty`) ve karar düzenlenirken temizlenir.
+    İtiraz kaydındaki `previous_*` ayrı tutulur: o, itiraza KONU cezadır.
+    Puan/yürürlük/itiraz mercii güncel cezadan türemeye devam eder.
     """
     if penalty_type not in set(PenaltyType.values):
         raise ValueError("Geçersiz ceza türü.")
@@ -508,6 +564,10 @@ def _apply_penalty_change(
                 "değişiklik seçmeyin."
             )
     is_suspension = penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
+    if not decision.board_penalty_type:
+        board_type, board_days = _legacy_board_penalty(decision)
+        decision.board_penalty_type = board_type
+        decision.board_suspension_days = board_days
     decision.penalty_type = penalty_type
     decision.suspension_days = suspension_days if is_suspension else None
     if not is_suspension:
@@ -519,7 +579,34 @@ def _apply_penalty_change(
         "suspension_days",
         "enforcement_start_date",
         "behavior_point_deduction",
+        "board_penalty_type",
+        "board_suspension_days",
     ]
+
+
+def _restore_board_penalty(decision: DisciplineDecision) -> list[str]:
+    """Üst kurul onayı geri alınırken cezayı kurulun VERDİĞİNE döndürür (S11b).
+
+    Yanlış girilen "değiştirildi" onayı beklemeye çekilince ceza değiştirilmiş hâliyle
+    kalıyordu: kart üst kurulun cezasını gösteriyor, düzenleme formu onunla açılıyor ve
+    kaydedilince kurulun gerçek kararı (ve onay mercii) sessizce kayboluyordu (§7.6 tek
+    yönlü kapan). Özgün ceza kayıtlıysa ve kararda İTİRAZ KAYDI YOKSA ceza + gün + puan
+    geri yüklenir (`_apply_penalty_change` ile — tek yazım yeri) ve özgün ceza alanları
+    temizlenir: onaysız kararda "değişiklik" kalmaz. İtiraz kaydı varsa dokunulmaz —
+    ceza itiraz kanalında değişmiş olabilir, itiraz sonucu kesindir (md. 169/4).
+    Kısıt: uzaklaştırma başka cezaya çevrilirken silinen uygulama başlangıcı geri gelmez
+    (kayıtta tutulmaz); onay yeniden girilmeden önce karar formundan girilir.
+    Döndürdüğü: kaydedilecek alan adları (değişiklik yoksa boş liste).
+    """
+    if not decision.board_penalty_type or decision.appeals.exists():
+        return []
+    board_type, board_days = decision.board_penalty_type, decision.board_suspension_days
+    fields = ["board_penalty_type", "board_suspension_days"]
+    if (board_type, board_days) != (decision.penalty_type, decision.suspension_days):
+        fields = _apply_penalty_change(decision, board_type, board_days)
+    decision.board_penalty_type = ""
+    decision.board_suspension_days = None
+    return fields
 
 
 @transaction.atomic
@@ -537,6 +624,11 @@ def record_principal_review(
     İade edilmiş karar kurulun yeniden görüşmesi için "onay bekliyor"a alınmış olabilir
     (düzenleme yalnız orada açılır); `returned_at` dolu olduğu sürece sevk yolu açık
     kalır, ikinci iade ise kapalıdır ("bir defa daha" — saha testi 14.11.2026).
+
+    Tarihler (kullanıcı kararı 14.11.2026 — S11b): `returned_at` SON md. 197 adımının
+    tarihidir (iadede iade, sevkte sevk tarihi — ilçe yazısının tarihi budur);
+    `first_returned_at` yalnız İADE'de yazılır ve sevkte EZİLMEZ (ilçe yazısı İlgi (b)
+    ile sevkten sonra yeniden üretilen iade yazısı bunu basar).
     """
     reason = (reason or "").strip()
     _assert_case_open(decision)
@@ -555,6 +647,7 @@ def record_principal_review(
                 "görüşülmek üzere' iade öngörür. Kurul ısrar ediyorsa ilçeye gönderin."
             )
         new_status = DecisionApprovalStatus.RETURNED_TO_COMMITTEE
+        decision.first_returned_at = decided_on
     elif action == "REFER":
         returned_before = (
             decision.approval_status == DecisionApprovalStatus.RETURNED_TO_COMMITTEE
@@ -587,6 +680,7 @@ def record_principal_review(
             "approval_status",
             "return_reason",
             "returned_at",
+            "first_returned_at",
             "approved_at",
             "is_enforced",
             "referred_to_district",
@@ -916,6 +1010,43 @@ def update_decision_narrative(
         from apps.okul.services import persons as okul_persons
 
         okul_persons.update_student(decision.student, birth_date=student_birth_date)
+    return decision
+
+
+@transaction.atomic
+def recompile_prior_penalties(decision: DisciplineDecision) -> DisciplineDecision:
+    """EK-1 "önceki cezalar" özetini güncel durumdan yeniden derler (S11c, 14.11.2026).
+
+    Yalnız kullanıcının isteğiyle çalışır (otomatik yeniden derleme YOK): özet anlık
+    kopyadır ve elle düzenlenmiş olabilir — yeniden derleme o düzenlemeyi SİLER, arayüz
+    bunu onaylatır. Kopya ile birlikte derleme izi de yenilenir; böylece "özet güncel
+    değil" uyarısı kalkar. Kapalı dosyada reddedilir: EK-1 kapanışın dayanağıdır
+    (`update_decision_narrative` ile aynı kilit); orada uyarı yalnız bilgidir.
+    """
+    from apps.disiplin import selectors
+
+    if decision.case.closed_at is not None:
+        raise ValueError(
+            "Dosya kapalı: EK-1 'önceki cezalar' özeti kapanışın dayanağıdır, yeniden "
+            "derlenemez. Düzeltme gerekiyorsa önce dosyayı yeniden açın (aşama geri alma)."
+        )
+    decision.prior_penalties_summary = selectors.compile_prior_penalties(
+        decision.student_id,
+        exclude_case_id=decision.case_id,
+        on=decision.decision_date,
+        before=decision,
+    )
+    # İz karar no'suz imzadır: önceki karara sonradan numara atanması bayatlatmaz.
+    decision.prior_penalties_compiled = selectors.compile_prior_penalties(
+        decision.student_id,
+        exclude_case_id=decision.case_id,
+        on=decision.decision_date,
+        before=decision,
+        signature=True,
+    )
+    decision.save(
+        update_fields=["prior_penalties_summary", "prior_penalties_compiled", "updated_at"]
+    )
     return decision
 
 
