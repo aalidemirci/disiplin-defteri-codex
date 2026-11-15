@@ -1289,6 +1289,9 @@ def _izinli_vekaletli(kurul: _Kurul) -> DisciplineCase:
         chair_absent=True,
         acting_chair_member_id=kurul.t1.pk,
     )
+    # Uzatma kararı vekâletli toplantıyla AYNI gün: Form-12/13 başkanlık edeni basar. (Önceki
+    # tarihli uzatma asıl başkanı basar — test_uzatma_vekaletli_toplantidan_onceyse_*.)
+    services.create_extension(case, requested_days=5, reason="Tanık dinlenecek.", decided_on=_ON)
     return case
 
 
@@ -1464,6 +1467,10 @@ def test_izinli_baskan_once_vekaletsiz_sonra_vekaletli_toplantida_baskanlik_eden
         chair_absent=True,
         acting_chair_member_id=kurul.t2.pk,
     )
+    # Uzatma kararı vekâletli toplantı günü alındı (önceki tarihli uzatma asıl başkanı basar).
+    services.create_extension(
+        case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 25)
+    )
     name = kurul.t2.member_name
     for key, template, ctx in _k3_documents(case):
         html = _html(template, ctx)
@@ -1513,7 +1520,7 @@ def test_izinli_baskan_gercek_uretim_sayfa_sayisi_degismez(kurul: _Kurul) -> Non
                 attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk],
             )
         services.create_extension(
-            case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
+            case, requested_days=5, reason="Tanık dinlenecek.", decided_on=_ON
         )
         accused = case.participants.get(role=ParticipantRole.ACCUSED)
         for index, (document_type, options) in enumerate(jobs):
@@ -2074,3 +2081,133 @@ def test_g2_sayilmayan_baskan_satiri_nedeniyle_gorunur_ve_duzeltmeyi_engellemez(
         attendee.delete()
     with pytest.raises(ValueError, match="yeter sayısı"):
         council_service._require_quorum(meeting, tolerate_chair_skip=True)
+
+
+def _izinli_vekaletli_uzatmali(kurul: _Kurul, decided_on: date) -> DisciplineCase:
+    case = _case_with_decision(kurul, petitioner_user_id=None)
+    services.create_extension(
+        case, requested_days=5, reason="Tanık dinlenecek.", decided_on=decided_on
+    )
+    services.record_meeting(
+        case,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    return case
+
+
+def test_uzatma_vekaletli_toplantidan_onceyse_form12_13_asil_baskani_basar(kurul: _Kurul) -> None:
+    """Kullanıcı kararı 15.11.2026 ("tarihe baksın"): izinli başkanın vekâletli toplantısından
+    ÖNCE alınmış uzatma kararına o gün asıl başkan başkanlık etmiştir — Form-12 / Form-13 kurulun
+    kendi kaydını basar, md. 188 ifadesi yoktur. Aynı dosyanın çağrı evrakı etkilenmez."""
+    case = _izinli_vekaletli_uzatmali(kurul, date(2026, 5, 20))
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert "chair_role" not in ctx
+    assert "chair_presiding" not in ctx
+    assert "chair_office" not in ctx
+    assert ctx["committee"].chair.pk == kurul.chair.pk
+    assert kurul.t1.pk in [m.pk for m in ctx["members"]]  # üye listesi kurulun kendi listesi
+    for template in (_FORM12, _FORM13):
+        html = _html(template, ctx)
+        assert kurul.chair.full_name in html
+        assert "md. 188" not in html
+        assert "Disiplin Kurulu Başkanı" in html
+    # Çağrı evrakı (Form-10) son toplantı kaydına bakmayı sürdürür: başkanlık eden üye.
+    call = doc_engine._meeting_call_context(case, {})
+    assert call["chair_role"] == _ROLE
+    assert call["committee"].chair.get_full_name() == kurul.t1.member_name
+
+
+@pytest.mark.parametrize("gun", [21, 25], ids=["ayni_gun", "sonraki_gun"])
+def test_uzatma_vekaletli_toplantiyla_ayni_gun_ya_da_sonraysa_baskanlik_edeni_basar(
+    kurul: _Kurul, gun: int
+) -> None:
+    case = _izinli_vekaletli_uzatmali(kurul, date(2026, 5, gun))
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert ctx["chair_role"] == _ROLE
+    assert ctx["committee"].chair.get_full_name() == kurul.t1.member_name
+    assert kurul.chair.full_name not in _html(_FORM12, ctx)
+
+
+def test_uzatma_tarihi_sikayetci_baskanda_aranmaz(kurul: _Kurul) -> None:
+    """Şikâyetçi / zarar gören başkan hiçbir oturuma katılamaz (md. 191/2): uzatma vekâletli
+    toplantıdan önce tarihli olsa da Form-12 / Form-13 başkanlık eden üyeyi basar."""
+    case = _sikayetci_vekaletli(kurul)
+    services.create_extension(
+        case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
+    )
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert ctx["chair_role"] == _ROLE
+    assert kurul.chair.full_name not in _html(_FORM12, ctx)
+
+
+def _iki_vekaletli_toplanti(kurul: _Kurul, decided_on: date) -> DisciplineCase:
+    """İzinli başkan: 21.05 vekâletli toplantı (t1) → uzatma → 28.05 vekâletli toplantı (t2)."""
+    case = _izinli_vekaletli_uzatmali(kurul, decided_on)
+    services.record_meeting(
+        case,
+        meeting_date=date(2026, 5, 28),
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t2.pk,
+    )
+    return case
+
+
+@pytest.mark.parametrize("gun", [21, 22], ids=["ilk_toplanti_gunu", "iki_toplanti_arasi"])
+def test_uzatma_ilk_vekaletli_toplantida_alindiysa_o_toplantinin_baskanlik_edeni_basilir(
+    kurul: _Kurul, gun: int
+) -> None:
+    """Sürüm öncesi gözden geçirme (15.11.2026): ölçüt SON toplantı değil, uzatma günündeki
+    toplantıdır. İkinci vekâletli toplantı kaydedildikten sonra da Form-12 / Form-13 uzatma
+    oturumuna başkanlık eden üyeyi (t1) basar — katılmamış başkanı ya da ikinci toplantının
+    başkanlık edenini (t2) değil."""
+    case = _iki_vekaletli_toplanti(kurul, date(2026, 5, gun))
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert ctx["chair_role"] == _ROLE
+    assert ctx["committee"].chair.get_full_name() == kurul.t1.member_name
+    assert kurul.t1.pk not in [m.pk for m in ctx["members"]]  # ızgarada çift imza yok
+    assert kurul.t2.pk in [m.pk for m in ctx["members"]]
+    for template in (_FORM12, _FORM13):
+        html = _html(template, ctx)
+        assert kurul.chair.full_name not in html
+        assert "md. 188" in html
+    form12 = _html(_FORM12, ctx)
+    assert form12.count(f'<div class="name">{kurul.t1.member_name}</div>') == 1
+    # Çağrı evrakı son toplantıya bakmayı sürdürür: ikinci toplantının başkanlık edeni.
+    call = doc_engine._meeting_call_context(case, {})
+    assert call["committee"].chair.get_full_name() == kurul.t2.member_name
+
+
+def test_uzatma_iki_vekaletli_toplantidan_da_onceyse_asil_baskan_basilir(kurul: _Kurul) -> None:
+    case = _iki_vekaletli_toplanti(kurul, date(2026, 5, 20))
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert "chair_role" not in ctx
+    assert ctx["committee"].chair.pk == kurul.chair.pk
+
+
+def test_uzatma_vekaletsiz_toplantidan_sonra_vekaletli_toplantidan_onceyse_asil_baskan(
+    kurul: _Kurul,
+) -> None:
+    """Başkanın katıldığı toplantı (21.05) → uzatma (22.05) → vekâletli toplantı (28.05):
+    uzatma günündeki toplantı vekâletsiz — asıl başkan basılır."""
+    case = _case_with_decision(kurul, petitioner_user_id=None)
+    services.record_meeting(
+        case, meeting_date=_ON, attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk]
+    )
+    services.create_extension(
+        case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 22)
+    )
+    services.record_meeting(
+        case,
+        meeting_date=date(2026, 5, 28),
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t2.pk,
+    )
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert "chair_role" not in ctx
+    assert ctx["committee"].chair.pk == kurul.chair.pk
+    assert "md. 188" not in _html(_FORM12, ctx)

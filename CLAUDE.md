@@ -160,7 +160,7 @@ yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
 Ölçek duygusu (2026.11.0-beta.1 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
-testlerle): backend ~24.300 satır Python (~46.200) + 1288 test · desktop/packaging ~3.200 satır
+testlerle): backend ~24.300 satır Python (~46.200) + 1296 test · desktop/packaging ~3.200 satır
 (~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 556 test.
 
 ---
@@ -378,7 +378,12 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   başkanlık eden üyeyi AYNI biçimde basar; ceza tebliğleri bu durumda asıl başkanı basmayı
   sürdürür. "Son" = toplantı tarihi en geç olan kayıt: toplantı kaydından ÖNCE üretilen çağrı
   asıl başkanla çıkar; vekâletli toplantıdan sonra daha ileri tarihli vekâletsiz toplantı
-  kaydedilirse evrak yeniden asıl başkanı basar. EK-1 kararın BAĞLI toplantısından basıldığı
+  kaydedilirse evrak yeniden asıl başkanı basar. Form-12 / Form-13 ayrıca TARİHE bakar
+  (`documents._extension_panel`): izinli başkanda ölçüt, tarihi uzatma tarihine eşit ya da ondan
+  önceki EN GEÇ toplantıdır — o toplantı vekâletliyse O toplantının başkanlık edeni, yoksa ya da
+  vekâletsizse asıl başkan basılır (son toplantıya değil uzatma günündeki toplantıya bakılır).
+  Şikâyetçi / zarar gören başkanda tarih aranmaz.
+  EK-1 kararın BAĞLI toplantısından basıldığı
   için çok toplantılı dosyada çağrı evrakından farklı kişi taşıyabilir. Son toplantı kaydı
   vekâletli değilse ve başkan şikâyetçi / zarar gören değilse bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
   (`case_chair_warnings`, `council_chair_warnings`). Onur Kurulu (md. 182) kapsam dışıdır.
