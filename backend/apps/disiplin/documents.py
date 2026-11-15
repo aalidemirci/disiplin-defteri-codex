@@ -1870,13 +1870,15 @@ def _extension_panel(case: DisciplineCase, extension: Any) -> dict[str, Any]:
     vekâletli toplantı varsa, sonradan başkanın katıldığı toplantı kaydedilmiş olsa da o günün
     başkanlık edeni basılır — yoksa Form-12 ızgarası (K4) o günün katılanlarını, başkan hanesi
     o gün katılmamış başkanı taşırdı. Başkan şikâyetçi / zarar gören ise (md. 191/2: hiçbir
-    oturuma katılamaz) tarih aranmaz; `_committee_with_members_context` sonucu aynen döner.
+    oturuma katılamaz) asıl başkan hiçbir durumda basılmaz: uzatma günündeki toplantı vekâletliyse
+    O toplantının başkanlık edeni (iki vekâletli toplantıda başkanlık eden farklıysa doğru kişi),
+    değilse `_committee_with_members_context` sonucu aynen döner.
     """
     panel = _committee_with_members_context(case)
     if extension is None:
         return panel
     committee = selectors.committee_for_case(case)
-    if committee is None or services.committee.chair_conflicted(case, committee):
+    if committee is None:
         return panel
     members = list(selectors.committee_members(committee))
     governing = (
@@ -1884,8 +1886,12 @@ def _extension_panel(case: DisciplineCase, extension: Any) -> dict[str, Any]:
     )
     acting = governing.acting_chair if governing is not None and governing.chair_absent else None
     if acting is None:
-        # Son toplantı da vekâletsizse panel zaten kurulun kendi kaydıdır (aynen döner).
-        return {"committee": committee, "members": members} if "chair_role" in panel else panel
+        # Şikâyetçi / zarar gören başkan hiçbir durumda basılmaz: panel aynen (son toplantının
+        # başkanlık edeni ya da boş hane). Son toplantı da vekâletsizse panel zaten kurulun
+        # kendi kaydıdır (aynen döner).
+        if services.committee.chair_conflicted(case, committee) or "chair_role" not in panel:
+            return panel
+        return {"committee": committee, "members": members}
     return {
         "committee": _ActingCommittee(committee, _ActingChair(acting)),
         "members": [m for m in members if m.pk != acting.pk],

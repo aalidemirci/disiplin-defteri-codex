@@ -957,9 +957,62 @@ def test_k9_tutanak_vekaletli_toplanti_kaydi_vekaletsizse_uyarilir(kurul: _Kurul
         ),
     )
     minutes = _minutes(kurul, case, T1, _acting_rows(kurul), chair_absent=True)
-    warnings = [w for w in council_service.council_chair_warnings(minutes) if "uyuşmuyor" in w]
+    # Katılımcılar aynı: K9 uyarısı yok; vekâlet farkı TEK uyarıyla söylenir.
+    warnings = [w for w in council_service.council_chair_warnings(minutes) if "21.05.2026" in w]
     assert len(warnings) == 1
-    assert "tutanakta başkan katılmadı olarak, toplantı kaydında katıldı olarak" in warnings[0]
+    assert "Bu tutanakta başkan katılmadı kayıtlı" in warnings[0]
+    assert "başkan katılmış görünüyor" in warnings[0]
+
+
+def test_k9_vekaletli_tutanakta_baskanlik_eden_toplanti_kaydinda_yoksa_adi_yazilir(
+    kurul: _Kurul,
+) -> None:
+    case = kurul.case()
+    _decide(
+        case,
+        services.record_meeting(
+            case,
+            meeting_date=T1,
+            attendee_member_ids=[kurul.t2.pk, kurul.parent.pk, kurul.sub.pk],
+        ),
+    )
+    minutes = _minutes(kurul, case, T1, _acting_rows(kurul), chair_absent=True)
+    joined = " ".join(council_service.council_chair_warnings(minutes))
+    assert f"tutanakta olup toplantı kaydında olmayan: {kurul.t1.member_name}" in joined
+
+
+def test_cok_toplantili_dosyada_ilk_gorusmenin_vekaletli_tutanagi_kendi_gunuyle_karsilastirilir(
+    kurul: _Kurul,
+) -> None:
+    """T1 vekâletli + T2 olağan: uyumlu T1 tutanağı uyarı almaz; başkanlık eden farkı yakalanır."""
+    case = kurul.case()
+    _decide(case, _acting_meeting(case, kurul, T1))
+    minutes = _minutes(kurul, case, T1, _acting_rows(kurul), chair_absent=True)
+    services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    assert council_service.council_chair_warnings(minutes) == []
+    rows = [kurul.row(kurul.t1), kurul.row(kurul.t2, chair=True), kurul.row(kurul.sub)]
+    other = _minutes(kurul, case, T1, rows, chair_absent=True)
+    joined = " ".join(council_service.council_chair_warnings(other))
+    assert f"Kurula başkanlık eden üye bu tutanakta {kurul.t2.member_name}" in joined
+    assert "21.05.2026" in joined and "27.05.2026" not in joined
+
+
+def test_sikayetci_baskanda_form12_uzatma_gunundeki_baskanlik_edeni_basar(kurul: _Kurul) -> None:
+    """İki vekâletli toplantı, farklı başkanlık edenler: T1'deki uzatma T1'in başkanlık edeniyle."""
+    case = kurul.case(petitioner_user_id=kurul.chair.pk)
+    _acting_meeting(case, kurul, T1)
+    services.record_meeting(
+        case,
+        meeting_date=T2,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t2.pk,
+    )
+    services.create_extension(case, requested_days=5, reason="Tanık dinlenecek.", decided_on=T1)
+    ctx = doc_engine._deadline_extension_context(case, {})
+    assert ctx["committee"].chair.get_full_name() == kurul.t1.member_name
+    assert _grid_names(ctx) == [kurul.t2.member_name, kurul.sub.member_name]
+    assert kurul.chair.full_name not in _html(_FORM12, ctx)
 
 
 def test_uzatma_gunu_vekaletli_son_toplanti_olagan_form12_o_gunun_baskanlik_edenini_basar(

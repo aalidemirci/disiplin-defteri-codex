@@ -103,7 +103,7 @@ describe("BaskanVekaleti — bilgi notu (K2)", () => {
     expect(screen.getByRole("checkbox", { name: /Başkan toplantıya katılmadı/ })).not.toBeChecked();
     expect(
       screen.getByText(
-        /dosyanın kurul evrakı \(çağrılar, ek süre evrakı, EK-1, dizi pusulası\).*başkan yerine kurula başkanlık eden üyeyle basılır/,
+        /Dosyanın kurul evrakı \(çağrılar, ek süre evrakı, EK-1, dizi pusulası\) dosyadaki kurul toplantısı kaydına göre basılır/,
       ),
     ).toBeInTheDocument();
   });
@@ -119,6 +119,6 @@ describe("BaskanVekaleti — bilgi notu (K2)", () => {
         caseReview={false}
       />,
     );
-    expect(screen.queryByText(/dosyanın kurul evrakı/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dosyanın kurul evrakı/)).not.toBeInTheDocument();
   });
 });

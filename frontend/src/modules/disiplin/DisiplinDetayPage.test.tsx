@@ -875,7 +875,7 @@ describe("DisiplinDetayPage — toplantıda başkan vekâleti (S7)", () => {
     await within(dialog).findByRole("checkbox", { name: /Başkan toplantıya katılmadı/ });
     expect(
       within(dialog).getByText(
-        /dosyanın kurul evrakı \(çağrılar, ek süre evrakı, EK-1, dizi pusulası\) başkan yerine kurula başkanlık eden üyeyle basılır/,
+        /dosyanın çağrı ve ifade evrakı ile dizi pusulası başkan yerine kurula başkanlık eden üyeyle basılır/,
       ),
     ).toBeInTheDocument();
   });

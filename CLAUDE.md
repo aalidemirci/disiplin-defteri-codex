@@ -411,7 +411,10 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   (`documents._extension_panel`): izinli başkanda ölçüt, tarihi uzatma tarihine eşit ya da ondan
   önceki EN GEÇ toplantıdır — o toplantı vekâletliyse O toplantının başkanlık edeni, yoksa ya da
   vekâletsizse asıl başkan basılır (son toplantıya değil uzatma günündeki toplantıya bakılır).
-  Şikâyetçi / zarar gören başkanda tarih aranmaz.
+  Şikâyetçi / zarar gören başkanda asıl başkan hiçbir durumda basılmaz: uzatma günündeki toplantı
+  vekâletliyse O toplantının başkanlık edeni, değilse son toplantının başkanlık edeni ya da boş
+  hane (16.11.2026). Karar defteri tutanağındaki başkanlık karşılaştırması da tutanağın
+  TARİHİNDEKİ dosya toplantısıyla yapılır (o tarihte kayıt yoksa son toplantıyla).
   EK-1 kararın BAĞLI toplantısından basıldığı
   için çok toplantılı dosyada çağrı evrakından farklı kişi taşıyabilir. Son toplantı kaydı vekâletli değilse ve başkan şikâyetçi / zarar gören değilse bu belgelerin
   çıktısı değişmez — Form-12 / Form-13 dışında: onlar son toplantıya değil uzatma günündeki

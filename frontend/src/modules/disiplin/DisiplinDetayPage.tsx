@@ -2033,10 +2033,11 @@ function RecordMeetingDialog({
               <p className="flex items-start gap-1 text-body-small text-on-surface-variant">
                 <Icon name="info" size="sm" />
                 <span>
-                  Toplantı bu kutu işaretli kaydedilirse, bu kayıttan sonra dosyanın kurul evrakı
-                  (çağrılar, ek süre evrakı, EK-1, dizi pusulası) başkan yerine kurula başkanlık
-                  eden üyeyle basılır. Başkan dosyada şikâyetçi ya da zarar gören değilse, bu
-                  toplantıdan sonraki tarihli çağrı ve ifade evrakı yeniden başkanla basılır.
+                  Toplantı bu kutu işaretli kaydedilirse, bu kayıttan sonra dosyanın çağrı ve ifade
+                  evrakı ile dizi pusulası başkan yerine kurula başkanlık eden üyeyle basılır. Ek
+                  süre evrakı uzatma günündeki toplantıya, EK-1 kararın bağlı olduğu toplantıya göre
+                  basılır. Başkan dosyada şikâyetçi ya da zarar gören değilse, bu toplantıdan
+                  sonraki tarihli çağrı ve ifade evrakı yeniden başkanla basılır.
                 </span>
               </p>
               {chairForced && (

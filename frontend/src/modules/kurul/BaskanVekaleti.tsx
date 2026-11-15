@@ -155,9 +155,9 @@ export default function BaskanVekaleti({
         <p className="flex items-start gap-1 text-body-small text-on-surface-variant">
           <Icon name="info" size="sm" />
           <span>
-            Bu tutanak karar defteri sayfasını belirler; dosyanın kurul evrakı (çağrılar, ek süre
-            evrakı, EK-1, dizi pusulası) dosyadaki kurul toplantısı da “başkan katılmadı” olarak
-            kaydedildikten sonra başkan yerine kurula başkanlık eden üyeyle basılır.
+            Bu tutanak yalnız karar defteri sayfasını belirler. Dosyanın kurul evrakı (çağrılar, ek
+            süre evrakı, EK-1, dizi pusulası) dosyadaki kurul toplantısı kaydına göre basılır; o
+            kayıt da “başkan katılmadı” olarak girilmelidir.
           </span>
         </p>
       )}

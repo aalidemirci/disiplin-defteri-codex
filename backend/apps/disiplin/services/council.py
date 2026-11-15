@@ -844,7 +844,16 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
     if meeting.minutes_type != CouncilMinutesType.CASE_REVIEW or meeting.discipline_case is None:
         return warnings
     warnings.extend(_bound_meeting_warnings(meeting, committee, voting))
-    case_meeting = meeting.discipline_case.meetings.first()
+    # Başkanlık karşılaştırması tutanağın TARİHİNDEKİ dosya toplantısıyla yapılır (16.11.2026):
+    # çok toplantılı dosyada (md. 197 ikinci görüşmesi, dönen başkan) ilk görüşmenin tutanağı
+    # son toplantıyla karşılaştırılınca yanlış uyarı alıyor, aynı günün gerçek farkı kaçıyordu.
+    # O tarihte toplantı kaydı yoksa eski davranış: dosyanın son toplantısı.
+    case_meetings = meeting.discipline_case.meetings.all()
+    case_meeting = case_meetings.filter(meeting_date=meeting.meeting_date).first()
+    which = "kurul toplantısı"
+    if case_meeting is None:
+        case_meeting = case_meetings.first()
+        which = "son kurul toplantısı"
     if case_meeting is None:
         return warnings
     on = f"{case_meeting.meeting_date:%d.%m.%Y}"
@@ -859,7 +868,7 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
             else ("başkan katıldı", "başkan katılmamış")
         )
         warnings.append(
-            f"Bu tutanakta {here} kayıtlı; dosyanın son kurul toplantısı kaydında ({on}) ise "
+            f"Bu tutanakta {here} kayıtlı; dosyanın {which} kaydında ({on}) ise "
             f"{there} görünüyor. {fix}"
         )
     elif meeting.chair_absent and case_meeting.acting_chair is not None:
@@ -872,8 +881,8 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
         )
         if chair_row is not None and not same:
             warnings.append(
-                f"Kurula başkanlık eden üye bu tutanakta {chair_row.person_name}; dosyanın son "
-                f"kurul toplantısı kaydında ({on}) ise {acting.member_name}. {fix}"
+                f"Kurula başkanlık eden üye bu tutanakta {chair_row.person_name}; dosyanın "
+                f"{which} kaydında ({on}) ise {acting.member_name}. {fix}"
             )
     return warnings
 
@@ -899,7 +908,9 @@ def _bound_meeting_warnings(
     md. 185/6 davetlileri karşılaştırmaya girmez. Dosya toplantısında başkan katılımcı satırı
     değildir ve vekâletsiz kayıtta o günkü başkanın adı saklanmaz: başkan satırı kişi olarak
     KARŞILAŞTIRILMAZ (kurul başkanı yıl içinde değişirse eski tutanaklar yanlış uyarı alırdı);
-    yalnız iki kaydın "başkan katıldı / katılmadı" durumu karşılaştırılır.
+    "başkan katıldı / katılmadı" durumu ve başkanlık eden kişi `council_chair_warnings` içinde
+    aynı günün toplantısıyla ayrıca karşılaştırılır. Tutanak vekâletliyse başkan satırı kurul
+    başkanı değil başkanlık eden ÜYEDİR: kişi olarak karşılaştırılır.
     """
     from apps.disiplin.services.committee import meeting_attendees
 
@@ -942,7 +953,8 @@ def _bound_meeting_warnings(
         for m in meeting_attendees(case_meeting)
     ]
     # Başkan toplantıya katıldıysa tutanaktaki başkan satırı kişi olarak karşılaştırılmaz.
-    compared = voting if case_meeting.chair_absent else [a for a in voting if not a.is_chair]
+    chair_is_member = case_meeting.chair_absent or meeting.chair_absent
+    compared = voting if chair_is_member else [a for a in voting if not a.is_chair]
     only_here = [
         a.person_name
         for a in compared
@@ -968,11 +980,9 @@ def _bound_meeting_warnings(
             for a in voting
         )
     ]
-    parts = []
-    if meeting.chair_absent and not case_meeting.chair_absent:
-        parts.append("tutanakta başkan katılmadı olarak, toplantı kaydında katıldı olarak kayıtlı")
-    if not parts and not only_here and not only_there:
+    if not only_here and not only_there:
         return []
+    parts = []
     if only_here:
         parts.append(f"tutanakta olup toplantı kaydında olmayan: {', '.join(only_here)}")
     if only_there:
