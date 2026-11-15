@@ -1806,6 +1806,45 @@ _DAYS_TEXT: dict[int, str] = {
 }
 
 
+def _extension_panel(case: DisciplineCase, extension: Any) -> dict[str, Any]:
+    """Form-12 / Form-13 kurul bağlamı — izinli başkanda uzatma GÜNÜNDEKİ toplantıya bakar.
+
+    Kullanıcı kararı, 15.11.2026 ("tarihe baksın"): başkan yalnız izinliyse (şikâyetçi / zarar
+    gören değilse) vekâlet toplantıya özgüdür. Süre uzatma kararına (md. 192/3) o gün kim
+    başkanlık ettiyse o basılır; ölçüt, tarihi uzatma tarihine eşit ya da ondan önceki EN GEÇ
+    toplantı kaydıdır (uzatma kaydı toplantıya bağlı değildir):
+
+    * öyle bir toplantı yoksa ya da vekâletli değilse o gün kurula asıl başkan başkanlık
+      etmiştir — kurulun kendi kaydı basılır ("md. 188 gereğince … başkanlığında" denmez:
+      tutanak gerçeğe aykırı olurdu);
+    * vekâletliyse O toplantıda başkanlık eden üye basılır (dosyada daha sonra başka bir
+      vekâletli toplantı olsa da — yalnız son toplantıya bakmak ilk oturumda alınan uzatmayı
+      katılmamış başkanla basıyordu).
+
+    Dosyanın SON toplantı kaydı vekâletli değilse ya da başkan şikâyetçi / zarar gören ise
+    (md. 191/2: hiçbir oturuma katılamaz) tarih aranmaz; `_committee_with_members_context`
+    sonucu aynen döner.
+    """
+    panel = _committee_with_members_context(case)
+    if extension is None or "chair_role" not in panel:
+        return panel
+    committee = selectors.committee_for_case(case)
+    if committee is None or services.committee.chair_conflicted(case, committee):
+        return panel
+    members = list(selectors.committee_members(committee))
+    governing = (
+        selectors.meetings_for_case(case).filter(meeting_date__lte=extension.decided_on).first()
+    )
+    acting = governing.acting_chair if governing is not None and governing.chair_absent else None
+    if acting is None:
+        return {"committee": committee, "members": members}
+    return {
+        **panel,
+        "committee": _ActingCommittee(committee, _ActingChair(acting)),
+        "members": [m for m in members if m.pk != acting.pk],
+    }
+
+
 def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """Süre uzatma (F-12 ara karar / F-13 dilekçe, md. 192/3) — uzatma kaydı + kurul + öğrenci.
 
@@ -1819,6 +1858,7 @@ def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> 
     (Form-13).
     """
     extension = case.deadline_extensions.first()
+    panel = _extension_panel(case, extension)
     students = [
         _student_context(link.student)
         for link in case.case_students.select_related("student").order_by("pk")
@@ -1828,7 +1868,7 @@ def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> 
     return {
         **_common_context(case),
         # S7/K3: başkanlık eden üye ızgarada bir kez imzalar — `_committee_with_members_context`.
-        **_committee_with_members_context(case),
+        **panel,
         "extension": extension,
         "student": student,
         "students": students,
