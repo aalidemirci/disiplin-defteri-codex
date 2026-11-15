@@ -62,10 +62,13 @@
    `statement_record` (Form-4/5/6), `info_gathering` (Form-7/8) ve `defense_call` (Form-9)
    başkan etiketini de bağlamdan alır (`chair_role`; verilmezse şablonun eski sabit metni).
    Form-12 giriş cümlesi `chair_presiding`, Form-13 gövdesi `chair_office` ile aynı yolu izler.
-   Bu anahtarlar YALNIZ başkan dosyada şikâyetçi / zarar gören ve dosyanın son toplantı kaydı
-   vekâletliyse verilir (`documents._committee_with_members_context`); öteki bütün durumlarda
-   yedi şablonun çıktısı bayt bayt aynıdır (testli) — kaldırma. Ceza tebliğleri ("Tebliğ Eden —
-   Müdür Yardımcısı") kapsam DIŞIDIR, AYNEN.
+   Bu anahtarlar dosyanın SON toplantı kaydı vekâletliyse verilir — başkan dosyada şikâyetçi /
+   zarar gören olsun ya da yalnız izinli olsun (kullanıcı kararı, 15.11.2026;
+   `documents._case_committee`, `_committee_with_members_context`). Dizi pusulasının düzenleyen
+   hanesi aynı kuralı izler (`_index_sheet_context`). Son toplantı kaydı vekâletli değilse yedi
+   şablonun çıktısı bayt bayt aynıdır (testli) — kaldırma. Ceza tebliğleri ("Tebliğ Eden —
+   Müdür Yardımcısı") kapsam DIŞIDIR, AYNEN: izinli başkanda asıl başkan basılır, şikâyetçi /
+   zarar gören başkanda hane boş kalır (`_case_committee(acting=False)`).
    `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.
@@ -157,7 +160,7 @@ yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
 Ölçek duygusu (2026.11.0-beta.1 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
-testlerle): backend ~24.300 satır Python (~45.900) + 1280 test · desktop/packaging ~3.200 satır
+testlerle): backend ~24.300 satır Python (~46.200) + 1288 test · desktop/packaging ~3.200 satır
 (~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 556 test.
 
 ---
@@ -365,11 +368,19 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   BÜTÜN kurul evrakından çıkar (`documents._signing_panel`, `documents._case_committee`):
   vekâletli toplantı kaydı varsa başkanlık eden üye (ad satırı YALNIZ ad, etiket
   `ACTING_CHAIR_ROLE`; Form-12/13 gövdesi de vekâlete göre), yoksa boş (noktalı) hane ve eski
-  sabit etiket; ceza tebliğlerinde tebliğ eden hanesi her durumda boş. Başkanlık eden üye
+  sabit etiket; (şikâyetçi / zarar gören başkanda) ceza tebliğlerinde tebliğ eden hanesi her
+  durumda boş. Başkanlık eden üye
   Form-12 ızgarasında ve Form-10 çağrılanlar tablosunda ikinci kez basılmaz; Form-10
   tablosunda o toplantı kaydında katılan yedek üye basılır (md. 188/1, 191/2 — yalnız bağlam:
-  `documents._meeting_call_context`; kayıtta yedek yoksa ad uydurulmaz). Başkan şikâyetçi / zarar gören değilse
-  bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
+  `documents._meeting_call_context`; kayıtta yedek yoksa ad uydurulmaz).
+  Başkan şikâyetçi / zarar gören DEĞİLSE de (izinli başkan — kullanıcı kararı, 15.11.2026)
+  dosyanın SON toplantı kaydı vekâletliyse Form-3, 4-6, 7-8, 9, 10, 12, 13 ve dizi pusulası
+  başkanlık eden üyeyi AYNI biçimde basar; ceza tebliğleri bu durumda asıl başkanı basmayı
+  sürdürür. "Son" = toplantı tarihi en geç olan kayıt: toplantı kaydından ÖNCE üretilen çağrı
+  asıl başkanla çıkar; vekâletli toplantıdan sonra daha ileri tarihli vekâletsiz toplantı
+  kaydedilirse evrak yeniden asıl başkanı basar. EK-1 kararın BAĞLI toplantısından basıldığı
+  için çok toplantılı dosyada çağrı evrakından farklı kişi taşıyabilir. Son toplantı kaydı
+  vekâletli değilse ve başkan şikâyetçi / zarar gören değilse bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
   (`case_chair_warnings`, `council_chair_warnings`). Onur Kurulu (md. 182) kapsam dışıdır.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
   iade eder / (iade sonrası) ilçeye sevk eder.

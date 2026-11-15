@@ -763,27 +763,39 @@ def _acting_chair_member(case: DisciplineCase) -> Any | None:
 
 
 def _case_committee(case: DisciplineCase, *, acting: bool = True) -> Any:
-    """Dosyanın kurulu — başkan o dosyada şikâyetçi / zarar gören ise başkansız sunulur.
+    """Dosyanın kurulu — başkan hanesi dosyanın SON toplantı kaydına ve md. 191/2'ye göre.
+
+    Kullanıcı kararı, 15.11.2026 — "izinli başkan durumunda da çağrı evrakı başkanlık edeni
+    bassın": dosyanın SON toplantı kaydı vekâletliyse (başkan şikâyetçi / zarar gören olsun
+    ya da yalnız izinli / raporlu olsun — md. 188/1) Form-3, 4-6, 7-8, 9, 10, 12, 13 başkan
+    hanesine kurula başkanlık eden üye yazılır (ad satırı yalın; hane etiketi ve gövde
+    ifadeleri `_committee_with_members_context` ile bağlamdan gelir). Böylece dosyanın bütün
+    kurul evrakı EK-1, Form-11, md. 195 tutanağı ve karar defteriyle (`_signing_panel`) AYNI
+    kişiyi basar. "Son kayıt" kuralı gereği toplantı kaydedilmeden ÖNCE üretilen çağrı asıl
+    başkanla çıkar; vekâletli toplantıdan sonra vekâletsiz toplantı kaydedilirse evrak yeniden
+    asıl başkanı basar.
 
     Kullanıcı kararı, 14.11.2026 — S7/K3: şikâyetçi / zarar gören başkan (md. 191/2) dosyanın
-    BÜTÜN kurul evrakından çıkar (Form-3, 4-6, 7-8, 9, 10, 12, 13, ceza tebliğleri). Dosyada
-    vekâletli toplantı kaydı varsa başkan hanesine kurula başkanlık eden üye yazılır (ad
-    satırı yalın; hane etiketi ve gövde ifadeleri `_committee_with_members_context` ile
-    bağlamdan gelir); kayıt yoksa ad satırı boş (noktalı) kalır, ad uydurulmaz ve etiket
-    şablonun eski sabit metnidir.
-    `acting=False`: hane her durumda boş kalır — ceza tebliğlerinde etiket "Tebliğ Eden —
-    Müdür Yardımcısı" sabittir; kurula başkanlık eden öğretmen üye tebliğ eden müdür
-    yardımcısı değildir, tebliği kimin yapacağı kayıtlı da değildir.
+    BÜTÜN kurul evrakından çıkar (ceza tebliğleri dahil); vekâletli toplantı kaydı yoksa ad
+    satırı boş (noktalı) kalır, ad uydurulmaz ve etiket şablonun eski sabit metnidir.
 
-    Başkan şikâyetçi / zarar gören DEĞİLSE (başkan izinli olduğu için vekâletli toplantı kaydı
-    olsa bile) kurulun kendi kaydı döner: bu belgelerin çıktısı AYNEN kalır.
+    `acting=False` (ceza tebliğleri): başkanlık eden üye HİÇ yazılmaz — etiket "Tebliğ Eden —
+    Müdür Yardımcısı" sabittir; kurula başkanlık eden öğretmen üye tebliğ eden müdür
+    yardımcısı değildir. Şikâyetçi / zarar gören başkanda hane boş kalır; izinli başkanda
+    kurulun kendi kaydı döner (tebliği müdür yardımcısı kendisi yapabilir — çıktı AYNEN).
+
+    Son toplantı kaydı vekâletli DEĞİLSE ve başkan şikâyetçi / zarar gören değilse kurulun
+    kendi kaydı döner: bu belgelerin çıktısı AYNEN kalır.
     """
     committee = selectors.committee_for_case(case)
-    if committee is None or not services.committee.chair_conflicted(case, committee):
-        return committee
+    if committee is None:
+        return None
     member = _acting_chair_member(case) if acting else None
-    chair: Any = _ActingChair(member) if member is not None else _BlankChair()
-    return _ActingCommittee(committee, chair)
+    if member is not None:
+        return _ActingCommittee(committee, _ActingChair(member))
+    if services.committee.chair_conflicted(case, committee):
+        return _ActingCommittee(committee, _BlankChair())
+    return committee
 
 
 class _DecisionView:
@@ -1062,14 +1074,17 @@ def _index_sheet_context(case: DisciplineCase) -> dict[str, Any]:
         chair = committee.chair if committee else None
         ctx["compiler_name"] = chair.full_name if chair else ""
         ctx["compiler_role"] = "Düzenleyen / Disiplin Kurulu Başkanı"
-        if committee is not None and services.committee.chair_conflicted(case, committee):
+        acting = _acting_chair_member(case) if committee is not None else None
+        if acting is not None:
+            # Kullanıcı kararı, 15.11.2026: dosyanın SON toplantı kaydı vekâletliyse (başkan
+            # şikâyetçi / zarar gören ya da yalnız izinli) düzenleyen, kurula başkanlık eden
+            # üyedir (md. 188 ifadesiyle) — öteki kurul evrakıyla aynı kişi (`_case_committee`).
+            ctx["compiler_name"] = acting.member_name
+            ctx["compiler_role"] = f"Düzenleyen / {ACTING_CHAIR_ROLE}"
+        elif committee is not None and services.committee.chair_conflicted(case, committee):
             # S7/K3 (14.11.2026): şikâyetçi / zarar gören başkan dosyayı düzenleyen olarak da
-            # basılmaz (md. 191/2). Vekâletli toplantı kaydı varsa kurula başkanlık eden üye
-            # (md. 188 ifadesiyle); yoksa ad boş — şablon noktalı çizgi basar.
-            acting = _acting_chair_member(case)
-            ctx["compiler_name"] = acting.member_name if acting is not None else ""
-            if acting is not None:
-                ctx["compiler_role"] = f"Düzenleyen / {ACTING_CHAIR_ROLE}"
+            # basılmaz (md. 191/2); vekâlet kaydı yoksa ad boş — şablon noktalı çizgi basar.
+            ctx["compiler_name"] = ""
     else:
         ctx["compiler_name"] = ctx.get("principal_name", "")
         ctx["compiler_role"] = "Düzenleyen / Okul Müdürü"
@@ -1080,7 +1095,8 @@ def _committee_context(case: DisciplineCase) -> dict[str, Any]:
     """Tebliğ eden (müdür yrd. / kurul başkanı) için dosyanın kurulu (md. 185/4).
 
     S7/K3: başkan dosyada şikâyetçi / zarar gören ise tebliğ eden hanesinin ad satırı boş
-    (noktalı) basılır — bkz. `_case_committee`.
+    (noktalı) basılır. İzinli başkanın vekâletli dosyasında (15.11.2026 kararı kapsam DIŞI)
+    asıl başkan basılmaya devam eder — bkz. `_case_committee(acting=False)`.
     """
     return {"committee": _case_committee(case, acting=False)}
 
@@ -1600,15 +1616,17 @@ def _non_compliance_context(
 def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
     """Dosyanın kurulu + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni).
 
-    S7/K3: başkan dosyada şikâyetçi / zarar gören ise başkan hanesi `_case_committee`
-    kuralıyla basılır; üye listesi kurulun kendi listesidir.
+    Başkan hanesi `_case_committee` kuralıyla basılır (son toplantı kaydı vekâletliyse
+    başkanlık eden üye; şikâyetçi / zarar gören başkan + vekâlet kaydı yoksa boş hane); üye
+    listesi kurulun kendi listesidir.
 
     Kullanıcı kararı, 14.11.2026 — S7 (Form-3, 4-6, 7-8, 9, 10, 12, 13): başkan hanesine
     kurula başkanlık eden üye yazılıyorsa hane ETİKETİ (`chair_role`) ve Form-12 / Form-13
     gövde ifadeleri (`chair_presiding`, `chair_office`) de bağlamdan verilir; o üye üye
     listesinden çıkar — Form-12 ızgarasında iki kez imzalamaz, Form-10'da çağrıyı imzalayan
-    kişi kendini çağırmaz. Öteki bütün durumlarda (başkan şikâyetçi değil; vekâlet kaydı yok)
-    bu anahtarlar VERİLMEZ, liste aynen kalır: şablon eski sabit metni basar.
+    kişi kendini çağırmaz. 15.11.2026 kararıyla bu, başkan şikâyetçi / zarar gören OLMASA DA
+    (izinli başkan) geçerlidir. Dosyanın son toplantı kaydı vekâletli değilse bu anahtarlar
+    VERİLMEZ, liste aynen kalır: şablon eski sabit metni basar.
     """
     committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
@@ -1748,8 +1766,8 @@ def _defense_record_context(
 def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
     """Kurul toplantı çağrısı (Form-10, md. 190-191) — üye listesi + toplantı zamanı.
 
-    S7 (14.11.2026): çağrıyı kurula başkanlık eden öğretmen üye imzalıyorsa (şikâyetçi /
-    zarar gören başkan + vekâletli toplantı kaydı) o toplantı kaydında KATILAN yedek üye
+    S7 (14.11.2026; 15.11.2026'dan beri izinli başkanda da): çağrıyı kurula başkanlık eden
+    öğretmen üye imzalıyorsa (dosyanın son toplantı kaydı vekâletli) o kayıtta KATILAN yedek üye
     çağrılanlar tablosunda basılır — md. 188/1 "Üyenin başkanlık yaptığı durumlarda yedek
     üye toplantıya katılır", md. 191/2 "yerine yedek üye toplantıya çağrılır". AYNEN şablon
     yedekleri (`is_substitute`) gizlediği için yedek üye bağlamda `_CalledSubstitute` ile
