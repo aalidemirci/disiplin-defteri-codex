@@ -16,6 +16,11 @@ Ek kararlar (kullanıcı, 14.11.2026): K1 başkan hanesi etiketi üç şablonda 
 yokken ileti; K3 şikâyetçi / zarar gören başkan dosyanın bütün kurul evrakından çıkar; K4 eski
 kayıtta boş hane + kalıcı uyarı. Dosyanın sonundaki bölüm. Etiket kararı ("Evet, değişsin"):
 Form-3, 4-6, 7-8, 9, 10, 12, 13'te sabit başkan etiketi de bağlamdan (`test_etiket_…`).
+
+Kullanıcı kararı (15.11.2026): "izinli başkan durumunda da çağrı evrakı başkanlık edeni bassın"
+— başkan şikâyetçi / zarar gören OLMASA DA dosyanın SON toplantı kaydı vekâletliyse aynı yedi
+şablon ve dizi pusulası başkanlık eden üyeyi basar; ceza tebliğleri kapsam dışı
+(`test_izinli_baskan_…`).
 """
 
 from __future__ import annotations
@@ -1274,18 +1279,35 @@ def test_k3_sikayetci_baskan_vekalet_kaydi_yokken_butun_kurul_evrakinda_bos_hane
             assert _BLANK in html, key
 
 
-@pytest.mark.parametrize("vekalet", [False, True], ids=["vekaletsiz", "izinli_baskan_vekaletli"])
-def test_k3_baskan_sikayetci_degilse_kurul_evraki_aynen_kalir(kurul: _Kurul, vekalet: bool) -> None:
-    """Başkan şikâyetçi / zarar gören DEĞİLSE bu belgeler (başkan izinli olduğu için vekâletli
-    toplantı kaydı olsa bile) kurulun gerçek kaydını basar — bağlam S7 öncesiyle aynı nesnedir."""
+def _izinli_vekaletli(kurul: _Kurul) -> DisciplineCase:
+    """Başkan şikâyetçi / zarar gören DEĞİL; izinli olduğu için toplantı vekâletle kaydedildi."""
     case = _case_with_decision(kurul, petitioner_user_id=None)
-    if vekalet:
+    services.record_meeting(
+        case,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    return case
+
+
+@pytest.mark.parametrize(
+    "kayit", ["toplantisiz", "vekaletsiz_toplanti", "vekaletten_sonra_vekaletsiz"]
+)
+def test_k3_baskan_sikayetci_degilse_kurul_evraki_aynen_kalir(kurul: _Kurul, kayit: str) -> None:
+    """Başkan şikâyetçi / zarar gören DEĞİLSE ve dosyanın SON toplantı kaydı vekâletli değilse
+    bu belgeler kurulun gerçek kaydını basar — bağlam S7 öncesiyle aynı nesnedir. İzinli başkanın
+    vekâletli toplantısından SONRA vekâletsiz toplantı kaydedildiyse de öyle (son kayıt belirler)."""
+    if kayit == "vekaletten_sonra_vekaletsiz":
+        case = _izinli_vekaletli(kurul)
+    else:
+        case = _case_with_decision(kurul, petitioner_user_id=None)
+    if kayit != "toplantisiz":
         services.record_meeting(
             case,
-            meeting_date=_ON,
-            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
-            chair_absent=True,
-            acting_chair_member_id=kurul.t1.pk,
+            meeting_date=date(2026, 5, 25),
+            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk],
         )
     for key, template, ctx in _k3_documents(case):
         html = _html(template, ctx)
@@ -1303,20 +1325,258 @@ def test_k3_baskan_sikayetci_degilse_kurul_evraki_aynen_kalir(kurul: _Kurul, vek
             ], key
 
 
+# --- Kullanıcı kararı (15.11.2026): "izinli başkan durumunda da çağrı evrakı başkanlık edeni
+# bassın" — başkan şikâyetçi / zarar gören OLMASA DA son toplantı kaydı vekâletliyse ---------
+def test_izinli_baskan_vekaletli_dosyada_kurul_evraki_baskanlik_edeni_basar(kurul: _Kurul) -> None:
+    """Form-3, 4-6, 7-8, 9, 10, 12, 13 ve dizi pusulası, şikâyetçi başkanın vekâletli dosyasındaki
+    ile AYNI biçimde başkanlık eden üyeyi basar; asıl başkanın adı bu belgelerde geçmez. Ceza
+    tebliğleri kapsam dışıdır: "Tebliğ Eden — Müdür Yardımcısı" hanesinde asıl başkan kalır."""
+    case = _izinli_vekaletli(kurul)
+    name = kurul.t1.member_name
+    seen: list[str] = []
+    for key, template, ctx in _k3_documents(case):
+        html = _html(template, ctx)
+        seen.append(key)
+        if key in _K3_NOTICES:
+            # Bağlam kurulun GERÇEK kaydıdır (vekil nesne değil) — çıktı karar öncesiyle aynı.
+            assert isinstance(ctx["committee"], DisciplineCommittee), key
+            assert ctx["committee"].pk == kurul.committee.pk, key
+            assert "chair_role" not in ctx, key
+            assert kurul.chair.full_name in html, key
+            assert "md. 188" not in html, key
+            assert name not in html, key
+            continue
+        assert kurul.chair.full_name not in html, key
+        if key == "dizi":
+            assert ctx["compiler_name"] == name
+            assert ctx["compiler_role"] == f"Düzenleyen / {_ROLE}"
+            assert name in html
+            continue
+        assert ctx["chair_role"] == _ROLE, key
+        assert ctx["chair_presiding"] == doc_engine.ACTING_CHAIR_PRESIDING, key
+        assert ctx["chair_office"] == doc_engine.ACTING_CHAIR_OFFICE, key
+        assert html.count(_ROLE) == 1, key
+        assert "Disiplin Kurulu Başkanı" not in html, key
+        assert "Müdür Yrd." not in html, key
+        assert f"{name} —" not in html, key
+        if key in ("form3", "form9"):
+            assert f"<strong>{name}</strong><br> {_ROLE} </td>" in html, key
+        else:
+            assert f'<div class="name">{name}</div> <div class="role">{_ROLE}</div>' in html, key
+    assert sorted(seen) == sorted([*_LABEL_KEYS, "dizi", *_K3_NOTICES])
+    kurul.committee.refresh_from_db()
+    assert kurul.committee.chair_id == kurul.chair.pk  # kayıt değişmez
+
+
+def test_izinli_baskan_vekaletli_dosya_sikayetci_baskanin_vekaletli_dosyasiyla_ayni_bicimde(
+    kurul: _Kurul,
+) -> None:
+    """Gövde cümleleri (Form-12/13), Form-10 çağrılanlar tablosu ve Form-12 ızgarası şikâyetçi
+    başkanın vekâletli dosyasındaki kuralla aynıdır."""
+    case = _izinli_vekaletli(kurul)
+    name = kurul.t1.member_name
+    docs = {key: (template, ctx) for key, template, ctx in _label_documents(case)}
+    form12 = _html(*docs["form12"])
+    assert (
+        "tarihinde md. 188 gereğince kurula başkanlık eden öğretmen üye "
+        f"<strong>{name}</strong> başkanlığında toplanarak" in form12
+    )
+    assert form12.count(f'<div class="name">{name}</div>') == 1  # ızgarada çift basma yok
+    assert kurul.sub.member_name not in form12  # Form-12 ızgarasında yedek gizli kalır
+    form13 = _html(*docs["form13"])
+    assert (
+        "başlatılan ve md. 188 uyarınca başkanlık ettiğim Disiplin Kurulu tarafından yürütülen "
+        "disiplin soruşturması" in form13
+    )
+    assert "Başkanlığım" not in form13
+    # Form-10: başkanlık eden üye çağrılanlar tablosunda yok, katılan yedek üye var.
+    ctx10 = docs["form10"][1]
+    assert [m.pk for m in ctx10["members"]] == [kurul.t2.pk, kurul.parent.pk, kurul.sub.pk]
+    form10 = _html(*docs["form10"])
+    assert form10.count(name) == 1  # yalnız imza bloğu
+    assert f"<td>{name}</td>" not in form10
+    assert f"<td>3</td> <td>{kurul.sub.member_name}</td>" in form10
+    # Şikâyetçi başkanın vekâletli dosyasıyla bağlam anahtarları ve üye listesi birebir aynı.
+    other = _sikayetci_vekaletli(kurul)
+    for key, _template, ctx in _label_documents(other):
+        mine = docs[key][1]
+        for context_key in _LABEL_CONTEXT_KEYS:
+            assert mine[context_key] == ctx[context_key], (key, context_key)
+        assert [m.pk for m in mine["members"]] == [m.pk for m in ctx["members"]], key
+        assert mine["committee"].chair.get_full_name() == ctx["committee"].chair.get_full_name()
+    # Kurul kaydı değişmez: üye hâlâ yedek, başkan hâlâ başkan.
+    kurul.sub.refresh_from_db()
+    assert kurul.sub.is_substitute is True
+
+
+def test_izinli_baskan_butun_kurul_evraki_ayni_kisiyi_basar(kurul: _Kurul) -> None:
+    """Kararın amacı: EK-1, Form-11 / md. 195 ızgarası ile çağrı evrakı AYNI kişiyi basar."""
+    case = _izinli_vekaletli(kurul)
+    name = kurul.t1.member_name
+    panel = doc_engine._committee_signers_context(case)
+    call = doc_engine._meeting_call_context(case, {})
+    assert panel["committee"].chair.get_full_name() == name
+    assert call["committee"].chair.get_full_name() == name
+    assert panel["chair_role"] == call["chair_role"] == _ROLE
+    ek1 = _html(_EK1, doc_engine._ek1_context(case, case.students.get()))
+    assert name in ek1
+    assert kurul.chair.full_name not in ek1
+
+
+def test_izinli_baskan_cagri_toplantidan_once_asil_baskanla_cikar(kurul: _Kurul) -> None:
+    """Bilinen sınır ("son toplantı kaydı" kuralı): toplantı kaydedilmeden ÖNCE üretilen çağrı
+    asıl başkanla çıkar; vekâletli toplantı kaydedildikten sonra başkanlık eden üyeyle."""
+    case = _case_with_decision(kurul, petitioner_user_id=None)
+    before = _html(_FORM10, doc_engine._meeting_call_context(case, {}))
+    assert kurul.chair.full_name in before
+    assert "md. 188" not in before
+    services.record_meeting(
+        case,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t1.pk,
+    )
+    after = _html(_FORM10, doc_engine._meeting_call_context(case, {}))
+    assert kurul.chair.full_name not in after
+    assert _ROLE in after
+
+
+def test_izinli_baskan_once_vekaletsiz_sonra_vekaletli_toplantida_baskanlik_edeni_basar(
+    kurul: _Kurul,
+) -> None:
+    """Ters sıra — SON kayıt (en geç tarihli toplantı) belirler: önce başkanın katıldığı, sonra
+    vekâletli toplantı kaydedildiyse çağrı evrakı ve dizi pusulası başkanlık eden üyeyi basar;
+    ceza tebliği asıl başkanı basmayı sürdürür."""
+    case = _case_with_decision(kurul, petitioner_user_id=None)
+    services.record_meeting(
+        case,
+        meeting_date=_ON,
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk],
+    )
+    first = _html(_FORM10, doc_engine._meeting_call_context(case, {}))
+    assert kurul.chair.full_name in first
+    assert "md. 188" not in first
+    services.record_meeting(
+        case,
+        meeting_date=date(2026, 5, 25),
+        attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+        chair_absent=True,
+        acting_chair_member_id=kurul.t2.pk,
+    )
+    name = kurul.t2.member_name
+    for key, template, ctx in _k3_documents(case):
+        html = _html(template, ctx)
+        if key in _K3_NOTICES:
+            assert kurul.chair.full_name in html, key
+            assert "md. 188" not in html, key
+            continue
+        assert kurul.chair.full_name not in html, key
+        assert name in html, key
+        if key == "dizi":
+            assert ctx["compiler_role"] == f"Düzenleyen / {_ROLE}"
+        else:
+            assert ctx["chair_role"] == _ROLE, key
+
+
+def test_izinli_baskan_gercek_uretim_sayfa_sayisi_degismez(kurul: _Kurul) -> None:
+    """Gerçek üretim (WeasyPrint): izinli başkanın vekâletli dosyasında yedi belge ve dizi
+    pusulası uzun adlı başkanlık eden üyeyi basar, asıl başkanı basmaz; sayfa sayısı vekâletsiz
+    toplantılı aynı dosyanın çıktısıyla aynıdır. Ceza tebliği asıl başkanı basmayı sürdürür."""
+    long_name = kurul._teacher("ABDURRAHMAN GAZİOSMANPAŞA", "KARAOSMANOĞULLARI YILDIRIMTÜRK")
+    jobs: list[tuple[str, dict[str, Any]]] = [
+        ("MEETING_CALL", {}),
+        ("DEADLINE_EXTENSION", {"variant": doc_engine.VARIANT_RECORD}),
+        ("DEADLINE_EXTENSION", {"variant": doc_engine.VARIANT_PETITION}),
+        ("STATEMENT_CALL", {"participant": True}),
+        ("STATEMENT_RECORD", {"participant": True}),
+        ("INFO_GATHERING", {"participant": True, "variant": "student"}),
+        ("INFO_GATHERING", {"participant": True, "variant": "teacher"}),
+        ("DEFENSE_CALL", {"participant": True}),
+        ("INDEX_SHEET", {}),
+    ]
+    pages: dict[tuple[str, int], int] = {}
+    for key in ("plain", "acting"):
+        case = _case_with_decision(kurul, petitioner_user_id=None)
+        if key == "acting":
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk, kurul.sub.pk],
+                chair_absent=True,
+                acting_chair_member_id=long_name.pk,
+            )
+        else:
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk],
+            )
+        services.create_extension(
+            case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
+        )
+        accused = case.participants.get(role=ParticipantRole.ACCUSED)
+        for index, (document_type, options) in enumerate(jobs):
+            kwargs: dict[str, Any] = {"variant": options.get("variant", "")}
+            if options.get("participant"):
+                kwargs["participant_id"] = accused.pk
+            pdf, _doc = doc_engine.generate_document(
+                case,
+                document_type=document_type,
+                generated_on=date(2026, 5, 20),
+                log=False,
+                **kwargs,
+            )
+            pages[(key, index)] = len(_pdf_pages(pdf))
+            text = _pdf_text(pdf)
+            if key == "acting":
+                assert kurul.chair.full_name not in text, document_type
+                assert long_name.member_name in text, document_type
+                assert "Kurula Başkanlık Eden" in text, document_type
+                assert "(md. 188)" in text, document_type
+                assert "Disiplin Kurulu Başkanı" not in text, document_type
+            else:
+                assert kurul.chair.full_name in text, document_type
+                assert "Disiplin Kurulu Başkanı" in text, document_type
+                assert "md. 188" not in text, document_type
+        if key == "acting":
+            # Ceza tebliği (Form-14): tebliğ eden müdür yardımcısı — asıl başkan basılır.
+            pdf, _doc = doc_engine.generate_document(
+                case,
+                document_type="PENALTY_NOTICE",
+                generated_on=date(2026, 6, 1),
+                student_id=case.students.get().pk,
+                log=False,
+            )
+            notice = _pdf_text(pdf)
+            assert kurul.chair.full_name in notice
+            assert "md. 188" not in notice
+    for index, (document_type, _options) in enumerate(jobs):
+        assert pages[("acting", index)] == pages[("plain", index)], (document_type, index)
+
+
 def test_k3_gercek_uretim_form10_ve_form12_pdf(kurul: _Kurul) -> None:
     """Gerçek üretim (WeasyPrint): şikâyetçi başkanın vekâletli dosyasında Form-10 ve Form-12
     PDF'i başkanı basmaz, başkanlık eden üyeyi md. 188 ifadesiyle basar; sayfa sayısı başkanı
-    şikâyetçi olmayan aynı dosyanın çıktısıyla aynıdır (uzun ad satırı taşma yapmaz)."""
+    şikâyetçi olmayan, vekâletsiz toplantılı aynı dosyanın çıktısıyla aynıdır (uzun ad satırı
+    taşma yapmaz)."""
     pages: dict[tuple[str, str], int] = {}
     for key, petitioner in (("plain", None), ("acting", kurul.chair.pk)):
         case = _case_with_decision(kurul, petitioner_user_id=petitioner)
-        services.record_meeting(
-            case,
-            meeting_date=_ON,
-            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
-            chair_absent=True,
-            acting_chair_member_id=kurul.t1.pk,
-        )
+        if key == "acting":
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
+                chair_absent=True,
+                acting_chair_member_id=kurul.t1.pk,
+            )
+        else:
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk],
+            )
         services.create_extension(
             case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
         )
@@ -1499,36 +1759,56 @@ def test_etiket_form10_vekaletli_dosyada_katilan_yedek_uye_cagrilanlar_tablosund
     )
     assert sub not in _html(_FORM10, doc_engine._meeting_call_context(without, {}))
 
-    # Başkan şikâyetçi değilse (izinli başkan, vekâletli toplantı) tablo AYNEN: yedek yok.
+    # İzinli başkan (şikâyetçi değil) + vekâletli toplantı: AYNI kural — katılan yedek tabloda
+    # (kullanıcı kararı, 15.11.2026).
+    leave = _izinli_vekaletli(kurul)
+    leave_ctx = doc_engine._meeting_call_context(leave, {})
+    assert [m.pk for m in leave_ctx["members"]] == [kurul.t2.pk, kurul.parent.pk, kurul.sub.pk]
+    assert _html(_FORM10, leave_ctx).count(f"<td>{sub}</td>") == 1
+
+    # Vekâlet kaydı yoksa (başkan katıldı) tablo AYNEN: yedek toplantıya katılmış olsa da yok.
     plain = _case_with_decision(kurul, petitioner_user_id=None)
     services.record_meeting(
         plain,
         meeting_date=_ON,
         attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
-        chair_absent=True,
-        acting_chair_member_id=kurul.t1.pk,
     )
     assert sub not in _html(_FORM10, doc_engine._meeting_call_context(plain, {}))
 
 
 @pytest.mark.parametrize(
-    "durum", ["vekaletsiz", "izinli_baskan_vekaletli", "sikayetci_kayitsiz", "eski_toplanti"]
+    "durum",
+    [
+        "vekaletsiz",
+        "vekaletsiz_toplanti",
+        "izinli_sonra_vekaletsiz_toplanti",
+        "sikayetci_kayitsiz",
+        "eski_toplanti",
+    ],
 )
 def test_etiket_vekaletli_olmayan_ciktida_yedi_sablon_bayt_bayt_ayni(
     kurul: _Kurul, durum: str
 ) -> None:
-    """Etiket izni yalnız "şikâyetçi / zarar gören başkan + vekâletli toplantı kaydı" çıktısını
-    değiştirir. Başkan şikâyetçi değilse (vekâletsiz ya da izinli başkan) ve vekâlet kaydı yokken
-    (boş hane, eski sabit etiket) yedi şablonun HAM çıktısı karar öncesi şablonla bayt bayt aynı."""
+    """Etiket izni yalnız "dosyanın SON toplantı kaydı vekâletli" çıktısını değiştirir (başkan
+    şikâyetçi olsun olmasın — kullanıcı kararı, 15.11.2026). Son kayıt vekâletli değilken (toplantı
+    yok; vekâletsiz toplantı; izinli başkanın vekâletli toplantısından SONRA vekâletsiz toplantı;
+    şikâyetçi başkanda boş hane + eski sabit etiket) yedi şablonun HAM çıktısı karar öncesi
+    şablonla bayt bayt aynı."""
     conflicted = durum in ("sikayetci_kayitsiz", "eski_toplanti")
     case = _case_with_decision(kurul, petitioner_user_id=kurul.chair.pk if conflicted else None)
-    if durum == "izinli_baskan_vekaletli":
+    if durum == "izinli_sonra_vekaletsiz_toplanti":
         services.record_meeting(
             case,
             meeting_date=_ON,
             attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.sub.pk],
             chair_absent=True,
             acting_chair_member_id=kurul.t1.pk,
+        )
+    if durum in ("vekaletsiz_toplanti", "izinli_sonra_vekaletsiz_toplanti"):
+        services.record_meeting(
+            case,
+            meeting_date=date(2026, 5, 25),
+            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, kurul.parent.pk],
         )
     elif durum == "eski_toplanti":
         _eski_toplanti(case, [kurul.t1, kurul.t2, kurul.parent])
@@ -1575,7 +1855,8 @@ def test_etiket_ceza_tebliglerinde_tebligeden_hanesi_degismez(kurul: _Kurul) -> 
 
 def test_etiket_gercek_uretim_yedi_belgede_sayfa_sayisi_degismez(kurul: _Kurul) -> None:
     """Gerçek üretim (WeasyPrint): uzun adlı başkanlık eden üyeyle vekâletli dosyada yedi
-    belgenin sayfa sayısı, başkanı şikâyetçi olmayan aynı dosyanın çıktısıyla aynıdır."""
+    belgenin sayfa sayısı, başkanı şikâyetçi olmayan ve toplantısı vekâletsiz kaydedilmiş aynı
+    dosyanın çıktısıyla aynıdır."""
     long_name = kurul._teacher("ABDURRAHMAN GAZİOSMANPAŞA", "KARAOSMANOĞULLARI YILDIRIMTÜRK")
     jobs: list[tuple[str, dict[str, Any]]] = [
         ("MEETING_CALL", {}),
@@ -1590,13 +1871,20 @@ def test_etiket_gercek_uretim_yedi_belgede_sayfa_sayisi_degismez(kurul: _Kurul) 
     pages: dict[tuple[str, int], int] = {}
     for key, petitioner in (("plain", None), ("acting", kurul.chair.pk)):
         case = _case_with_decision(kurul, petitioner_user_id=petitioner)
-        services.record_meeting(
-            case,
-            meeting_date=_ON,
-            attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk, kurul.sub.pk],
-            chair_absent=True,
-            acting_chair_member_id=long_name.pk,
-        )
+        if key == "acting":
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk, kurul.sub.pk],
+                chair_absent=True,
+                acting_chair_member_id=long_name.pk,
+            )
+        else:
+            services.record_meeting(
+                case,
+                meeting_date=_ON,
+                attendee_member_ids=[kurul.t1.pk, kurul.t2.pk, long_name.pk],
+            )
         services.create_extension(
             case, requested_days=5, reason="Tanık dinlenecek.", decided_on=date(2026, 5, 20)
         )
