@@ -109,7 +109,7 @@ yazıldığını anlamıyorsan cevap çoğu kez "OYS'de öyleydi ve pariteyi kor
 
 **Durum:** F0-F5 fazlarının hepsi tamamlandı. CI'da Linux `.deb` (debian:11 ve
 debian:12'ye temiz kurulum) ve Windows `setup.exe` + `portable.zip` uçtan uca
-yeşil koştu. Sürüm: `VERSION` → `2026.11.0-beta.1` (CalVer; kasım 2026 yedekleme düzeltmesi + 14.11.2026 saha denemesi kararları S1-S13: vekâlet kaydı, toplantı zorunluluğu, şema göçleri 0014-0017).
+yeşil koştu. Sürüm: `VERSION` → `2026.11.0-beta.2` (CalVer; kasım 2026 yedekleme düzeltmesi + 14.11.2026 saha denemesi kararları S1-S13: vekâlet kaydı, toplantı zorunluluğu, şema göçleri 0014-0017; beta.2: izinli başkanın vekâletli dosyasında çağrı ve ek süre evrakı).
 
 ---
 
@@ -159,7 +159,7 @@ arka plan thread'i → `pywebview` penceresi. Bütünlük denetimi bilinçli ola
 yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
-Ölçek duygusu (2026.11.0-beta.1 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
+Ölçek duygusu (2026.11.0-beta.2 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
 testlerle): backend ~24.300 satır Python (~46.200) + 1296 test · desktop/packaging ~3.200 satır
 (~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 556 test.
 
