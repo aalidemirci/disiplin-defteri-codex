@@ -699,6 +699,10 @@ def test_bagli_toplanti_acikca_gonderilirse_yeniden_dogrulanmaz() -> None:
         case, meeting_date=T1, attendee_member_ids=[members[0].pk]
     )  # başkan + 1 üye = 2/3
     decision = _record(case, sid, meeting=meeting)
+    # K8 (15.11.2026) ÖNCESİ kayıt taklidi: toplantı anındaki tam sayı yazılmamış — yeter sayı
+    # kurulun güncel üye sayısından hesaplanır (yeni kayıtlar: test_acik_kalemler.py, K8).
+    DisciplineMeeting.objects.filter(pk=meeting.pk).update(quorum_full=None)
+    meeting.refresh_from_db()
     for _ in range(2):
         services.add_committee_member(
             committee, member_type="TEACHER", person_id=PersonnelFactory().pk
@@ -728,6 +732,10 @@ def test_yeter_sayi_reddi_karar_bagli_toplantida_silmeyi_onermez() -> None:
     committee, members = _committee()
     meeting = services.record_meeting(case, meeting_date=T1, attendee_member_ids=[members[0].pk])
     _record(case, first_sid, meeting=meeting)
+    # K8 (15.11.2026) ÖNCESİ kayıt taklidi: tam sayı yazılmamış toplantı kurul büyüyünce
+    # yetersiz görünür (yeni kayıtlar yeterli kalır — test_acik_kalemler.py, K8).
+    DisciplineMeeting.objects.filter(pk=meeting.pk).update(quorum_full=None)
+    meeting.refresh_from_db()
     for _ in range(2):
         services.add_committee_member(
             committee, member_type="TEACHER", person_id=PersonnelFactory().pk

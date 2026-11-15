@@ -231,10 +231,18 @@ export interface DisciplineMeeting {
   chair_absent: boolean;
   acting_chair: number | null;
   acting_chair_name: string;
+  // K5 (15.11.2026) — salt okur. Vekâletli kayıtta O GÜNKÜ kurul başkanının adı (kayda
+  // yazılır; başkan sonradan değişse de değişmez). "" = başkan katıldı ya da eski kayıt.
+  absent_chair_name?: string;
+  // K7 (15.11.2026) — salt okur. Toplantı tarihi bugünden (sunucunun yerel tarihi) sonra:
+  // toplantı kaydedilebilir ama yapılmamış toplantıya karar bağlanamaz / taşınamaz.
+  is_future?: boolean;
   // Uyarır, engellemez: başkan katılmadı ama katılanlar arasında yedek üye yok (md. 188).
   chair_warnings?: string[];
   // S8 (14.11.2026): karar yalnız yeter sayılı toplantıya bağlanır (md. 191/1) — sunucu
-  // yeniden hesaplar; `ok: false` toplantı karar formunda seçilemez.
+  // yeniden hesaplar; `ok: false` toplantı karar formunda seçilemez. K8 (15.11.2026):
+  // `full` toplantı ANINDAKİ üye tam sayısıdır (kurul sonradan büyüse de değişmez; eski
+  // kayıtta kurulun güncel sayısı).
   quorum?: MeetingQuorum;
   // Bu toplantıya bağlı CANLI kararlar — karar bağlı toplantı silinemez.
   decisions?: MeetingDecisionRef[];
@@ -503,6 +511,14 @@ export interface DisciplineDecision extends DecisionNarrative {
   // S11b (14.11.2026) — salt okur. Kurula İADE tarihi: ilçeye sevkte korunur; eski
   // (göç öncesi sevk edilmiş) kararda boştur.
   first_returned_at?: string | null;
+  // K10 (15.11.2026) — salt okur. Müdürün kurula iade ettiği karar başka bir toplantıya İLK
+  // KEZ taşınırken yazılan ilk görüşme tarihi ve (varsa) toplantısı; sonradan ezilmez.
+  // `null` = karar iade sonrası taşınmadı. Süreler ve diğer belgeler `decision_date` kullanır.
+  first_decision_date?: string | null;
+  first_meeting?: number | null;
+  // K11 (15.11.2026) — salt okur. Silinmiş karar NEDEN geri yüklenemez (sunucunun geri
+  // yükleme reddiyle aynı metin); "" = yüklenebilir. Canlı kararda hep "".
+  restore_blocked_reason?: string;
   // Okul kurulunun VERDİĞİ ceza — yalnız ceza üst kurulca (onayda) ya da itirazla
   // değiştiyse dolu; `penalty_type`/`suspension_days` her zaman yürürlükteki cezadır.
   board_penalty_type?: PenaltyType | "";

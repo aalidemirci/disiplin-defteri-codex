@@ -199,8 +199,18 @@ def _assert_meeting_usable(
     *,
     referred_on: date | None,
 ) -> None:
-    """Karar bağlanacak toplantı: aynı dosyada, canlı, yeter sayılı ve sevkten sonra (S8)."""
-    from apps.disiplin.services.committee import case_meeting_quorum, meeting_quorum_message
+    """Karar bağlanacak toplantı: aynı dosyada, canlı, yeter sayılı ve sevkten sonra (S8).
+
+    K7 (kullanıcı kararı, 15.11.2026): toplantı tarihi bugünden (yerel tarih) sonraysa karar
+    bağlanamaz / taşınamaz — yapılmamış toplantının kararı olmaz. Kararın ZATEN bağlı olduğu
+    toplantı yeniden doğrulanmaz (`update_decision`): K7 öncesi kayıt kendiliğinden bozulmaz.
+    """
+    from apps.disiplin.services.committee import (
+        case_meeting_quorum,
+        meeting_future_message,
+        meeting_is_future,
+        meeting_quorum_message,
+    )
 
     if meeting.case_id != case.pk:
         raise ValueError("Seçilen toplantı bu dosyaya ait değil.")
@@ -208,6 +218,8 @@ def _assert_meeting_usable(
         raise ValueError(
             "Seçilen toplantı kaydı silinmiş; kararı kayıtlı bir kurul toplantısına bağlayın."
         )
+    if meeting_is_future(meeting):
+        raise ValueError(meeting_future_message(meeting))
     quorum = case_meeting_quorum(meeting)
     if not quorum["ok"]:
         raise ValueError(meeting_quorum_message(meeting, quorum))
@@ -429,7 +441,9 @@ def update_decision(
 
     TOPLANTI BAĞI (S8): toplantıya bağlı kararda karar tarihi toplantı tarihidir — yalnız
     `meeting` verilerek (başka toplantıya bağlama; md. 197 iadesinden sonraki ikinci görüşme
-    böyle kaydedilir) değişir; bağ KALDIRILAMAZ (`meeting=None` reddedilir). Toplantısız
+    böyle kaydedilir; iade edilmiş kararın İLK taşınmasında ilk görüşmenin tarihi ve
+    toplantısı `first_decision_date` / `first_meeting` alanlarına yazılır, sonra ezilmez —
+    K10) değişir; bağ KALDIRILAMAZ (`meeting=None` reddedilir). Toplantısız
     girilmiş ESKİ kararda tarih eskisi gibi düzenlenir, toplantı ZORLANMAZ; `meeting`
     verilirse karar o toplantıya bağlanır ve tarihi toplantı tarihine çekilir.
 
@@ -515,6 +529,22 @@ def update_decision(
     is_suspension = penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
     if is_suspension:
         _validate_enforcement_start(penalty_type, enforcement_start_date)
+    if (
+        decision.first_returned_at is not None
+        and decision.first_decision_date is None
+        and new_meeting is not None
+        and (bound is None or new_meeting.pk != bound.pk)
+        and new_meeting.meeting_date != decision.decision_date
+    ):
+        # K10 (kullanıcı kararı, 15.11.2026): müdürün kurula iade ettiği karar başka bir
+        # toplantıya İLK KEZ taşınıyor (md. 197 — ikinci görüşme). İlk görüşmenin tarihi ve
+        # (varsa) toplantısı saklanır; sonraki taşımalar EZMEZ, alanlar BOŞALTILMAZ.
+        # Tarih DEĞİŞMİYORSA ikinci görüşme yoktur (eski kararın o günkü toplantıya
+        # bağlanması, yanlış kaydın aynı tarihli doğrusuna taşınması): iz yazılmaz —
+        # `rebind_decision_meeting` ile aynı; iz gerçek ikinci görüşmede, o an bağlı olan
+        # (düzeltilmiş) toplantıyla yazılır.
+        decision.first_decision_date = decision.decision_date
+        decision.first_meeting = bound
     decision.md166_override_reason = md166_reason
     decision.penalty_type = penalty_type
     decision.decision_date = decision_date
@@ -552,9 +582,34 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
     Aynı öğrenci için bu dosyada zaten CANLI bir karar varsa reddedilir. Dosya artık
     kurula sevkli değilse (sevk geri alınmış / yazılı uyarıya dönülmüş) karar geri
     gelmez — md. 163/2 (`record_decision` ile aynı kural). Toplantıya bağlı karar (S8),
-    toplantısı silinmişse ya da sevk yeniden yapıldığı için toplantı sevk öncesinde
-    kaldıysa da geri gelmez.
+    toplantısı silinmişse geri gelmez. Karar tarihi dosyanın YÜRÜRLÜKTEKİ kurula sevk
+    tarihinden önceyse (karar silindikten sonra sevk geri alınıp yeniden yapılmış) bağlı
+    karar da toplantısız girilmiş ESKİ karar da geri gelmez (K11, 15.11.2026). Canlı eski
+    kararlar etkilenmez. Bağlı toplantının tarihi henüz gelmediyse (K7 öncesi kayıt) karar
+    toplantı gününe dek geri gelmez (K7).
     """
+    _assert_restorable(decision)
+    decision.restore()
+    return decision
+
+
+def restore_block_reason(decision: DisciplineDecision) -> str:
+    """Silinmiş karar NEDEN geri yüklenemez — yüklenebiliyorsa (ya da karar canlıysa) boş.
+
+    Çöp kutusu "Geri yükle" yerine nedeni yazar (§7.6: basınca reddedilecek düğme sunulmaz);
+    denetim `restore_decision` ile AYNI yerdedir (`_assert_restorable`).
+    """
+    if decision.deleted_at is None:
+        return ""
+    try:
+        _assert_restorable(decision)
+    except ValueError as exc:
+        return str(exc)
+    return ""
+
+
+def _assert_restorable(decision: DisciplineDecision) -> None:
+    """`restore_decision` denetimleri — kaydı değiştirmez, geri yüklenemiyorsa ValueError."""
     if decision.deleted_at is None:
         raise ValueError("Karar zaten geri yüklenmiş (silinmemiş).")
     _assert_case_open(decision)
@@ -565,7 +620,8 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
         case_id=decision.case_id, student_id=decision.student_id
     ).exists():
         raise ValueError("Bu öğrenci için bu dosyada zaten (canlı) bir karar var; geri yüklenemez.")
-    if decision.meeting_id is not None and _live_meeting(decision.meeting_id) is None:
+    live = _live_meeting(decision.meeting_id)
+    if decision.meeting_id is not None and live is None:
         # S8: karar toplantıya dayanır. Toplantısız girilmiş ESKİ karar (bağ boş) bu denetime
         # girmez — eski kararlar geçerli kalır.
         gone = DisciplineMeeting.all_objects.filter(pk=decision.meeting_id).first()
@@ -574,18 +630,33 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
             f"Kararın bağlı olduğu kurul toplantısı kaydı{when} silinmiş; karar geri "
             "yüklenemez. Toplantıyı yeniden kaydedip kararı yeniden girin."
         )
-    if decision.meeting_id is not None and decision.decision_date < referred_on:
-        # Karar silindikten sonra sevk geri alınıp yeniden yapılmış: bağlı toplantı artık
-        # yürürlükteki sevkten ÖNCE (md. 163/2; `_assert_meeting_usable` ile aynı kural). Yalnız
-        # sevk tarihi denetlenir — yeter sayı canlı karardaki gibi yeniden sorgulanmaz. Eski
-        # (bağsız) karar bu denetime girmez: tarihi düzenlemede düzeltilir (S8 öncesi davranış).
+    if live is not None:
+        from apps.disiplin.services.committee import meeting_is_future
+
+        if meeting_is_future(live):
+            # K7: geri yükleme fiilen yeniden bağlamadır — yapılmamış toplantının kararı
+            # canlanmaz. Yol yalnız K7 ÖNCESİ girilip silinmiş kayıtta açıktır; CANLI eski
+            # karar yeniden doğrulanmaz (kilitlenmez). Kapan değil: tarih gelince yüklenir.
+            raise ValueError(
+                f"Kararın bağlı olduğu toplantının tarihi ({live.meeting_date:%d.%m.%Y}) henüz "
+                "gelmedi; karar geri yüklenemez. Toplantı günü ya da sonrasında geri yükleyin; "
+                "toplantı başka bir tarihte yapıldıysa o toplantıyı kaydedip kararı yeniden "
+                "girin."
+            )
+    if decision.decision_date < referred_on:
+        # Karar silindikten sonra sevk geri alınıp yeniden yapılmış: karar artık yürürlükteki
+        # sevkten ÖNCE (md. 163/2; `_assert_meeting_usable` ile aynı kural). Yalnız sevk tarihi
+        # denetlenir — yeter sayı canlı karardaki gibi yeniden sorgulanmaz. K11 (kullanıcı
+        # kararı, 15.11.2026): toplantısız girilmiş ESKİ (bağsız) karar da bu denetime girer;
+        # eskiden sevk öncesi tarihle geri geliyordu. Canlı eski kararlar etkilenmez.
+        subject = (
+            "Kararın bağlı olduğu toplantı" if decision.meeting_id is not None else "Karar tarihi"
+        )
         raise ValueError(
-            f"Kararın bağlı olduğu toplantı ({decision.decision_date:%d.%m.%Y}) dosyanın "
+            f"{subject} ({decision.decision_date:%d.%m.%Y}) dosyanın "
             f"yürürlükteki kurula sevk tarihinden ({referred_on:%d.%m.%Y}) önce; karar geri "
             "yüklenemez. Sevkten sonraki toplantıyı kaydedip kararı yeniden girin."
         )
-    decision.restore()
-    return decision
 
 
 @transaction.atomic

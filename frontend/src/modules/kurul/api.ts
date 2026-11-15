@@ -84,6 +84,9 @@ export interface CouncilMeeting {
   // VEKÂLET KAYDI (S7, 14.11.2026 — yalnız Ödül ve Disiplin Kurulu): başkan katılmadı;
   // başkan işaretli katılımcı kurula başkanlık eden öğretmen üyedir (md. 188).
   chair_absent: boolean;
+  // K5 (15.11.2026) — salt okur. Vekâletli kayıtta O GÜNKÜ kurul başkanının adı; karar
+  // defterindeki "Kurul başkanı … toplantıya katılmamış" cümlesi bunu basar. "" = eski kayıt.
+  absent_chair_name?: string;
   attendees: CouncilAttendee[];
   // Kurul işleyişi (04.10.2026): kurul kararı gündem maddesinde verilir.
   agenda_items: AgendaItem[];
@@ -94,6 +97,8 @@ export interface CouncilMeeting {
   composition_warnings?: string[];
   // VEKÂLET KAYDI uyarıları (S7) — uyarır, engellemez: başkan katılmadı ama yedek üye
   // çağrılmamış (md. 188) ya da dosya görüşme tutanağı dosya toplantısı kaydıyla çelişiyor.
+  // K9 (15.11.2026): tutanağın tarihi / oy hakkı olan katılımcıları dosyadaki kararların
+  // BAĞLI olduğu kurul toplantısıyla uyuşmuyorsa o uyarı da bu listededir.
   chair_warnings?: string[];
 }
 

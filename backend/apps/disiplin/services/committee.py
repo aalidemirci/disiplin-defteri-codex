@@ -194,13 +194,15 @@ def case_meeting_quorum(meeting: DisciplineMeeting) -> dict[str, Any]:
     `record_meeting` yeter sayıyı kayıt anında denetler; ancak o denetimden önce kaydedilmiş
     (ya da katılımcısız) toplantı satırı bulunabilir. Katılanlar ara tablodan sayılır: sonradan
     kuruldan çıkarılan (soft-delete) üye o gün katılmıştı, sayılmaya devam eder. Başkan
-    katılmadıysa (`chair_absent`, S7) sayılmaz. Üye tam sayısı katılımcıların kurulunun (yoksa
-    dosyanın kurulunun) BUGÜNKÜ asıl üyeleri + başkandır.
+    katılmadıysa (`chair_absent`, S7) sayılmaz.
 
-    Bilinen sınır: üyelik geçmişi tutulmaz. Toplantıdan sonra kurulun asıl üye SAYISI
-    büyüdüyse eski toplantı yetersiz görünebilir; çare toplantıyı silip yeniden kaydetmek,
-    toplantıya karar bağlıysa (silinemez) yeni bir toplantı kaydetmektir. Bağlı kararlar
-    geçerli kalır.
+    Üye tam sayısı (kullanıcı kararı, 15.11.2026 — K8): toplantı KAYDEDİLİRKEN yazılan
+    `quorum_full` (o günkü başkan + asıl üyeler). Kurul sonradan büyüse de eski toplantı
+    yeterli kalır. Alan boşsa (K8 öncesi kayıt) eskisi gibi katılımcıların kurulunun (yoksa
+    dosyanın kurulunun) BUGÜNKÜ asıl üyeleri + başkan sayılır — o kayıtlarda bilinen sınır
+    sürer: kurulun asıl üye SAYISI büyüdüyse eski toplantı yetersiz görünebilir; çare
+    toplantıyı silip yeniden kaydetmek, toplantıya karar bağlıysa (silinemez) yeni bir toplantı
+    kaydetmektir. Bağlı kararlar geçerli kalır.
     """
     from apps.disiplin.selectors import committee_for_case
 
@@ -211,6 +213,11 @@ def case_meeting_quorum(meeting: DisciplineMeeting) -> dict[str, Any]:
         )
     )
     present = len(member_ids) + (0 if meeting.chair_absent else 1)
+    if meeting.quorum_full is not None:
+        full = int(meeting.quorum_full)
+        required = full // 2 + 1
+        ok = bool(member_ids) and present >= required
+        return {"full": full, "required": required, "present": present, "ok": ok}
     committee: DisciplineCommittee | None = None
     if member_ids:
         member = (
@@ -246,6 +253,37 @@ def meeting_quorum_message(meeting: DisciplineMeeting, quorum: dict[str, Any]) -
         f"Seçilen toplantıda ({meeting.meeting_date:%d.%m.%Y}) yeter sayı yok: kurul "
         f"{quorum['full']} kişi, en az {quorum['required']} kişi katılmalı; kayıtta "
         f"{quorum['present']} kişi (md. 191/1). {remedy}"
+    )
+
+
+def meeting_is_future(meeting: DisciplineMeeting) -> bool:
+    """Toplantı tarihi bugünden (YEREL tarih — §7.1) sonra mı? (K7)"""
+    from django.utils import timezone
+
+    return bool(meeting.meeting_date > timezone.localdate())
+
+
+def meeting_future_message(meeting: DisciplineMeeting) -> str:
+    """İleri tarihli toplantıya karar bağlama reddi (kullanıcı kararı, 15.11.2026 — K7).
+
+    İleri tarihli toplantı KAYDEDİLEBİLİR (planlama); ama yapılmamış toplantının kararı
+    olmaz — Onur belgesi tarafındaki kuralın (`services.council.decide_agenda_item`) eşi.
+    Eyleme dönük (§7.6): dosya toplantısı kaydı düzenlenemez; tarih yanlış girildiyse kayıt
+    silinip doğrusu girilir, toplantıya (eski) karar bağlıysa doğru tarihli yeni kayıt açılır.
+    """
+    if DisciplineDecision.objects.filter(meeting=meeting).exists():
+        remedy = (
+            "Toplantı yapıldıysa doğru tarihle yeni bir toplantı kaydedin ve kararı o "
+            "toplantıya bağlı girin (bu kayda karar bağlı olduğu için kayıt silinemez)."
+        )
+    else:
+        remedy = (
+            "Toplantı yapıldıysa kaydı silip doğru tarihle yeniden kaydedin; yapılmadıysa "
+            "kararı toplantı günü ya da sonrasında girin."
+        )
+    return (
+        f"Seçilen toplantının tarihi ({meeting.meeting_date:%d.%m.%Y}) henüz gelmedi; "
+        f"yapılmamış toplantıda karar verilemez. {remedy}"
     )
 
 
@@ -505,6 +543,11 @@ def record_meeting(
     kurula başkanlık eden asıl öğretmen üyedir (md. 188) — katılanlar arasında olmalıdır.
     Başkan dosyada şikâyetçi / zarar gören ise toplantı ANCAK böyle kaydedilir (md. 191/2).
     Yeter sayıda katılmayan başkan sayılmaz (md. 191/1).
+
+    Anlık kopyalar (kullanıcı kararları, 15.11.2026): kurulun o günkü üye tam sayısı
+    `quorum_full`'a (K8 — kurul sonradan büyüse de toplantı yeterli kalır), vekâletli kayıtta
+    o günkü başkanın adı `absent_chair_name`'e (K5) yazılır. İleri tarihli toplantı
+    kaydedilebilir; ona karar bağlanamaz (K7 — `services.decisions._assert_meeting_usable`).
     """
     from apps.disiplin.selectors import committee_referred_on, get_active_committee
 
@@ -571,6 +614,8 @@ def record_meeting(
         notes=notes,
         chair_absent=chair_absent,
         acting_chair_id=acting_chair_member_id if chair_absent else None,
+        absent_chair_name=committee.chair.full_name if chair_absent else "",
+        quorum_full=committee_quorum(committee, 0)["full"],
     )
     meeting.full_clean(exclude=["event"])
     meeting.save()

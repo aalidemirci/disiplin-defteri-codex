@@ -1495,6 +1495,239 @@ describe("DecisionsSection — S9: cezasız kararda süre beklenmez", () => {
   });
 });
 
+// Kullanıcı kararları, 15.11.2026 — açık kalemler (K7, K10, K11).
+describe("DecisionsSection — 15.11.2026 açık kalemler", () => {
+  const bos = { decisions: [], behavior_points: {} };
+
+  it("K7: yalnız ileri tarihli toplantı varken karar eklenemez; nedeni ve çaresi yazılır", async () => {
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({ meeting_date: "2026-03-20", is_future: true }),
+    ]);
+    renderSection();
+    expect(
+      await screen.findByText(
+        /Kayıtlı toplantının tarihi \(20\.03\.2026\) henüz gelmedi; yapılmamış toplantıda karar verilemez/,
+      ),
+    ).toBeInTheDocument();
+    // Eyleme dönük: yapıldıysa sil + doğru tarihle kaydet; yapılmadıysa toplantı gününü bekle.
+    expect(screen.getByText(/kaydı silip doğru tarihle yeniden kaydedin/)).toBeInTheDocument();
+    expect(screen.queryByText(/yeter sayısı yok/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Karar ekle" })).not.toBeInTheDocument();
+  });
+
+  it("K7: ileri tarihli toplantıya (eski) karar bağlıysa silme değil yeni toplantı önerilir", async () => {
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({
+        meeting_date: "2026-03-20",
+        is_future: true,
+        decisions: [{ id: 9, student: 4, student_name: "Deniz Uydurma", decision_no: "" }],
+      }),
+    ]);
+    renderSection();
+    expect(await screen.findByText(/doğru tarihle yeni bir toplantı kaydedin/)).toBeInTheDocument();
+    expect(screen.queryByText(/kaydı silip/)).toBeNull();
+  });
+
+  it("K7: ileri tarihli toplantı karar formunda seçilemez; neden listede olmadığı yazılır", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({ id: 62, meeting_date: "2026-03-20", is_future: true }),
+      makeMeeting({ id: 61 }),
+    ]);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Karar ekle" }));
+    const select = screen.getByLabelText(/Kurul toplantısı/);
+    // Seçilebilen tek toplantı ön-seçilidir; ileri tarihli olan seçenek değildir.
+    expect(select).toHaveValue("61");
+    expect(within(select).queryByRole("option", { name: /20\.03\.2026/ })).toBeNull();
+    expect(
+      screen.getByText(/İleri tarihli toplantı \(20\.03\.2026\) listede yok: tarihi henüz gelmedi/),
+    ).toBeInTheDocument();
+  });
+
+  it("K7: ileri tarihli toplantı yokken karar formunda ek not yoktur", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue(bos);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Karar ekle" }));
+    expect(screen.queryByText(/İleri tarihli toplantı/)).toBeNull();
+  });
+
+  it("K7: düzenlemede ileri tarihli toplantı seçenek değildir; kararın bağlı olduğu toplantı kalır", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue({
+      // K7 öncesi ileri tarihli toplantıya bağlanmış karar: geçerlidir, kilitlenmez.
+      decisions: [makeDecision({ meeting: 62, meeting_date: "2026-03-20" })],
+      behavior_points: {},
+    });
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({ id: 63, meeting_date: "2026-03-25", is_future: true }),
+      makeMeeting({ id: 62, meeting_date: "2026-03-20", is_future: true }),
+      makeMeeting({ id: 61 }),
+    ]);
+    dapi.updateDecision.mockResolvedValue(makeDecision());
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Düzenle" }));
+    const select = screen.getByLabelText(/Kurul toplantısı/);
+    expect(select).toHaveValue("62");
+    expect(within(select).queryByRole("option", { name: /25\.03\.2026/ })).toBeNull();
+    expect(within(select).getByRole("option", { name: /02\.03\.2026/ })).toBeInTheDocument();
+    expect(
+      screen.getByText(/İleri tarihli toplantı \(25\.03\.2026\) listede yok: tarihi henüz gelmedi/),
+    ).toBeInTheDocument();
+    // Bağlı toplantı değişmeden kaydedilebilir (tek yönlü kapan yok).
+    await user.click(screen.getByRole("button", { name: "Değişiklikleri kaydet" }));
+    await waitFor(() => expect(dapi.updateDecision).toHaveBeenCalled());
+    expect(dapi.updateDecision.mock.calls[0][2]).not.toHaveProperty("meeting");
+  });
+
+  it("K7: onaylı karar aynı tarihli ileri tarihli toplantıya taşınamaz (eylem sunulmaz)", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          approval_status: "APPROVED",
+          decision_date: "2026-03-20",
+          meeting: 62,
+          meeting_date: "2026-03-20",
+        }),
+      ],
+      behavior_points: {},
+    });
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({ id: 63, meeting_date: "2026-03-20", is_future: true }),
+      makeMeeting({ id: 62, meeting_date: "2026-03-20", is_future: true }),
+    ]);
+    renderSection();
+    await screen.findByText("Toplantı: 20.03.2026");
+    expect(screen.queryByRole("button", { name: "Toplantıyı değiştir" })).toBeNull();
+  });
+
+  it("K10: md. 197 iadesinden sonra taşınan kararda 'İlk görüşme' tarihi kartta görünür", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          meeting: 62,
+          meeting_date: "2026-03-09",
+          decision_date: "2026-03-09",
+          first_returned_at: "2026-03-04",
+          first_decision_date: "2026-03-02",
+          first_meeting: 61,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText("İlk görüşme: 02.03.2026")).toBeInTheDocument();
+    expect(screen.getByText("Toplantı: 09.03.2026")).toBeInTheDocument();
+  });
+
+  it("K10: ilk görüşme tarihi yoksa satır yoktur", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ first_decision_date: null, first_meeting: null })],
+      behavior_points: {},
+    });
+    renderSection();
+    await screen.findByText(/Toplantı kaydı yok/);
+    expect(screen.queryByText(/İlk görüşme/)).toBeNull();
+  });
+
+  it("K11: çöp kutusunda geri yüklenemeyen kararda 'Geri yükle' yerine sunucunun nedeni yazılır", async () => {
+    const user = userEvent.setup();
+    const neden =
+      "Karar tarihi (02.03.2026) dosyanın yürürlükteki kurula sevk tarihinden (10.03.2026) önce; karar geri yüklenemez. Kurul yeniden görüştüyse kararı yeniden girin.";
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listDeletedDecisions.mockResolvedValue([
+      makeDecision({
+        meeting: null,
+        meeting_date: null,
+        deleted_at: "2026-03-04T10:00:00Z",
+        restore_blocked_reason: neden,
+      }),
+    ]);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Silinmiş kararlar/ }));
+    expect(await screen.findByText(neden)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Geri yükle" })).not.toBeInTheDocument();
+    expect(dapi.restoreDecision).not.toHaveBeenCalled();
+  });
+
+  it("K11: neden boşsa 'Geri yükle' sunulur", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listDeletedDecisions.mockResolvedValue([
+      makeDecision({
+        meeting: 61,
+        meeting_date: "2026-03-02",
+        deleted_at: "2026-03-04T10:00:00Z",
+        restore_blocked_reason: "",
+      }),
+    ]);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Silinmiş kararlar/ }));
+    expect(await screen.findByRole("button", { name: "Geri yükle" })).toBeInTheDocument();
+  });
+
+  it("K11: kapalı dosyada çöp kutusu satırı sessiz kalmaz; sunucunun nedeni yazılır", async () => {
+    const user = userEvent.setup();
+    const neden = "Dosya kapalı: karar geri yüklenemez. Gerekiyorsa önce dosyayı yeniden açın.";
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listDeletedDecisions.mockResolvedValue([
+      makeDecision({ deleted_at: "2026-03-04T10:00:00Z", restore_blocked_reason: neden }),
+    ]);
+    renderSection(makeCase({ closed_at: "2026-04-01T10:00:00+03:00" }));
+    await user.click(await screen.findByRole("button", { name: /Silinmiş kararlar/ }));
+    expect(await screen.findByText(neden)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Geri yükle" })).not.toBeInTheDocument();
+  });
+
+  it("K11: çöp kutusu açıkken karar eklenince silinmiş kararlar yeniden çekilir (neden bayatlamaz)", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue(bos);
+    dapi.listDeletedDecisions.mockResolvedValue([
+      makeDecision({ id: 8, deleted_at: "2026-03-04T10:00:00Z", restore_blocked_reason: "" }),
+    ]);
+    dapi.createDecision.mockResolvedValue(makeDecision());
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Silinmiş kararlar/ }));
+    await screen.findByRole("button", { name: "Geri yükle" });
+    expect(dapi.listDeletedDecisions).toHaveBeenCalledTimes(1);
+
+    // Aynı öğrenciye yeni karar: sunucu artık geri yüklemeyi reddeder ve nedenini verir.
+    const neden = "Bu öğrenci için bu dosyada zaten (canlı) bir karar var; geri yüklenemez.";
+    dapi.listDeletedDecisions.mockResolvedValue([
+      makeDecision({ id: 8, deleted_at: "2026-03-04T10:00:00Z", restore_blocked_reason: neden }),
+    ]);
+    await user.click(screen.getByRole("button", { name: "Karar ekle" }));
+    await user.click(screen.getByRole("button", { name: "Kararı kaydet" }));
+    expect(await screen.findByText(neden)).toBeInTheDocument();
+    expect(dapi.listDeletedDecisions).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: "Geri yükle" })).not.toBeInTheDocument();
+  });
+
+  it("K7: toplantısız eski kararın düzenlemesinde seçim kutusu yokken not 'listede yok' demez", async () => {
+    const user = userEvent.setup();
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [makeDecision({ meeting: null, meeting_date: null })],
+      behavior_points: {},
+    });
+    dapi.listMeetings.mockResolvedValue([
+      makeMeeting({ id: 62, meeting_date: "2026-03-20", is_future: true }),
+    ]);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Düzenle" }));
+    expect(screen.queryByLabelText(/Kurul toplantısı/)).toBeNull();
+    expect(
+      screen.getByText(/İleri tarihli toplantı \(20\.03\.2026\) seçilemez: tarihi henüz gelmedi/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/listede\s+yok/)).toBeNull();
+    // Kapan yok: karar tarihi elle düzenlenebilir kalır.
+    expect(screen.getByLabelText(/Karar tarihi/)).not.toHaveAttribute("readonly");
+  });
+});
+
 function itiraz() {
   return {
     id: 9,

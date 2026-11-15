@@ -458,6 +458,7 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
                 rows={editingAttendees}
                 onRowsChange={setEditingAttendees}
                 existingRecord
+                caseReview={meeting.discipline_case !== null}
               />
             )}
             <KatilimciEditor
@@ -483,7 +484,9 @@ export default function ToplantiDetay({ meetingId, onBack }: Props) {
               <li className="flex items-start gap-1 text-body-medium text-on-surface-variant">
                 <Icon name="info" size="sm" />
                 <span>
-                  Başkan katılmadı;{" "}
+                  {/* K5 (15.11.2026): o günkü başkanın adı kayıttan; eski kayıtta boştur. */}
+                  Başkan{meeting.absent_chair_name ? ` (${meeting.absent_chair_name})` : ""}{" "}
+                  katılmadı;{" "}
                   {meeting.attendees.find((a) => a.is_chair)?.person_name ?? "öğretmen üye"}{" "}
                   başkanlık etti (md. 188).
                 </span>

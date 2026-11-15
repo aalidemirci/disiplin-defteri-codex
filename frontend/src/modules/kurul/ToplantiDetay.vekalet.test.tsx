@@ -99,6 +99,38 @@ describe("ToplantiDetay — başkan vekâleti (S7)", () => {
     expect(screen.getByText("(Başkanlık eden)")).toBeInTheDocument();
   });
 
+  // Kullanıcı kararı, 15.11.2026 — K5: o günkü başkanın adı kayda yazılır; ekranda gösterilir.
+  it("K5: katılmayan başkanın kayıttaki adı satırda gösterilir", async () => {
+    kapi.getMeeting.mockResolvedValue(meeting({ absent_chair_name: "Ayşe Başkan" }));
+    ekran();
+    expect(
+      await screen.findByText(
+        /Başkan \(Ayşe Başkan\) katılmadı; İpek Öğretmen başkanlık etti \(md\. 188\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // K9: dosya toplantısıyla tarih / katılımcı uyuşmazlığı AYNI uyarı kartında gösterilir;
+  // kart başlığı yalnız vekâleti anmaz.
+  it("K9: bağlı dosya toplantısıyla uyuşmazlık uyarısı kartta gösterilir", async () => {
+    kapi.getMeeting.mockResolvedValue(
+      meeting({
+        chair_absent: false,
+        minutes_type: "CASE_REVIEW",
+        discipline_case: 9,
+        discipline_case_no: "2025-2026-0002",
+        chair_warnings: [
+          "Bu tutanağın tarihi (25.05.2026), dosyadaki kararların bağlı olduğu kurul toplantısının tarihiyle (22.05.2026) uyuşmuyor.",
+        ],
+      }),
+    );
+    ekran();
+    expect(await screen.findByText(/tarihiyle \(22\.05\.2026\) uyuşmuyor/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Kurul toplantısı kaydı (uyarıdır; kayıt engellenmez):"),
+    ).toBeInTheDocument();
+  });
+
   it("vekâletsiz toplantıda satır yoktur; başkan 'Başkan' olarak gösterilir", async () => {
     kapi.getMeeting.mockResolvedValue(meeting({ chair_absent: false }));
     ekran();

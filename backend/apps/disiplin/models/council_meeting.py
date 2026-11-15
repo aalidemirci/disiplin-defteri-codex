@@ -148,6 +148,17 @@ class CouncilMeeting(BaseModel):
         default=False,
         help_text="Kurul başkanı toplantıya katılmadı; öğretmen üye başkanlık etti (md. 188).",
     )
+    # Kullanıcı kararı, 15.11.2026 — K5: vekâlet KAYDEDİLİRKEN o günkü kurul başkanının adı
+    # (düz metin anlık kopya). Karar defterindeki "Kurul başkanı … toplantıya katılmamış"
+    # cümlesi bunu basar; boşsa (K5 öncesi kayıt) eskisi gibi kurulun bugünkü başkanı okunur.
+    # Kayıt sonradan düzenlenirken ad kendiliğinden DEĞİŞMEZ.
+    absent_chair_name = models.CharField(
+        "katılmayan başkanın adı",
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Vekâlet kaydedilirken o günkü kurul başkanının adı (md. 188).",
+    )
 
     class Meta:
         verbose_name = "kurul toplantı tutanağı"

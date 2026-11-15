@@ -2,6 +2,9 @@
 // Metinler sunucuda üretilir (`chair_warnings`): başkan katılmadı ama yedek üye çağrılmamış
 // (md. 188 son cümlesi, md. 191/2) ya da dosya görüşme tutanağı dosyanın kurul toplantısı
 // kaydıyla başkanlık bakımından çelişiyor (EK-1 ile karar defteri farklı başkan basmasın).
+// K9 (15.11.2026): dosya görüşme tutanağının tarihi / oy hakkı olan katılımcıları dosyadaki
+// kararların BAĞLI olduğu kurul toplantısıyla uyuşmuyorsa o uyarı da aynı listeyle gelir —
+// başlık bu yüzden yalnız vekâleti anmaz.
 // Liste boşsa hiçbir şey çizilmez.
 
 import Icon from "../../ui/Icon";
@@ -13,7 +16,7 @@ export default function VekaletUyarisi({ warnings }: { warnings: string[] | unde
       <Icon name="warning" className="shrink-0 text-on-tertiary-container" />
       {/* `role="status"`: uyarı yalnız renk ve ikonla değil, ekran okuyucuya da duyurulur. */}
       <div role="status" className="space-y-1 text-body-small text-on-tertiary-container">
-        <p>Başkan vekâleti (uyarıdır; kayıt engellenmez):</p>
+        <p>Kurul toplantısı kaydı (uyarıdır; kayıt engellenmez):</p>
         <ul className="list-inside list-disc">
           {warnings.map((warning) => (
             <li key={warning}>{warning}</li>

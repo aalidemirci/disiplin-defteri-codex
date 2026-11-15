@@ -560,7 +560,10 @@ def test_s11c_goc_derleme_izini_mevcut_kopyanin_otomatik_satirlarindan_doldurur(
     assert rows[edited_line].prior_penalties_compiled == "10.02.2026 — Kınama"
     assert rows[later_line].prior_penalties_compiled == "10.02.2026 — Kınama"
     assert rows[only_later_line].prior_penalties_compiled == ""
-    # Göçten sonra gerçek denetim: bu dört kayıt bayat GÖRÜNMEZ.
+    # Göçten sonra gerçek denetim: bu dört kayıt bayat GÖRÜNMEZ. Canlı model GÜNCEL şemayı
+    # ister (0018 karara yeni sütun ekledi): önce uca çıkılır; geri alma aşağıda uçtan iner.
+    leaf_executor = MigrationExecutor(connection)
+    leaf_executor.migrate(leaf_executor.loader.graph.leaf_nodes())
     for pk in (dated_sentence, edited_line, later_line, only_later_line):
         live = DisciplineDecision.objects.get(pk=pk)
         assert selectors.prior_penalties_summary_is_stale(live) is False, pk

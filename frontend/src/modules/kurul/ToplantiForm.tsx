@@ -385,6 +385,7 @@ export default function ToplantiForm({
             }}
             rows={rows}
             onRowsChange={setRows}
+            caseReview={minutesType === "CASE_REVIEW"}
           />
         )}
         <KatilimciEditor

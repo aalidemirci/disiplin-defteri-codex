@@ -81,8 +81,40 @@ const APPEAL_RESULT_CHIP: Record<AppealResult, string> = {
 
 // S8 (14.11.2026): karar yalnız yeter sayılı toplantıya bağlanır (md. 191/1). Sunucu yeter
 // sayıyı yeniden hesaplar; `quorum.ok === false` toplantı seçeneklere girmez.
+// K7 (kullanıcı kararı, 15.11.2026): ileri tarihli toplantı kaydedilebilir ama yapılmamış
+// toplantıya karar bağlanamaz / taşınamaz — o da seçeneklere girmez. `is_future` sunucunun
+// yerel tarihinden gelir (§7.1); sunucu bağlarken yeniden doğrular.
 function usableMeetings(meetings: DisciplineMeeting[]): DisciplineMeeting[] {
-  return meetings.filter((m) => m.quorum?.ok !== false);
+  return meetings.filter((m) => m.quorum?.ok !== false && !m.is_future);
+}
+
+/** Yeter sayısı olduğu hâlde yalnız tarihi gelmediği için seçilemeyen toplantılar (K7). */
+function futureMeetings(meetings: DisciplineMeeting[]): DisciplineMeeting[] {
+  return meetings.filter((m) => m.quorum?.ok !== false && m.is_future);
+}
+
+// K7: seçim kutusunda neden eksik toplantı olduğu sessiz kalmaz (yoksa hiçbir şey çizilmez).
+// `listed`: formda toplantı seçim kutusu çiziliyor mu — çizilmiyorsa (toplantısız eski kararın
+// düzenlemesi, seçilebilir toplantı yok) "listede yok" denmez, "seçilemez" denir.
+function FutureMeetingsNote({
+  meetings,
+  listed = true,
+}: {
+  meetings: DisciplineMeeting[];
+  listed?: boolean;
+}) {
+  const future = futureMeetings(meetings);
+  if (future.length === 0) return null;
+  return (
+    <p className="flex items-start gap-1 text-body-small text-on-surface-variant">
+      <Icon name="schedule" size="sm" />
+      <span>
+        İleri tarihli toplantı ({future.map((m) => formatDate(m.meeting_date)).join(", ")}){" "}
+        {listed ? "listede yok" : "seçilemez"}: tarihi henüz gelmedi, yapılmamış toplantıda karar
+        verilemez. Karar toplantı günü ya da sonrasında bu toplantıya bağlanabilir.
+      </span>
+    </p>
+  );
 }
 
 function meetingLabel(m: DisciplineMeeting): string {
@@ -251,6 +283,13 @@ export default function DecisionsSection({
       .catch(() => setDeletedDecisions([]));
   }, [caseObj.id]);
 
+  // §7.5: karar eklenince / değişince çöp kutusundaki geri yükleme nedeni
+  // (`restore_blocked_reason`, K11) de değişebilir — açıksa o da yeniden çekilir.
+  const refreshWithTrash = useCallback(() => {
+    refresh();
+    if (showTrash) loadDeleted();
+  }, [loadDeleted, refresh, showTrash]);
+
   const handleRestore = useCallback(
     async (decisionId: number) => {
       try {
@@ -301,6 +340,7 @@ export default function DecisionsSection({
     point: behaviorPoints[s.id],
   }));
   const selectable = usableMeetings(meetings ?? []);
+  const notYetHeld = futureMeetings(meetings ?? []);
 
   return (
     <Card elevation={1} className="p-6">
@@ -337,10 +377,20 @@ export default function DecisionsSection({
             Karar girmek için önce kurul toplantısını kaydedin (md. 191/1): karar, yukarıdaki “Kurul
             toplantıları” bölümünde kaydedilen toplantıya bağlı girilir; karar tarihi toplantı
             tarihidir.
-            {meetings.length > 0 &&
-              (meetings.some((m) => (m.decisions?.length ?? 0) > 0)
-                ? " Kayıtlı toplantıların yeter sayısı yok; katılanları doğru girerek yeni bir toplantı kaydedin (karar bağlı toplantı silinemez)."
-                : " Kayıtlı toplantıların yeter sayısı yok; toplantıyı silip katılanları doğru girerek yeniden kaydedin.")}
+            {/* K7: yeter sayısı olan ama tarihi gelmemiş toplantı — neden ve çare ayrı söylenir
+                (dosya toplantısı düzenlenemez: silinir ya da doğru tarihle yenisi kaydedilir). */}
+            {notYetHeld.length > 0
+              ? ` Kayıtlı toplantının tarihi (${notYetHeld
+                  .map((m) => formatDate(m.meeting_date))
+                  .join(", ")}) henüz gelmedi; yapılmamış toplantıda karar verilemez. ${
+                  notYetHeld.some((m) => (m.decisions?.length ?? 0) > 0)
+                    ? "Toplantı yapıldıysa doğru tarihle yeni bir toplantı kaydedin (karar bağlı toplantı silinemez)"
+                    : "Toplantı yapıldıysa kaydı silip doğru tarihle yeniden kaydedin"
+                }; yapılmadıysa kararı toplantı günü ya da sonrasında girin.`
+              : meetings.length > 0 &&
+                (meetings.some((m) => (m.decisions?.length ?? 0) > 0)
+                  ? " Kayıtlı toplantıların yeter sayısı yok; katılanları doğru girerek yeni bir toplantı kaydedin (karar bağlı toplantı silinemez)."
+                  : " Kayıtlı toplantıların yeter sayısı yok; toplantıyı silip katılanları doğru girerek yeniden kaydedin.")}
           </span>
         </div>
       )}
@@ -368,11 +418,12 @@ export default function DecisionsSection({
           <AddDecisionForm
             caseObj={caseObj}
             meetings={selectable}
+            allMeetings={meetings ?? []}
             md166Priors={md166Priors}
             onCancel={() => setAdding(false)}
             onAdded={() => {
               setAdding(false);
-              refresh();
+              refreshWithTrash();
             }}
           />
         </div>
@@ -411,7 +462,7 @@ export default function DecisionsSection({
               caps={caps}
               meetings={meetings ?? []}
               md166Prior={md166Priors[String(d.student)]}
-              onChanged={refresh}
+              onChanged={refreshWithTrash}
               onDelete={handleDelete}
             />
           ))}
@@ -451,7 +502,17 @@ export default function DecisionsSection({
                     </span>
                     {/* S8: bağlı toplantısı silinmiş karar geri yüklenemez (sunucu reddeder) —
                         yapılamayan adım sunulmaz; ne yapılacağı söylenir. */}
-                    {caseObj.closed_at === null &&
+                    {/* K11 (15.11.2026): sunucu geri yüklenemeyen kararın nedenini verir
+                        (`restore_blocked_reason` — geri yükleme reddiyle AYNI metin; sevkten
+                        önceki tarihli toplantısız eski karar dahil). Alan yoksa eski kalıp.
+                        Neden kapalı dosyada da yazılır (satır sessiz kalmaz); düğme ve eski
+                        kalıp yalnız açık dosyadadır. */}
+                    {d.restore_blocked_reason ? (
+                      <span className="text-body-small text-on-surface-variant">
+                        {d.restore_blocked_reason}
+                      </span>
+                    ) : (
+                      caseObj.closed_at === null &&
                       (d.meeting !== null && d.meeting_date === null ? (
                         <span className="text-body-small text-on-surface-variant">
                           Bağlı toplantı kaydı silinmiş; karar geri yüklenemez. Toplantıyı yeniden
@@ -465,7 +526,8 @@ export default function DecisionsSection({
                         >
                           Geri yükle
                         </Button>
-                      ))}
+                      ))
+                    )}
                   </li>
                 ))}
               </ul>
@@ -596,6 +658,15 @@ function DecisionCard({
             ? "Toplantı kaydı yok (bu karar toplantı zorunluluğundan önce girildi)"
             : `Toplantı: ${formatDate(d.meeting_date ?? d.decision_date)}`}
         </span>
+        {/* K10 (15.11.2026): md. 197 iadesinden sonra karar başka toplantıya taşındıysa kurulun
+            İLK görüşme tarihi kayıtta kalır; kart ve süreler yürürlükteki karar tarihini
+            kullanır, kurula iade yazısı ilk tarihi basar. */}
+        {d.first_decision_date && (
+          <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
+            <Icon name="history" size="xs" />
+            İlk görüşme: {formatDate(d.first_decision_date)}
+          </span>
+        )}
         {d.notified_at ? (
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
             <Icon name="mark_email_read" size="xs" />
@@ -1029,6 +1100,7 @@ function md166ReasonOrThrow(needed: boolean, reason: string): string {
 function AddDecisionForm({
   caseObj,
   meetings,
+  allMeetings,
   md166Priors,
   onCancel,
   onAdded,
@@ -1036,6 +1108,8 @@ function AddDecisionForm({
   caseObj: DisciplineCase;
   /** Karar bağlanabilecek (yeter sayılı) toplantılar — en az bir tane (S8). */
   meetings: DisciplineMeeting[];
+  /** Dosyanın bütün toplantıları — seçilemeyen ileri tarihli toplantının notu için (K7). */
+  allMeetings: DisciplineMeeting[];
   md166Priors: Record<string, Md166Prior>;
   onCancel: () => void;
   onAdded: () => void;
@@ -1144,6 +1218,7 @@ function AddDecisionForm({
           helperText="Karar tarihi toplantı tarihidir."
         />
       </div>
+      <FutureMeetingsNote meetings={allMeetings} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {isSuspension && (
@@ -1253,9 +1328,13 @@ function EditDecisionForm({
   const [decisionDate, setDecisionDate] = useState(d.decision_date);
   const isBound = d.meeting !== null;
   const [meetingId, setMeetingId] = useState<string>(isBound ? String(d.meeting) : "");
-  // Seçenekler: yeter sayılı toplantılar + kararın BAĞLI olduğu toplantı (yeter sayısı
-  // sonradan yetersiz görünse de mevcut bağ seçenek olarak kalır).
-  const meetingOptions = meetings.filter((m) => m.quorum?.ok !== false || m.id === d.meeting);
+  // Seçenekler: yeter sayılı ve tarihi gelmiş toplantılar + kararın BAĞLI olduğu toplantı
+  // (yeter sayısı sonradan yetersiz görünse ya da karar K7'den önce ileri tarihli toplantıya
+  // bağlanmış olsa da mevcut bağ seçenek olarak kalır — sunucu bağlı toplantıyı yeniden
+  // doğrulamaz, eski kayıt kilitlenmez).
+  const meetingOptions = meetings.filter(
+    (m) => (m.quorum?.ok !== false && !m.is_future) || m.id === d.meeting,
+  );
   const selectedMeeting = meetingOptions.find((m) => String(m.id) === meetingId);
   const [suspensionDays, setSuspensionDays] = useState(String(d.suspension_days ?? 1));
   const [enforcementStart, setEnforcementStart] = useState(d.enforcement_start_date ?? "");
@@ -1362,6 +1441,10 @@ function EditDecisionForm({
           />
         )}
       </div>
+      <FutureMeetingsNote
+        meetings={meetings.filter((m) => m.id !== d.meeting)}
+        listed={meetingOptions.length > 0}
+      />
       {md166Needed && md166Prior && (
         <Md166ReasonField prior={md166Prior} value={md166Reason} onChange={setMd166Reason} />
       )}
