@@ -193,6 +193,15 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             return None
         return meeting.meeting_date.isoformat()
 
+    # K11 (15.11.2026): çöp kutusundaki karar NEDEN geri yüklenemez — yüklenebiliyorsa ve
+    # canlı kararda boş. Arayüz "Geri yükle" yerine bu metni yazar (denetim sunucuda tek yer).
+    restore_blocked_reason = serializers.SerializerMethodField()
+
+    def get_restore_blocked_reason(self, obj: DisciplineDecision) -> str:
+        from apps.disiplin.services.decisions import restore_block_reason
+
+        return restore_block_reason(obj)
+
     def get_is_final(self, obj: DisciplineDecision) -> bool:
         from apps.disiplin import selectors
 
@@ -227,6 +236,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "return_reason",
             "returned_at",
             "first_returned_at",
+            # K10: md. 197 iadesinden sonra karar başka toplantıya taşındıysa İLK görüşme.
+            "first_decision_date",
+            "first_meeting",
             "board_penalty_type",
             "board_suspension_days",
             "notified_at",
@@ -240,6 +252,7 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "notes",
             "md166_override_reason",
             "deleted_at",
+            "restore_blocked_reason",
             "appeals",
             # EK-1 anlatı + öğrenci-bağlam alanları
             "accused_statement_summary",
@@ -271,6 +284,8 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "return_reason",
             "returned_at",
             "first_returned_at",
+            "first_decision_date",
+            "first_meeting",
             "board_penalty_type",
             "board_suspension_days",
             "notified_at",
@@ -350,6 +365,13 @@ class MeetingSerializer(serializers.ModelSerializer[DisciplineMeeting]):
     # (karar bağlı toplantı silinemez).
     quorum = serializers.SerializerMethodField()
     decisions = serializers.SerializerMethodField()
+    # K7 (15.11.2026): toplantı tarihi bugünden (yerel tarih) sonra — karar bağlanamaz.
+    is_future = serializers.SerializerMethodField()
+
+    def get_is_future(self, obj: DisciplineMeeting) -> bool:
+        from apps.disiplin.services.committee import meeting_is_future
+
+        return meeting_is_future(obj)
 
     def get_quorum(self, obj: DisciplineMeeting) -> dict[str, Any]:
         from apps.disiplin.services.committee import case_meeting_quorum
@@ -381,11 +403,14 @@ class MeetingSerializer(serializers.ModelSerializer[DisciplineMeeting]):
             "chair_absent",
             "acting_chair",
             "acting_chair_name",
+            # K5: vekâletli kayıtta o günkü başkanın adı (boş = başkan katıldı / eski kayıt).
+            "absent_chair_name",
             "chair_warnings",
             "quorum",
             "decisions",
+            "is_future",
         ]
-        read_only_fields = ["attendees", "chair_absent", "acting_chair"]
+        read_only_fields = ["attendees", "chair_absent", "acting_chair", "absent_chair_name"]
 
     def get_attendee_names(self, obj: DisciplineMeeting) -> list[str]:
         # Sonradan kuruldan çıkarılan üye de listelenir (yeter sayı `present` ile aynı küme).
@@ -846,6 +871,7 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
             "discipline_case",
             "discipline_case_no",
             "chair_absent",
+            "absent_chair_name",
             "attendees",
             "agenda_items",
             "quorum",
@@ -858,6 +884,7 @@ class CouncilMeetingSerializer(serializers.ModelSerializer[CouncilMeeting]):
             "minutes_type",
             "discipline_case",
             "chair_absent",
+            "absent_chair_name",
         ]
 
     def get_quorum(self, obj: CouncilMeeting) -> dict[str, Any] | None:

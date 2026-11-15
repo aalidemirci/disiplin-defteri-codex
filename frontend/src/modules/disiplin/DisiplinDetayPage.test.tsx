@@ -866,6 +866,58 @@ describe("DisiplinDetayPage — toplantıda başkan vekâleti (S7)", () => {
     // md. 188 son cümlesi: yedek çağrılmadıysa uyarılır (engel değil).
     expect(screen.getAllByText(/katılanlar arasında yedek üye yok/)).toHaveLength(1);
   });
+
+  // Kullanıcı kararları, 15.11.2026 — açık kalemler (K2, K5, K7).
+  it("K2: 'Başkan toplantıya katılmadı' kutusunun altında evrak bilgi notu vardır", async () => {
+    const user = userEvent.setup();
+    dapi.getActingChairOptions.mockResolvedValue(SECENEKLER);
+    const dialog = await dialogAc(user);
+    await within(dialog).findByRole("checkbox", { name: /Başkan toplantıya katılmadı/ });
+    expect(
+      within(dialog).getByText(
+        /dosyanın kurul evrakı \(çağrılar, ek süre evrakı, EK-1, dizi pusulası\) başkan yerine kurula başkanlık eden üyeyle basılır/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("K5: vekâletli toplantıda katılmayan başkanın kayıttaki adı gösterilir", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([
+      {
+        ...TOPLANTI,
+        chair_absent: true,
+        acting_chair: 11,
+        acting_chair_name: "İpek Öğretmen",
+        absent_chair_name: "Ayşe Başkan",
+      },
+    ]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    expect(
+      await screen.findByText(
+        /Başkan \(Ayşe Başkan\) katılmadı; İpek Öğretmen başkanlık etti \(md\. 188\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("K7: ileri tarihli toplantıda karar bağlanamayacağı ve çaresi yazılır", async () => {
+    bosListeler();
+    dapi.listMeetings.mockResolvedValue([
+      { ...TOPLANTI, is_future: true, decisions: [] },
+      { ...TOPLANTI, id: 63, meeting_date: "2026-05-20", is_future: false, decisions: [] },
+    ]);
+    const user = userEvent.setup();
+    renderPage({ current_stage: "DECIDED", events: [SEVK_OLAYI] });
+    await screen.findByText("İlgili öğrenciler");
+    await user.click(screen.getByRole("tab", { name: /Kurul & Karar/ }));
+    // Yalnız ileri tarihli toplantıda bir kez.
+    expect(
+      await screen.findAllByText(/Toplantı tarihi henüz gelmedi; bu toplantıya karar bağlanamaz/),
+    ).toHaveLength(1);
+    expect(screen.getByText(/kaydı silip doğru tarihle yeniden kaydedin/)).toBeInTheDocument();
+  });
 });
 
 describe("DisiplinDetayPage — kapalı dosyada taraflar kilitli (A3)", () => {

@@ -387,6 +387,29 @@ class DisciplineDecision(BaseModel):
         help_text="Özetin son derlendiği andaki otomatik derleme; 'özet güncel değil' "
         "uyarısı güncel derlemeyle bunun farkından doğar. Evraka basılmaz.",
     )
+    # md. 197 — İLK GÖRÜŞME (kullanıcı kararı, 15.11.2026 — K10). Müdürün kurula iade ettiği
+    # (`first_returned_at` dolu) karar başka bir toplantıya İLK KEZ taşınırken
+    # (`services.decisions.update_decision`) o andaki karar tarihi ve — varsa — bağlı toplantı
+    # buraya yazılır; sonraki taşımalar EZMEZ, alanlar BOŞALTILMAZ. Boş = karar iade sonrası
+    # hiç taşınmadı (ya da K10 göçünden önce taşındı — ilk görüşme tarihi bilinemez).
+    # `decision_date` her zaman YÜRÜRLÜKTEKİ karar tarihidir: süreler, onay/tebliğ denetimleri
+    # ve öteki belgeler ondan türer; bu alanlar yalnız kurula iade yazısı (ilk kararın tarihi)
+    # ve karar kartındaki "İlk görüşme" bilgisi içindir.
+    first_decision_date = models.DateField(
+        "ilk görüşme (karar) tarihi",
+        null=True,
+        blank=True,
+        help_text="md. 197: kurula iade edilen kararın, yeniden görüşülmeden önceki tarihi.",
+    )
+    first_meeting = models.ForeignKey(
+        DisciplineMeeting,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="first_decisions",
+        verbose_name="ilk görüşmenin toplantısı",
+        help_text="md. 197: kararın iade edilmeden önce bağlı olduğu kurul toplantısı (varsa).",
+    )
     notes = models.TextField("açıklama", blank=True, default="")
     md166_override_reason = models.TextField(
         "md. 166 gerekçesi",

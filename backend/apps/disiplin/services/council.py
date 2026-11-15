@@ -30,6 +30,8 @@ from apps.disiplin.models import (
     DisciplineCase,
     DisciplineCommittee,
     DisciplineCommitteeMember,
+    DisciplineDecision,
+    DisciplineMeeting,
     HonorBoard,
     HonorCertificate,
     HonorCertificateStatus,
@@ -381,6 +383,11 @@ def _resolve_source(council_type: str, honor_meeting_kind: str) -> tuple[Any, An
     return None, get_active_honor_board()
 
 
+def _absent_chair_name(committee: DisciplineCommittee | None) -> str:
+    """Vekâlet kaydedilirken kurulun O GÜNKÜ başkanının adı (K5) — kurul yoksa boş."""
+    return committee.chair.full_name if committee is not None else ""
+
+
 @transaction.atomic
 def create_council_meeting(
     *,
@@ -475,6 +482,8 @@ def create_council_meeting(
         discipline_committee=discipline_committee,
         honor_board=honor_board,
         chair_absent=chair_absent,
+        # K5 (15.11.2026): vekâlet kaydedilirken o günkü başkanın adı kayda yazılır.
+        absent_chair_name=_absent_chair_name(discipline_committee) if chair_absent else "",
     )
     _create_attendees(meeting, attendees)
     if honor_certificate_ids:
@@ -587,6 +596,13 @@ def update_council_meeting(
     if now_absent != was_absent:
         meeting.chair_absent = now_absent
         fields.append("chair_absent")
+        # K5 (15.11.2026): ad yalnız vekâlet KAYDEDİLİRKEN yazılır (vekâlet kaldırılınca
+        # silinir). Vekâlet durumu değişmeyen düzenlemede ad kendiliğinden DEĞİŞMEZ — kurul
+        # başkanı sonradan değişmiş olsa da, alan boş (K5 öncesi kayıt) olsa da.
+        meeting.absent_chair_name = (
+            _absent_chair_name(meeting_committee(meeting)) if now_absent else ""
+        )
+        fields.append("absent_chair_name")
     if fields:
         fields.append("updated_at")
         meeting.save(update_fields=fields)
@@ -781,6 +797,8 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
       Toplantılar) başkanlık bakımından çelişiyorsa: EK-1, Form-11 ve md. 195 ızgarası dosya
       toplantısı kaydına, karar defteri bu tutanağa göre basılır — iki resmî belgede farklı
       başkan çıkmasın. Dosya toplantısı kaydı yoksa karşılaştırma yapılmaz.
+    - Dosya görüşme tutanağının tarihi ya da oy hakkı olan katılımcıları, dosyadaki kararların
+      BAĞLI olduğu dosya toplantısıyla uyuşmuyorsa (K9, 15.11.2026 — `_bound_meeting_warnings`).
     """
     from apps.disiplin.services.committee import NO_SUBSTITUTE_WARNING, chair_conflicted
 
@@ -825,6 +843,7 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
             warnings.append(NO_SUBSTITUTE_WARNING)
     if meeting.minutes_type != CouncilMinutesType.CASE_REVIEW or meeting.discipline_case is None:
         return warnings
+    warnings.extend(_bound_meeting_warnings(meeting, committee, voting))
     case_meeting = meeting.discipline_case.meetings.first()
     if case_meeting is None:
         return warnings
@@ -857,6 +876,112 @@ def council_chair_warnings(meeting: CouncilMeeting) -> list[str]:
                 f"kurul toplantısı kaydında ({on}) ise {acting.member_name}. {fix}"
             )
     return warnings
+
+
+def _bound_meeting_warnings(
+    meeting: CouncilMeeting, committee: DisciplineCommittee, voting: list[Any]
+) -> list[str]:
+    """Dosya görüşme tutanağı ↔ kararların BAĞLI olduğu dosya toplantısı (K9, 15.11.2026).
+
+    Karar tarihi ve EK-1 imza heyeti dosya toplantısı kaydından (`DisciplineDecision.meeting`,
+    S8), karar defteri bu tutanaktan basılır. Tutanağın TARİHİ ya da OY HAKKI OLAN
+    katılımcıları bağlı toplantıyla uyuşmuyorsa UYARILIR — kayıt engellenmez. Kararı bağsız
+    (S8 öncesi) dosyada karşılaştırılacak toplantı yoktur: uyarı da yoktur.
+
+    Dosyanın kararları birden çok toplantıya bağlıysa (çok öğrencili dosya, md. 197 ikinci
+    görüşmesi) tutanak, kendi tarihindeki bağlı toplantıyla karşılaştırılır; o tarihte bağlı
+    toplantı yoksa tarih uyarısı verilir (katılımcı karşılaştırması yapılmaz). md. 197 ikinci
+    görüşmesinde karar TAŞINDIYSA (K10) ilk görüşmenin tutanağı da doğru kayıttır: tutanak,
+    kendi tarihindeki İLK toplantıyla (`first_meeting`, canlıysa) karşılaştırılır; ilk toplantı
+    kaydı yoksa / silinmişse tutanak tarihi `first_decision_date`'e eşitken tarih uyarısı
+    verilmez. Kişi eşleşmesi
+    yeter sayı sayımıyla aynıdır (`_roster_index`: personel / öğrenci kimliği, yoksa ad);
+    md. 185/6 davetlileri karşılaştırmaya girmez. Dosya toplantısında başkan katılımcı satırı
+    değildir ve vekâletsiz kayıtta o günkü başkanın adı saklanmaz: başkan satırı kişi olarak
+    KARŞILAŞTIRILMAZ (kurul başkanı yıl içinde değişirse eski tutanaklar yanlış uyarı alırdı);
+    yalnız iki kaydın "başkan katıldı / katılmadı" durumu karşılaştırılır.
+    """
+    from apps.disiplin.services.committee import meeting_attendees
+
+    case = meeting.discipline_case
+    if case is None:
+        return []
+    rows = list(
+        DisciplineDecision.objects.filter(case=case, meeting__isnull=False).values_list(
+            "meeting_id", "first_meeting_id", "first_decision_date"
+        )
+    )
+    bound_ids = {row[0] for row in rows}
+    bound = list(DisciplineMeeting.objects.filter(pk__in=bound_ids).order_by("meeting_date", "id"))
+    if not bound:
+        return []
+    # K10: kararın iade edilmeden önce görüşüldüğü toplantı(lar) ve ilk karar tarihleri.
+    first_ids = {row[1] for row in rows if row[1] is not None} - bound_ids
+    first = list(DisciplineMeeting.objects.filter(pk__in=first_ids).order_by("meeting_date", "id"))
+    first_dates = {row[2] for row in rows if row[2] is not None}
+    fix = (
+        "Karar tarihi ve EK-1 imza heyeti dosya toplantısı kaydına, karar defteri bu tutanağa "
+        "göre basılır; iki kaydı aynı duruma getirin."
+    )
+    same_day = [m for m in bound if m.meeting_date == meeting.meeting_date]
+    label = "dosyadaki kararların bağlı olduğu"
+    if not same_day:
+        same_day = [m for m in first if m.meeting_date == meeting.meeting_date]
+        label = "dosyadaki kararın ilk görüşüldüğü"
+    if not same_day:
+        if meeting.meeting_date in first_dates:
+            return []
+        dates = ", ".join(sorted({f"{m.meeting_date:%d.%m.%Y}" for m in bound}))
+        return [
+            f"Bu tutanağın tarihi ({meeting.meeting_date:%d.%m.%Y}), dosyadaki kararların bağlı "
+            f"olduğu kurul toplantısının tarihiyle ({dates}) uyuşmuyor. {fix}"
+        ]
+    case_meeting = same_day[-1]
+    expected: list[tuple[int | None, int | None, str, str]] = [
+        (m.member_user_id, m.member_student_id, _name_key(m.member_name), m.member_name)
+        for m in meeting_attendees(case_meeting)
+    ]
+    # Başkan toplantıya katıldıysa tutanaktaki başkan satırı kişi olarak karşılaştırılmaz.
+    compared = voting if case_meeting.chair_absent else [a for a in voting if not a.is_chair]
+    only_here = [
+        a.person_name
+        for a in compared
+        if _roster_index(
+            [row[:3] for row in expected],
+            user_id=a.member_user_id,
+            student_id=a.member_student_id,
+            name=a.person_name,
+        )
+        is None
+    ]
+    only_there = [
+        row[3]
+        for row in expected
+        if not any(
+            _roster_index(
+                [row[:3]],
+                user_id=a.member_user_id,
+                student_id=a.member_student_id,
+                name=a.person_name,
+            )
+            is not None
+            for a in voting
+        )
+    ]
+    parts = []
+    if meeting.chair_absent and not case_meeting.chair_absent:
+        parts.append("tutanakta başkan katılmadı olarak, toplantı kaydında katıldı olarak kayıtlı")
+    if not parts and not only_here and not only_there:
+        return []
+    if only_here:
+        parts.append(f"tutanakta olup toplantı kaydında olmayan: {', '.join(only_here)}")
+    if only_there:
+        parts.append(f"toplantı kaydında olup tutanakta olmayan: {', '.join(only_there)}")
+    return [
+        f"Bu tutanağın oy hakkı olan katılımcıları, {label} kurul "
+        f"toplantısı kaydıyla ({case_meeting.meeting_date:%d.%m.%Y}) uyuşmuyor — "
+        f"{'; '.join(parts)}. {fix}"
+    ]
 
 
 def _require_quorum(meeting: CouncilMeeting, *, tolerate_chair_skip: bool = False) -> None:

@@ -2,9 +2,10 @@
 // md. 188: başkan bulunmadığında öğretmen üyelerden biri başkanlık eder; başkan katılımcı
 // listesinde yer almaz. Vekâlet kaldırılınca kurul başkanı başkan satırı olarak geri gelir.
 
-import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import {
+import BaskanVekaleti, {
   actingChairMemberId,
   withActingChair,
   withChairRestored,
@@ -84,5 +85,40 @@ describe("BaskanVekaleti yardımcıları (S7)", () => {
       attendee_role: "VOTING_MEMBER",
     });
     expect(rows.filter((r) => r.is_chair)).toHaveLength(1);
+  });
+});
+
+// Kullanıcı kararı, 15.11.2026 — K2: kutunun altında tek cümlelik bilgi notu.
+describe("BaskanVekaleti — bilgi notu (K2)", () => {
+  it("kutunun altında vekâlet kaydının hangi evrakı etkilediği yazılır", () => {
+    render(
+      <BaskanVekaleti
+        options={SECENEKLER}
+        chairAbsent={false}
+        onChairAbsentChange={vi.fn()}
+        rows={satirlar()}
+        onRowsChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("checkbox", { name: /Başkan toplantıya katılmadı/ })).not.toBeChecked();
+    expect(
+      screen.getByText(
+        /dosyanın kurul evrakı \(çağrılar, ek süre evrakı, EK-1, dizi pusulası\).*başkan yerine kurula başkanlık eden üyeyle basılır/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("dosyasız genel tutanakta evrak notu gösterilmez", () => {
+    render(
+      <BaskanVekaleti
+        options={SECENEKLER}
+        chairAbsent={false}
+        onChairAbsentChange={vi.fn()}
+        rows={satirlar()}
+        onRowsChange={vi.fn()}
+        caseReview={false}
+      />,
+    );
+    expect(screen.queryByText(/dosyanın kurul evrakı/)).not.toBeInTheDocument();
   });
 });

@@ -1797,8 +1797,9 @@ function MeetingsSection({
                 <p className="mt-2 flex items-start gap-1 text-body-small text-on-surface-variant">
                   <Icon name="info" size="sm" />
                   <span>
-                    Başkan katılmadı; {m.acting_chair_name || "öğretmen üye"} başkanlık etti (md.
-                    188).
+                    {/* K5 (15.11.2026): o günkü başkanın adı kayıttan; eski kayıtta boştur. */}
+                    Başkan{m.absent_chair_name ? ` (${m.absent_chair_name})` : ""} katılmadı;{" "}
+                    {m.acting_chair_name || "öğretmen üye"} başkanlık etti (md. 188).
                   </span>
                 </p>
               )}
@@ -1806,6 +1807,23 @@ function MeetingsSection({
                 <div className="mt-2">
                   <VekaletUyarisi warnings={m.chair_warnings} />
                 </div>
+              )}
+              {/* K7 (kullanıcı kararı, 15.11.2026): ileri tarihli toplantı kaydedilebilir ama
+                  yapılmamış toplantıya karar bağlanamaz (backend de reddeder). Bayrak sunucunun
+                  yerel tarihinden gelir (§7.1). Dosya toplantısı düzenlenemediği için çare
+                  kayda göre söylenir (§7.6). */}
+              {m.is_future && (
+                <p className="mt-2 flex items-start gap-1 text-body-small text-on-surface-variant">
+                  <Icon name="schedule" size="sm" />
+                  <span>
+                    Toplantı tarihi henüz gelmedi; bu toplantıya karar bağlanamaz
+                    {!(canManage && caseOpen)
+                      ? "."
+                      : m.decisions && m.decisions.length > 0
+                        ? ". Toplantı yapıldıysa doğru tarihle yeni bir toplantı kaydedin."
+                        : ". Toplantı yapıldıysa kaydı silip doğru tarihle yeniden kaydedin; yapılmadıysa kararı toplantı günü ya da sonrasında girin."}
+                  </span>
+                </p>
               )}
               {/* S8: yeter sayısı olmayan (eski) toplantıya karar bağlanamaz (md. 191/1). */}
               {m.quorum && !m.quorum.ok && (
@@ -2011,6 +2029,16 @@ function RecordMeetingDialog({
                 />
                 <span>Başkan toplantıya katılmadı ({chairOptions.chair_name})</span>
               </label>
+              {/* K2 (kullanıcı kararı, 15.11.2026): vekâlet kaydının evraka etkisi. */}
+              <p className="flex items-start gap-1 text-body-small text-on-surface-variant">
+                <Icon name="info" size="sm" />
+                <span>
+                  Toplantı bu kutu işaretli kaydedilirse, bu kayıttan sonra dosyanın kurul evrakı
+                  (çağrılar, ek süre evrakı, EK-1, dizi pusulası) başkan yerine kurula başkanlık
+                  eden üyeyle basılır. Başkan dosyada şikâyetçi ya da zarar gören değilse, bu
+                  toplantıdan sonraki tarihli çağrı ve ifade evrakı yeniden başkanla basılır.
+                </span>
+              </p>
               {chairForced && (
                 <p
                   id={`${fieldIdBase}-chair-reason`}

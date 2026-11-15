@@ -69,6 +69,15 @@
    şablonun çıktısı bayt bayt aynıdır (testli) — kaldırma. Ceza tebliğleri ("Tebliğ Eden —
    Müdür Yardımcısı") kapsam DIŞIDIR, AYNEN: izinli başkanda asıl başkan basılır, şikâyetçi /
    zarar gören başkanda hane boş kalır (`_case_committee(acting=False)`).
+   **Kullanıcı kararları 15-16.11.2026 (K1, K4, K6, K10 — yalnız BAĞLAM, şablon değişmedi) —
+   OYS'ye "geri döndürme":** çağrı ve ifade evrakı (Form-3, 4-6, 7-8, 9, 10) izinli başkanda
+   İŞLEM TARİHİNE bakar (`documents._transaction_date`: `statement_date`, yoksa üretim tarihi):
+   tarih dosyanın son vekâletli toplantısından SONRA ise asıl başkan ve eski sabit etiket basılır;
+   şikâyetçi / zarar gören başkanda tarih aranmaz. Form-12 ızgarası uzatma kararıyla AYNI tarihli
+   dosya toplantısı varsa o toplantıya katılanları basar (`documents._extension_grid`; yedek
+   dahil, başkanlık eden bir kez); öyle bir kayıt yoksa kurulun asıl üyeleri. Form-10'da çağrılan
+   yedek üyenin görevi "<görev> (Yedek Üye)". Kurula iade yazısı (`return_letter`) kurulun İLK
+   kararının tarihini basar (`first_decision_date`).
    `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.
@@ -340,20 +349,40 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   sayısı olan (md. 191/1) kurul toplantısına (`DisciplineMeeting`) bağlı girilir; karar tarihi =
   toplantı tarihi, ayrı tarih girilemez (`services.decisions.record_decision`; toplantı
   verilmezse dosyanın TEK toplantısı seçilir). Toplantı kurula sevk tarihinden önce olamaz.
-  Yeter sayı karar anında yeniden doğrulanır (`services.committee.case_meeting_quorum`).
+  Yeter sayı karar anında yeniden doğrulanır (`services.committee.case_meeting_quorum`); üye tam
+  sayısı toplantı KAYDEDİLİRKEN `DisciplineMeeting.quorum_full`'a yazılır (K8, 15.11.2026) — kurul
+  sonradan büyüse de toplantı yeterli kalır; alan boşsa (eski kayıt) kurulun güncel üye sayısı.
   `meeting IS NULL` = S8 öncesi toplantısız girilmiş karar: GEÇERLİDİR; onay/tebliğ/itiraz/
   kapanış toplantıya bakmaz, kayıt kendiliğinden değiştirilmez, geriye dönük toplantı
   üretilmez; arayüz "Toplantı kaydı yok" bilgisini gösterir. Canlı kararı bağlı toplantı
   silinemez; bağ KALDIRILAMAZ, yalnız taşınır: beklemedeki karar düzenlemede başka toplantıya
   (tarih toplantıya geçer — md. 197 iadesinden sonraki ikinci görüşme böyle kaydedilir),
   düzenlemeye kapalı karar ve eski karar yalnız AYNI tarihli toplantıya
-  (`rebind_decision_meeting`). Bağlı karar çöp kutusundan, toplantısı silinmişse ya da toplantı
-  yürürlükteki sevk tarihinden önce kaldıysa geri yüklenmez (eski bağsız karar bu denetime
-  girmez). Toplantıya katılanlar her yerde AYNI kümedir (`services.committee.meeting_attendees`:
+  (`rebind_decision_meeting`). Silinmiş karar; bağlı toplantısı silinmişse, bağlı toplantının tarihi henüz gelmediyse
+  (K7) ya da karar tarihi yürürlükteki kurula sevk tarihinden önce kaldıysa geri yüklenmez —
+  toplantısız girilmiş eski karar DAHİL (K11, 15.11.2026); canlı eski kararlar etkilenmez. Neden
+  arayüze `restore_blocked_reason` ile verilir (`services.decisions.restore_block_reason`); çöp
+  kutusu "Geri yükle" yerine bu metni basar (kapalı dosyada da). Toplantıya katılanlar her yerde AYNI kümedir (`services.committee.meeting_attendees`:
   sonradan kuruldan çıkarılan üye dahil — `meeting.attendees.all()` kullanma, çıkarılanı
   süzer). EK-1 imza heyeti kararın BAĞLI toplantısından, bağ yoksa dosyanın son toplantısından
   basılır. Göç yok: mevcut `DisciplineDecision.meeting` alanı kullanılır. Testlerde karar
   `tests/factories.py::decide` ile (gerçek yol), S8 öncesi kayıt `legacy_decision` ile kurulur.
+  **İleri tarihli toplantı (K7, 15.11.2026):** kaydedilebilir ama ona karar bağlanamaz / taşınamaz
+  (`services.decisions._assert_meeting_usable`, yerel tarih — §7.1); kararın ZATEN bağlı olduğu
+  toplantı yeniden doğrulanmaz (eski kayıt kilitlenmez). Arayüz ileri tarihli toplantıyı seçenek
+  olarak sunmaz, nedenini ve çaresini yazar.
+  **md. 197 ilk görüşme (K10):** kurula iade edilmiş (`first_returned_at` dolu) karar BAŞKA
+  TARİHLİ bir toplantıya İLK KEZ taşınırken ilk karar tarihi ve (varsa) toplantısı
+  `first_decision_date` / `first_meeting` alanlarına yazılır; sonra ezilmez / boşaltılmaz. Tarih
+  değişmeyen bağlama / taşıma iz yazmaz. `decision_date` yürürlükteki tarihtir (süreler ve öteki
+  belgeler onu kullanır); yalnız kurula iade yazısı ilk tarihi basar — karar SAYISI ve ceza
+  yürürlükteki kayıttan gelir (ilk sayı / ceza saklanmaz; bilinen sınır). Kartta "İlk görüşme".
+  **Karar defteri ↔ dosya toplantısı (K9):** dosya görüşme tutanağının tarihi ya da oy hakkı olan
+  katılımcıları dosyadaki kararların BAĞLI olduğu toplantıyla uyuşmuyorsa UYARILIR, engellenmez
+  (`services.council._bound_meeting_warnings`, `chair_warnings` içinde); kararı bağsız dosyada
+  uyarı yok. İlk görüşmenin tutanağı `first_meeting` / `first_decision_date` ile karşılaştırılır.
+  Vekâletsiz toplantıda başkan satırı KİŞİ olarak karşılaştırılmaz (o günkü başkan kayıtta
+  tutulmaz; başkan değişince yanlış uyarı çıkardı) — yalnız "katıldı / katılmadı" durumu.
 - **Vekâlet kaydı (md. 188, 191/2 — S7, 14.11.2026):** kurul başkanı toplantıya katılmadıysa
   toplantı `chair_absent` ile kaydedilir ve kurula kurulun ASIL ÖĞRETMEN üyelerinden biri
   başkanlık eder (`services.committee.acting_chair_candidates`; yedek, veli ve öğrenci üye
@@ -384,8 +413,18 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   vekâletsizse asıl başkan basılır (son toplantıya değil uzatma günündeki toplantıya bakılır).
   Şikâyetçi / zarar gören başkanda tarih aranmaz.
   EK-1 kararın BAĞLI toplantısından basıldığı
-  için çok toplantılı dosyada çağrı evrakından farklı kişi taşıyabilir. Son toplantı kaydı
-  vekâletli değilse ve başkan şikâyetçi / zarar gören değilse bu belgelerin çıktısı değişmez. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
+  için çok toplantılı dosyada çağrı evrakından farklı kişi taşıyabilir. Son toplantı kaydı vekâletli değilse ve başkan şikâyetçi / zarar gören değilse bu belgelerin
+  çıktısı değişmez — Form-12 / Form-13 dışında: onlar son toplantıya değil uzatma günündeki
+  toplantıya bakar (o gün vekâletliyse, sonradan olağan toplantı kaydedilmiş olsa da o günün
+  başkanlık edeni; 16.11.2026).
+  **Dönen başkan (K1, 15.11.2026):** izinli başkanda çağrı / ifade evrakı (Form-3, 4-6, 7-8, 9,
+  10) işlem tarihine bakar — tarih son vekâletli toplantıdan SONRA ise asıl başkan (bkz. §1/3).
+  **Katılmayan başkanın adı (K5):** vekâletli toplantı kaydedilirken o günkü başkanın adı kayda
+  yazılır (`absent_chair_name` — dosya toplantısı ve karar defteri); karar defterindeki "Kurul
+  başkanı … toplantıya katılmamış" cümlesi bu alanı basar, alan boşsa (eski kayıt) kurulun
+  bugünkü başkanı. Düzenlemede ad yalnız vekâlet durumu değişirken yazılır / silinir.
+  **Bilgi notu (K2):** "Başkan toplantıya katılmadı" kutusunun altında evraka etkisi yazılır —
+  dosya toplantısı diyaloğunda ve (yalnız dosya görüşme tutanağında) karar defteri formunda. Eski kayıt kendiliğinden DEĞİŞTİRİLMEZ: ekranda uyarılır
   (`case_chair_warnings`, `council_chair_warnings`). Onur Kurulu (md. 182) kapsam dışıdır.
 - **Müdür kurul kararını reddedemez** (md. 197): onaylar / gerekçeyle **bir kez**
   iade eder / (iade sonrası) ilçeye sevk eder.
@@ -507,9 +546,10 @@ Etki × yoğunluk sırasıyla:
 - **Yeni Python bağımlılığı eklersen** `packaging/pyinstaller/disiplin_defteri.spec`
   içindeki `hiddenimports`'u da güncelle (borç K7) — yoksa paket açılmaz, testler
   bunu yakalamaz.
-- **Migration:** `okul` 0006'da, `disiplin` 0017'de (0014 dosya numarası sayacı, 0015
+- **Migration:** `okul` 0006'da, `disiplin` 0018'de (0014 dosya numarası sayacı, 0015
   md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi, 0017 toplantıda
-  başkana vekâlet — yalnız şema). Veri göçleri
+  başkana vekâlet, 0018 açık kalemler: katılmayan başkanın adı, toplantı anındaki üye tam
+  sayısı, md. 197 ilk görüşme tarihi + toplantısı — yalnız şema). Veri göçleri
   yalnız DÜZ alan okur: parola kuruluysa açılışta `migrate` koşarken anahtar henüz yoktur —
   şifreli alan okuyan/yazan göç yazma (kilitli kip testi:
   `test_s11_gocleri_kilitli_kipte_sifreli_alana_dokunmadan_kosar`). Şema değişikliği şifreli

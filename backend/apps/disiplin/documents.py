@@ -583,6 +583,7 @@ class _Signer:
     is_substitute = False
 
     def __init__(self, member: Any) -> None:
+        self.pk = member.pk
         self.member_name = member.member_name
         self.title = member.title
         self._member = member
@@ -596,11 +597,16 @@ class _CalledSubstitute(_Signer):
 
     `_Signer` ile aynı sunum (şablonun `is_substitute` süzgecinden geçer); `pk` üyenin
     kendi anahtarıdır. Kurul kaydı DEĞİŞMEZ — üye yedek kalır.
+
+    K6 (kullanıcı kararı, 15.11.2026): görev sütunu "<görev> (Yedek Üye)" basılır (ör.
+    "Öğretmen (Yedek Üye)") — çağrılan kişinin yedek üye olduğu yazıdan anlaşılsın. Şablon
+    `m.title|default:m.get_member_type_display` okur; ibare bağlamda `title`'a eklenir.
     """
 
     def __init__(self, member: Any) -> None:
         super().__init__(member)
-        self.pk = member.pk
+        base = (member.title or "").strip() or str(member.get_member_type_display())
+        self.title = f"{base} (Yedek Üye)"
 
 
 def _signing_members(case: DisciplineCase, committee: Any, meeting: Any | None = None) -> list[Any]:
@@ -682,6 +688,8 @@ class _ActingChair:
     def __init__(self, member: Any) -> None:
         self.full_name = str(member.member_name)
         self.username = self.full_name
+        # Başkan hanesine yazılan üyenin anahtarı: üye hanelerinde ikinci kez basılmasın (K4).
+        self.member_pk = member.pk
 
     def get_full_name(self) -> str:
         return self.full_name
@@ -1613,7 +1621,21 @@ def _non_compliance_context(
 # --- Dal B ifade/savunma/bilgi formları (Tur 106) — katılımcı + kurul + geçici alanlar ---
 
 
-def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
+def _transaction_date(extra: dict[str, Any]) -> date | None:
+    """Çağrı / ifade evrakının İŞLEM TARİHİ (K1, 15.11.2026).
+
+    Çağrılan toplantının / ifadenin / savunmanın tarihi (`statement_date` — Form-3, 9, 10
+    formlarında girilir); verilmediyse belgenin üretim tarihi (`generated_on` —
+    `generate_document` bağlama taşır; Form-4/5/6 ve Form-7/8'de tarih alanı şablona
+    basılmaz, istek de göndermezse ölçüt üretim tarihidir). İkisi de yoksa None: tarih aranmaz.
+    """
+    on = extra.get("statement_date") or extra.get("generated_on")
+    return on if isinstance(on, date) else None
+
+
+def _committee_with_members_context(
+    case: DisciplineCase, *, on: date | None = None
+) -> dict[str, Any]:
     """Dosyanın kurulu + üyeleri (asıl+yedek) — imza ızgaraları için (EK-1 deseni).
 
     Başkan hanesi `_case_committee` kuralıyla basılır (son toplantı kaydı vekâletliyse
@@ -1627,9 +1649,28 @@ def _committee_with_members_context(case: DisciplineCase) -> dict[str, Any]:
     kişi kendini çağırmaz. 15.11.2026 kararıyla bu, başkan şikâyetçi / zarar gören OLMASA DA
     (izinli başkan) geçerlidir. Dosyanın son toplantı kaydı vekâletli değilse bu anahtarlar
     VERİLMEZ, liste aynen kalır: şablon eski sabit metni basar.
+
+    `on` — DÖNEN BAŞKAN (kullanıcı kararı, 15.11.2026 — K1): çağrı ve ifade evrakı (Form-3,
+    4-6, 7-8, 9, 10) belgenin işlem tarihini (`_transaction_date`) verir. Başkan yalnız
+    izinliyse (dosyada şikâyetçi / zarar gören DEĞİLSE) vekâlet toplantıya özgüdür: işlem
+    tarihi dosyanın son (vekâletli) toplantısının tarihinden SONRA ise başkan dönmüştür —
+    kurulun kendi kaydı, eski sabit etiket ve kurulun kendi üye listesi basılır. İşlem tarihi
+    o toplantının tarihine eşit ya da öncesiyse başkanlık eden üye basılır. Şikâyetçi / zarar
+    gören başkanda tarih ARANMAZ (md. 191/2: hiçbir oturuma katılamaz). `on` verilmezse
+    (dizi pusulası, Form-12/13 — onların kendi kuralı: `_extension_panel`) tarih aranmaz.
     """
     committee = selectors.committee_for_case(case)
     members = list(selectors.committee_members(committee)) if committee else []
+    if on is not None and committee is not None:
+        last = selectors.meetings_for_case(case).first()
+        if (
+            last is not None
+            and last.chair_absent
+            and last.acting_chair_id is not None
+            and on > last.meeting_date
+            and not services.committee.chair_conflicted(case, committee)
+        ):
+            return {"committee": committee, "members": members}
     shown = _case_committee(case)
     panel: dict[str, Any] = {"committee": shown, "members": members}
     if isinstance(shown, _ActingCommittee) and isinstance(shown.chair, _ActingChair):
@@ -1695,7 +1736,7 @@ def _statement_call_context(
     """İfadeye çağrı pusulası (Form-3, md. 194-195) — katılımcı + tebliğ/tebellüğ + zaman."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_with_members_context(case, on=_transaction_date(extra)),
         "participant": _participant_context(participant),
         **_schedule_context(extra),
     }
@@ -1712,7 +1753,7 @@ def _statement_record_context(
     """
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_with_members_context(case, on=_transaction_date(extra)),
         "participant": _participant_context(participant),
         "statement_subject": (extra.get("statement_subject") or "").strip(),
         "statement_body": (extra.get("statement_body") or "").strip(),
@@ -1725,7 +1766,7 @@ def _info_gathering_context(
     """Bilgi toplama (Form-7/8) — variant 'student'/'teacher' gövdeyi belirler (hakkında işlem yapılan öğrenci)."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_with_members_context(case, on=_transaction_date(extra)),
         "participant": _participant_context(participant),
         "variant": (extra.get("variant") or "student").strip() or "student",
     }
@@ -1737,7 +1778,7 @@ def _defense_call_context(
     """Savunmaya çağrı (Form-9, md. 194) — suçlanan + tebliğ/tebellüğ + zaman."""
     return {
         **_common_context(case),
-        **_committee_with_members_context(case),
+        **_committee_with_members_context(case, on=_transaction_date(extra)),
         "participant": _participant_context(participant),
         **_schedule_context(extra),
     }
@@ -1773,8 +1814,12 @@ def _meeting_call_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[s
     yedekleri (`is_substitute`) gizlediği için yedek üye bağlamda `_CalledSubstitute` ile
     sunulur (şablon değişmez). Kayıtta yedek yoksa ad uydurulmaz; öteki bütün durumlarda
     liste kurulun kendi listesidir (çıktı aynen).
+
+    K1 (15.11.2026): izinli başkanda çağrılan toplantının tarihi (verilmediyse üretim tarihi)
+    vekâletli toplantıdan SONRA ise çağrıyı asıl başkan imzalar, liste kurulun kendi listesidir.
+    K6: tabloda basılan yedek üyenin görev sütunu "<görev> (Yedek Üye)" (`_CalledSubstitute`).
     """
-    panel = _committee_with_members_context(case)
+    panel = _committee_with_members_context(case, on=_transaction_date(extra))
     if "chair_role" in panel:
         meeting = selectors.meetings_for_case(case).first()
         attended = (
@@ -1821,12 +1866,14 @@ def _extension_panel(case: DisciplineCase, extension: Any) -> dict[str, Any]:
       vekâletli toplantı olsa da — yalnız son toplantıya bakmak ilk oturumda alınan uzatmayı
       katılmamış başkanla basıyordu).
 
-    Dosyanın SON toplantı kaydı vekâletli değilse ya da başkan şikâyetçi / zarar gören ise
-    (md. 191/2: hiçbir oturuma katılamaz) tarih aranmaz; `_committee_with_members_context`
-    sonucu aynen döner.
+    Bu, dosyanın SON toplantı kaydı vekâletli olmasa da geçerlidir (16.11.2026): uzatma günü
+    vekâletli toplantı varsa, sonradan başkanın katıldığı toplantı kaydedilmiş olsa da o günün
+    başkanlık edeni basılır — yoksa Form-12 ızgarası (K4) o günün katılanlarını, başkan hanesi
+    o gün katılmamış başkanı taşırdı. Başkan şikâyetçi / zarar gören ise (md. 191/2: hiçbir
+    oturuma katılamaz) tarih aranmaz; `_committee_with_members_context` sonucu aynen döner.
     """
     panel = _committee_with_members_context(case)
-    if extension is None or "chair_role" not in panel:
+    if extension is None:
         return panel
     committee = selectors.committee_for_case(case)
     if committee is None or services.committee.chair_conflicted(case, committee):
@@ -1837,12 +1884,40 @@ def _extension_panel(case: DisciplineCase, extension: Any) -> dict[str, Any]:
     )
     acting = governing.acting_chair if governing is not None and governing.chair_absent else None
     if acting is None:
-        return {"committee": committee, "members": members}
+        # Son toplantı da vekâletsizse panel zaten kurulun kendi kaydıdır (aynen döner).
+        return {"committee": committee, "members": members} if "chair_role" in panel else panel
     return {
-        **panel,
         "committee": _ActingCommittee(committee, _ActingChair(acting)),
         "members": [m for m in members if m.pk != acting.pk],
+        "chair_role": ACTING_CHAIR_ROLE,
+        "chair_presiding": ACTING_CHAIR_PRESIDING,
+        "chair_office": ACTING_CHAIR_OFFICE,
     }
+
+
+def _extension_grid(case: DisciplineCase, extension: Any, panel: dict[str, Any]) -> dict[str, Any]:
+    """Form-12 imza ızgarası — uzatma GÜNÜNDEKİ toplantıya katılanlar (K4, 15.11.2026).
+
+    Süre uzatma kararının tarihiyle (`decided_on`) AYNI tarihli dosya toplantısı kayıtlıysa
+    ızgara o toplantıya KATILAN üyeleri basar (yedek dahil, sonradan kuruldan çıkarılan dahil —
+    `services.committee.meeting_attendees`; md. 196/1 "karar bütün üyelerce imzalanır"). Öyle
+    bir toplantı kaydı yoksa (ya da kayıt katılımcısızsa) liste aynen kalır: kurulun asıl
+    üyeleri. Kural başkan şikâyetçi, izinli ya da olağan olsun geçerlidir; başkan hanesi
+    DEĞİŞMEZ (`_extension_panel`). Başkan hanesine yazılan başkanlık eden üye ızgarada ikinci
+    kez basılmaz. AYNEN şablon yedekleri (`is_substitute`) gizlediği için katılanlar EK-1'deki
+    `_Signer` kalıbıyla sunulur (şablon değişmez). Form-13 üye listesi basmaz — etkilenmez.
+    """
+    if extension is None:
+        return panel
+    meeting = selectors.meetings_for_case(case).filter(meeting_date=extension.decided_on).first()
+    if meeting is None:
+        return panel
+    attendees = services.committee.meeting_attendees(meeting)
+    if not attendees:
+        return panel
+    committee = panel.get("committee")
+    chair_pk = getattr(getattr(committee, "chair", None), "member_pk", None)
+    return {**panel, "members": [_Signer(m) for m in attendees if m.pk != chair_pk]}
 
 
 def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> dict[str, Any]:
@@ -1858,7 +1933,7 @@ def _deadline_extension_context(case: DisciplineCase, extra: dict[str, Any]) -> 
     (Form-13).
     """
     extension = case.deadline_extensions.first()
-    panel = _extension_panel(case, extension)
+    panel = _extension_grid(case, extension, _extension_panel(case, extension))
     students = [
         _student_context(link.student)
         for link in case.case_students.select_related("student").order_by("pk")
@@ -2051,6 +2126,8 @@ def generate_document(
         "variant": variant,
         # Form-12 oylama esası (md. 191/1) — GEÇİCİ: DB'ye yazılmaz, yalnız PDF.
         "vote_basis": vote_basis,
+        # K1: çağrı / ifade evrakında işlem tarihi verilmediyse ölçüt üretim tarihidir.
+        "generated_on": generated_on,
     }
     context = _build_context(case, document_type, student, participant, extra)
     # NOT: eski DOC_CODES/doc_code altbilgi kodu Talep 1g'de (Tur 181) PDF
@@ -2245,6 +2322,13 @@ def _apply_md197_dates(context: dict[str, Any], document_type: str) -> None:
     elif decision.referred_to_district:
         context["decision"] = _DecisionView(decision, returned_at=None)
         context["return_date_unknown"] = True
+    # K10 (kullanıcı kararı, 15.11.2026): kurula iade yazısı kurulun İLK kararına ilişkindir.
+    # Karar iadeden sonra başka toplantıya taşındıysa (ikinci görüşme) `decision_date` yeni
+    # tarihtir; yazı `first_decision_date`'i basar (yalnız bağlam — şablon ve kayıt değişmez).
+    # İlçeye gönderme yazısı ve öteki belgeler yürürlükteki karar tarihini kullanır.
+    first_decision_date = getattr(decision, "first_decision_date", None)
+    if document_type == DocumentType.RETURN_LETTER and first_decision_date is not None:
+        context["decision"] = _DecisionView(context["decision"], decision_date=first_decision_date)
 
 
 def _student_in_case(case: DisciplineCase, student_id: int) -> Any:
@@ -2424,15 +2508,21 @@ def _council_minutes_context(meeting: Any) -> dict[str, Any]:
 def _chair_absence_note(meeting: Any, acting: Any) -> str:
     """Karar defterine düşülen vekâlet cümlesi (md. 188) — K1, kullanıcı kararı 14.11.2026.
 
-    Başkanın adı kurulun BUGÜNKÜ başkanından okunur (başkan değişikliğinin geçmişi tutulmaz —
-    bilinen sınır). Bugünkü başkan, o toplantıda kurula başkanlık eden kişinin kendisiyse
-    (sonradan başkan yapılmış öğretmen üye) ad yazılmaz: cümle kendisiyle çelişmesin.
+    K5 (kullanıcı kararı, 15.11.2026): katılmayan başkanın adı vekâlet KAYDEDİLİRKEN kayda
+    yazılır (`absent_chair_name`) ve cümle ONU basar — başkan sonradan değişse de tutanak
+    aynı kalır. Alan boşsa (K5 öncesi kayıt) eski davranış: ad kurulun BUGÜNKÜ başkanından
+    okunur (o kayıtlarda başkan değişikliğinin geçmişi yoktur — bilinen sınır); bugünkü başkan,
+    o toplantıda kurula başkanlık eden kişinin kendisiyse (sonradan başkan yapılmış öğretmen
+    üye) ad yazılmaz: cümle kendisiyle çelişmesin.
     """
     from apps.disiplin.services.council import _name_key, meeting_committee
 
     committee = meeting_committee(meeting)
     chair_name = ""
-    if committee is not None:
+    recorded = str(getattr(meeting, "absent_chair_name", "") or "").strip()
+    if recorded:
+        chair_name = f" {recorded}"
+    elif committee is not None:
         same_person = (
             acting.member_user_id == committee.chair_id
             if acting.member_user_id is not None

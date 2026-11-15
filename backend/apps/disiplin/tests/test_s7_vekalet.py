@@ -1090,14 +1090,23 @@ def test_k1_karar_defteri_vekaletli_toplantida_baskan_isareti_yok_ve_cumle_var(
 def test_k1_karar_defteri_cumlesi_baskan_sonradan_baskanlik_eden_olduysa_ad_vermez(
     kurul: _Kurul,
 ) -> None:
-    """Başkan geçmişi tutulmaz: başkanlık eden öğretmen sonradan kurul başkanı yapıldıysa
-    tutanak "başkan X katılmamış; kurula X başkanlık etmiştir" demez — başkanın adı yazılmaz."""
+    """K5 ÖNCESİ kayıt (katılmayan başkanın adı kayıtta yok): başkan geçmişi tutulmaz;
+    başkanlık eden öğretmen sonradan kurul başkanı yapıldıysa tutanak "başkan X katılmamış;
+    kurula X başkanlık etmiştir" demez — başkanın adı yazılmaz. K5'ten (15.11.2026) beri yeni
+    kayıt o günkü başkanın adını saklar ve cümle onu basar (test_acik_kalemler.py)."""
     meeting = kurul.odk(
         [kurul.row(kurul.t1, chair=True), kurul.row(kurul.t2), kurul.row(kurul.sub)],
         chair_absent=True,
     )
     assert kurul.t1.member_user_id is not None
     services.set_committee_chair(kurul.committee, kurul.t1.member_user_id)
+    meeting = CouncilMeeting.objects.get(pk=meeting.pk)
+    recorded = _html(_MINUTES, doc_engine._council_minutes_context(meeting))
+    assert (
+        f"Kurul başkanı {kurul.chair.full_name} toplantıya katılmamış; kurula öğretmen üye "
+        f"{kurul.t1.member_name} başkanlık etmiştir (md. 188)." in recorded
+    )
+    CouncilMeeting.objects.filter(pk=meeting.pk).update(absent_chair_name="")
     meeting = CouncilMeeting.objects.get(pk=meeting.pk)
     html = _html(_MINUTES, doc_engine._council_minutes_context(meeting))
     assert (
@@ -1301,7 +1310,8 @@ def _izinli_vekaletli(kurul: _Kurul) -> DisciplineCase:
 def test_k3_baskan_sikayetci_degilse_kurul_evraki_aynen_kalir(kurul: _Kurul, kayit: str) -> None:
     """Başkan şikâyetçi / zarar gören DEĞİLSE ve dosyanın SON toplantı kaydı vekâletli değilse
     bu belgeler kurulun gerçek kaydını basar — bağlam S7 öncesiyle aynı nesnedir. İzinli başkanın
-    vekâletli toplantısından SONRA vekâletsiz toplantı kaydedildiyse de öyle (son kayıt belirler)."""
+    vekâletli toplantısından SONRA vekâletsiz toplantı kaydedildiyse de öyle (son kayıt belirler)
+    — Form-12 / Form-13 dışında: onlar uzatma günündeki toplantıya bakar."""
     if kayit == "vekaletten_sonra_vekaletsiz":
         case = _izinli_vekaletli(kurul)
     else:
@@ -1314,6 +1324,15 @@ def test_k3_baskan_sikayetci_degilse_kurul_evraki_aynen_kalir(kurul: _Kurul, kay
         )
     for key, template, ctx in _k3_documents(case):
         html = _html(template, ctx)
+        if key in ("form12", "form13") and kayit == "vekaletten_sonra_vekaletsiz":
+            # Uzatma kararı 21.05 vekâletli toplantısıyla AYNI gün: Form-12/13 o günün
+            # başkanlık edenini basar — dosyanın son toplantısı vekâletsiz olsa da (16.11.2026);
+            # Form-12 ızgarası o toplantıya katılanları basar (K4), başkanlık eden bir kez.
+            assert "md. 188" in html, key
+            assert kurul.chair.full_name not in html, key
+            assert ctx["committee"].chair.get_full_name() == kurul.t1.member_name
+            assert [m.pk for m in ctx["members"]] == [kurul.t2.pk, kurul.sub.pk]
+            continue
         assert "md. 188" not in html, key
         assert kurul.chair.full_name in html, key
         if key == "dizi":
@@ -1385,7 +1404,10 @@ def test_izinli_baskan_vekaletli_dosya_sikayetci_baskanin_vekaletli_dosyasiyla_a
         f"<strong>{name}</strong> başkanlığında toplanarak" in form12
     )
     assert form12.count(f'<div class="name">{name}</div>') == 1  # ızgarada çift basma yok
-    assert kurul.sub.member_name not in form12  # Form-12 ızgarasında yedek gizli kalır
+    # K4 (15.11.2026): uzatma kararı toplantıyla AYNI gün — ızgara o toplantıya katılanları
+    # basar: yedek üye var, katılmayan veli üye yok.
+    assert kurul.sub.member_name in form12
+    assert kurul.parent.member_name not in form12
     form13 = _html(*docs["form13"])
     assert (
         "başlatılan ve md. 188 uyarınca başkanlık ettiğim Disiplin Kurulu tarafından yürütülen "
@@ -1401,6 +1423,8 @@ def test_izinli_baskan_vekaletli_dosya_sikayetci_baskanin_vekaletli_dosyasiyla_a
     assert f"<td>3</td> <td>{kurul.sub.member_name}</td>" in form10
     # Şikâyetçi başkanın vekâletli dosyasıyla bağlam anahtarları ve üye listesi birebir aynı.
     other = _sikayetci_vekaletli(kurul)
+    # Uzatma iki dosyada da toplantı günü alınmış olsun (K4: ızgara o günün katılanları).
+    services.create_extension(other, requested_days=5, reason="Tanık dinlenecek.", decided_on=_ON)
     for key, _template, ctx in _label_documents(other):
         mine = docs[key][1]
         for context_key in _LABEL_CONTEXT_KEYS:

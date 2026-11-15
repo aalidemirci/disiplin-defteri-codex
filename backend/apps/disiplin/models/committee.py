@@ -210,6 +210,26 @@ class DisciplineMeeting(BaseModel):
         verbose_name="başkanlık eden üye",
         help_text="Başkanın yokluğunda kurula başkanlık eden öğretmen üye (md. 188).",
     )
+    # Kullanıcı kararı, 15.11.2026 — K5: vekâletli toplantı KAYDEDİLİRKEN o günkü kurul
+    # başkanının adı (düz metin anlık kopya; başkan sonradan değişse de kayıt aynı kalır).
+    # Boş = başkan katıldı ya da K5 öncesi kayıt (ad bilinemez — kendiliğinden doldurulmaz).
+    absent_chair_name = models.CharField(
+        "katılmayan başkanın adı",
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Vekâletli toplantı kaydedilirken o günkü kurul başkanının adı (md. 188).",
+    )
+    # Kullanıcı kararı, 15.11.2026 — K8: toplantı KAYDEDİLİRKEN kurulun üye tam sayısı
+    # (başkan + asıl üyeler, md. 185/1). Yeter sayı (md. 191/1) bu sayıya göre hesaplanır:
+    # kurul sonradan büyüse de eski toplantı yeterli kalır. Boş = K8 öncesi kayıt — yeter sayı
+    # eskisi gibi kurulun GÜNCEL üye sayısından hesaplanır (`services.committee.case_meeting_quorum`).
+    quorum_full = models.PositiveSmallIntegerField(
+        "toplantı anındaki üye tam sayısı",
+        null=True,
+        blank=True,
+        help_text="Toplantı kaydedilirken kurulun üye tam sayısı (başkan + asıl üyeler, md. 191/1).",
+    )
 
     class Meta:
         verbose_name = "disiplin kurulu toplantısı"

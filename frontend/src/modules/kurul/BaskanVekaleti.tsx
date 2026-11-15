@@ -103,6 +103,11 @@ interface Props {
    * bir satırı düzeltebilir; yalnız bilgi notu gösterilir. Zorlama yalnız YENİ kayıttadır.
    */
   existingRecord?: boolean;
+  /**
+   * Tutanak bir dosyanın görüşmesi mi (CASE_REVIEW)? Evrak notu (K2) yalnız o zaman
+   * gösterilir: dosyasız genel tutanakta etkilenecek dosya evrakı yoktur.
+   */
+  caseReview?: boolean;
 }
 
 export default function BaskanVekaleti({
@@ -112,6 +117,7 @@ export default function BaskanVekaleti({
   rows,
   onRowsChange,
   existingRecord = false,
+  caseReview = true,
 }: Props) {
   // Başkan seçilen dosyada şikâyetçi / zarar gören ise YENİ kayıtta kutu zorunludur
   // (md. 191/2). Kayıtlı tutanak düzeltilirken zorlanmaz (§7.6 — tek yönlü kapan olmasın).
@@ -142,6 +148,19 @@ export default function BaskanVekaleti({
         />
         <span>Başkan toplantıya katılmadı ({options.chair_name})</span>
       </label>
+      {/* K2 (kullanıcı kararı, 15.11.2026): vekâlet kaydının evraka etkisi kutunun altında
+          söylenir. Dosya evrakı karar defteri tutanağına değil DOSYADAKİ kurul toplantısı
+          kaydına bakar (documents._committee_with_members_context); not bunu da söyler. */}
+      {caseReview && (
+        <p className="flex items-start gap-1 text-body-small text-on-surface-variant">
+          <Icon name="info" size="sm" />
+          <span>
+            Bu tutanak karar defteri sayfasını belirler; dosyanın kurul evrakı (çağrılar, ek süre
+            evrakı, EK-1, dizi pusulası) dosyadaki kurul toplantısı da “başkan katılmadı” olarak
+            kaydedildikten sonra başkan yerine kurula başkanlık eden üyeyle basılır.
+          </span>
+        </p>
+      )}
       {forced && (
         <p id={reasonId} className="flex items-start gap-1 text-body-small text-on-surface-variant">
           <Icon name="info" size="sm" />
