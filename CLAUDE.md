@@ -120,7 +120,7 @@ backend/
                     is_working_day, yıl devri, opsiyonel parola servisi, lock_middleware
   apps/disiplin/    disiplin çekirdeği: models/, selectors/, services/, views.py,
                     state_machine.py, discipline_periods.py, deadlines.py,
-                    documents.py (1165 satır), honor_documents.py, purge (md. 157/7),
+                    documents.py (2470 satır), honor_documents.py, purge (md. 157/7),
                     templates/disiplin/documents/  ← 25 evrak şablonu
   shared/           FK'sız BaseModel, working_days, letterhead, crypto (Fernet+Argon2id),
                     exceptions ({code,message,fields} sözleşmesi), text
@@ -156,8 +156,9 @@ arka plan thread'i → `pywebview` penceresi. Bütünlük denetimi bilinçli ola
 yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
-Ölçek duygusu (F5 sonu itibarıyla, kaba): backend ~22.500 satır Python + 470 test ·
-desktop/packaging ~4.700 satır + ~111 test · frontend ~26.900 satır TS/TSX + 360 test.
+Ölçek duygusu (2026.11.0-beta.1 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
+testlerle): backend ~24.300 satır Python (~45.900) + 1280 test · desktop/packaging ~3.200 satır
+(~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 556 test.
 
 ---
 
@@ -459,10 +460,10 @@ Etki × yoğunluk sırasıyla:
 
 1. **`backend/apps/disiplin/services/` + `selectors/`** — iş kurallarının kalbi;
    §8 invariantlarına karşı oku.
-2. **`backend/apps/disiplin/views.py` (1196 satır) + `serializers.py`** — doğrulama
+2. **`backend/apps/disiplin/views.py` (1700 satır) + `serializers.py`** — doğrulama
    boşlukları, 500 dönmesi gereken yerde 400, kısmi güncellemenin veri silmesi.
-3. **`frontend/src/modules/disiplin/DisiplinDetayPage.tsx` (2355 satır) +
-   `DecisionsSection.tsx` (1840)** — en büyük iki dosya, en çok durum barındıran
+3. **`frontend/src/modules/disiplin/DisiplinDetayPage.tsx` (2891 satır) +
+   `DecisionsSection.tsx` (2713)** — en büyük iki dosya, en çok durum barındıran
    yerler; §7.5 ve §7.6 sınıfları burada yaşıyor.
 4. **`documents.py` uyarlama noktaları** — Dal A/B kısıtı ve Form-16/17 kilidinin
    hâlâ yerinde olduğu; şablon bağlam anahtarlarının bozulmadığı.
