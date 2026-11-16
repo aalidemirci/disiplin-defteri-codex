@@ -77,7 +77,8 @@
    dosya toplantısı varsa o toplantıya katılanları basar (`documents._extension_grid`; yedek
    dahil, başkanlık eden bir kez); öyle bir kayıt yoksa kurulun asıl üyeleri. Form-10'da çağrılan
    yedek üyenin görevi "<görev> (Yedek Üye)". Kurula iade yazısı (`return_letter`) kurulun İLK
-   kararının tarihini basar (`first_decision_date`).
+   kararının tarihini (`first_decision_date`) ve — iz varsa — sayısını, cezasını, maddesini basar
+   (`first_decision_no`, `first_penalty_type`, `first_statute_ref`; kullanıcı kararı 16.11.2026).
    `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.
@@ -377,8 +378,12 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   TARİHLİ bir toplantıya İLK KEZ taşınırken ilk karar tarihi ve (varsa) toplantısı
   `first_decision_date` / `first_meeting` alanlarına yazılır; sonra ezilmez / boşaltılmaz. Tarih
   değişmeyen bağlama / taşıma iz yazmaz. `decision_date` yürürlükteki tarihtir (süreler ve öteki
-  belgeler onu kullanır); yalnız kurula iade yazısı ilk tarihi basar — karar SAYISI ve ceza
-  yürürlükteki kayıttan gelir (ilk sayı / ceza saklanmaz; bilinen sınır). Kartta "İlk görüşme".
+  belgeler onu kullanır); yalnız kurula iade yazısı ilk tarihi basar. AYNI anda, düzenleme
+  uygulanmadan önceki karar sayısı, ceza, gün ve madde atfı da saklanır (`first_decision_no`,
+  `first_penalty_type`, `first_suspension_days`, `first_statute_ref` — kullanıcı kararı,
+  16.11.2026; göç 0019); iade yazısı bunları basar, öteki belgeler yürürlükteki kaydı.
+  `first_penalty_type` boş = iz yok (taşınmadı / 0019'dan önce taşındı): yazı yürürlükteki sayı
+  ve cezayı basar, uydurulmaz. Kartta "İlk görüşme" (tarih, ceza, sayı).
   **Karar defteri ↔ dosya toplantısı (K9):** dosya görüşme tutanağının tarihi ya da oy hakkı olan
   katılımcıları dosyadaki kararların BAĞLI olduğu toplantıyla uyuşmuyorsa UYARILIR, engellenmez
   (`services.council._bound_meeting_warnings`, `chair_warnings` içinde); kararı bağsız dosyada
@@ -551,10 +556,11 @@ Etki × yoğunluk sırasıyla:
 - **Yeni Python bağımlılığı eklersen** `packaging/pyinstaller/disiplin_defteri.spec`
   içindeki `hiddenimports`'u da güncelle (borç K7) — yoksa paket açılmaz, testler
   bunu yakalamaz.
-- **Migration:** `okul` 0006'da, `disiplin` 0018'de (0014 dosya numarası sayacı, 0015
+- **Migration:** `okul` 0006'da, `disiplin` 0019'da (0014 dosya numarası sayacı, 0015
   md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi, 0017 toplantıda
   başkana vekâlet, 0018 açık kalemler: katılmayan başkanın adı, toplantı anındaki üye tam
-  sayısı, md. 197 ilk görüşme tarihi + toplantısı — yalnız şema). Veri göçleri
+  sayısı, md. 197 ilk görüşme tarihi + toplantısı; 0019 md. 197 ilk kararın sayısı + cezası — ikisi de
+  yalnız şema). Veri göçleri
   yalnız DÜZ alan okur: parola kuruluysa açılışta `migrate` koşarken anahtar henüz yoktur —
   şifreli alan okuyan/yazan göç yazma (kilitli kip testi:
   `test_s11_gocleri_kilitli_kipte_sifreli_alana_dokunmadan_kosar`). Şema değişikliği şifreli

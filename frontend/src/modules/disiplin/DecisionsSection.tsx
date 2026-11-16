@@ -660,11 +660,15 @@ function DecisionCard({
         </span>
         {/* K10 (15.11.2026): md. 197 iadesinden sonra karar başka toplantıya taşındıysa kurulun
             İLK görüşme tarihi kayıtta kalır; kart ve süreler yürürlükteki karar tarihini
-            kullanır, kurula iade yazısı ilk tarihi basar. */}
+            kullanır, kurula iade yazısı ilk tarihi — iz varsa ilk sayı ve cezayı da — basar. */}
         {d.first_decision_date && (
           <span className="inline-flex items-center gap-1 rounded-shape-xl bg-surface-container px-2.5 py-0.5">
             <Icon name="history" size="xs" />
             İlk görüşme: {formatDate(d.first_decision_date)}
+            {d.first_penalty_type_display &&
+              ` · ${d.first_penalty_type_display}${
+                d.first_suspension_days ? ` — ${d.first_suspension_days} gün` : ""
+              }${d.first_decision_no ? ` · karar no ${d.first_decision_no}` : ""}`}
           </span>
         )}
         {d.notified_at ? (

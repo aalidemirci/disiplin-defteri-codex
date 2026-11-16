@@ -442,8 +442,9 @@ def update_decision(
     TOPLANTI BAĞI (S8): toplantıya bağlı kararda karar tarihi toplantı tarihidir — yalnız
     `meeting` verilerek (başka toplantıya bağlama; md. 197 iadesinden sonraki ikinci görüşme
     böyle kaydedilir; iade edilmiş kararın İLK taşınmasında ilk görüşmenin tarihi ve
-    toplantısı `first_decision_date` / `first_meeting` alanlarına yazılır, sonra ezilmez —
-    K10) değişir; bağ KALDIRILAMAZ (`meeting=None` reddedilir). Toplantısız
+    toplantısı `first_decision_date` / `first_meeting` alanlarına, ilk kararın sayısı ve
+    cezası `first_decision_no` / `first_penalty_*` / `first_statute_ref` alanlarına yazılır,
+    sonra ezilmez — K10) değişir; bağ KALDIRILAMAZ (`meeting=None` reddedilir). Toplantısız
     girilmiş ESKİ kararda tarih eskisi gibi düzenlenir, toplantı ZORLANMAZ; `meeting`
     verilirse karar o toplantıya bağlanır ve tarihi toplantı tarihine çekilir.
 
@@ -545,6 +546,14 @@ def update_decision(
         # (düzeltilmiş) toplantıyla yazılır.
         decision.first_decision_date = decision.decision_date
         decision.first_meeting = bound
+        # İlk kararın sayısı ve cezası (kullanıcı kararı, 16.11.2026): düzenleme
+        # uygulanmadan ÖNCEKİ değerler — kurula iade yazısı bunları basar. Karar beklemeye
+        # alınırken üst kurul değişikliği geri alındığı için (`_restore_board_penalty`)
+        # buradaki ceza kurulun KENDİ ilk cezasıdır.
+        decision.first_decision_no = decision.decision_no
+        decision.first_penalty_type = decision.penalty_type
+        decision.first_suspension_days = decision.suspension_days
+        decision.first_statute_ref = decision.statute_ref
     decision.md166_override_reason = md166_reason
     decision.penalty_type = penalty_type
     decision.decision_date = decision_date

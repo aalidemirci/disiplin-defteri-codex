@@ -2332,9 +2332,26 @@ def _apply_md197_dates(context: dict[str, Any], document_type: str) -> None:
     # Karar iadeden sonra başka toplantıya taşındıysa (ikinci görüşme) `decision_date` yeni
     # tarihtir; yazı `first_decision_date`'i basar (yalnız bağlam — şablon ve kayıt değişmez).
     # İlçeye gönderme yazısı ve öteki belgeler yürürlükteki karar tarihini kullanır.
+    if document_type != DocumentType.RETURN_LETTER:
+        return
     first_decision_date = getattr(decision, "first_decision_date", None)
-    if document_type == DocumentType.RETURN_LETTER and first_decision_date is not None:
+    if first_decision_date is not None:
         context["decision"] = _DecisionView(context["decision"], decision_date=first_decision_date)
+    # Kullanıcı kararı 16.11.2026: ikinci görüşmede sayı / ceza da değişebilir; iade yazısı
+    # kurulun İLK kararının sayısını, cezasını ve maddesini basar (yalnız bağlam). İz
+    # `first_penalty_type` doluysa vardır; boşsa (taşınmadı / 0019 öncesi taşındı)
+    # yürürlükteki kayıt basılır — ilk sayı / ceza UYDURULMAZ.
+    first_penalty_type = getattr(decision, "first_penalty_type", "")
+    if first_penalty_type:
+        view = _DecisionView(
+            context["decision"],
+            decision_no=decision.first_decision_no,
+            penalty_type=first_penalty_type,
+            suspension_days=decision.first_suspension_days,
+            statute_ref=decision.first_statute_ref,
+        )
+        context["decision"] = view
+        context["statute_label"] = statute_label(view)
 
 
 def _student_in_case(case: DisciplineCase, student_id: int) -> Any:
