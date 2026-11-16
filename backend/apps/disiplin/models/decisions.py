@@ -395,6 +395,12 @@ class DisciplineDecision(BaseModel):
     # `decision_date` her zaman YÜRÜRLÜKTEKİ karar tarihidir: süreler, onay/tebliğ denetimleri
     # ve öteki belgeler ondan türer; bu alanlar yalnız kurula iade yazısı (ilk kararın tarihi)
     # ve karar kartındaki "İlk görüşme" bilgisi içindir.
+    # İLK KARARIN SAYISI VE CEZASI (kullanıcı kararı, 16.11.2026): aynı anda, düzenleme
+    # uygulanmadan ÖNCEKİ karar no / ceza / gün / madde atfı `first_decision_no`,
+    # `first_penalty_type`, `first_suspension_days`, `first_statute_ref` alanlarına yazılır;
+    # kurula iade yazısı bunları basar. `first_penalty_type` boş = ilk karar izi yok (taşınmadı
+    # ya da 0019 göçünden önce taşındı): yazı yürürlükteki sayı ve cezayı basar, UYDURULMAZ.
+    # `first_decision_no` iz varken de boş olabilir (ilk karara sayı girilmemişti).
     first_decision_date = models.DateField(
         "ilk görüşme (karar) tarihi",
         null=True,
@@ -409,6 +415,34 @@ class DisciplineDecision(BaseModel):
         related_name="first_decisions",
         verbose_name="ilk görüşmenin toplantısı",
         help_text="md. 197: kararın iade edilmeden önce bağlı olduğu kurul toplantısı (varsa).",
+    )
+    first_decision_no = models.CharField(
+        "ilk kararın sayısı",
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="md. 197: kurula iade edilen kararın, yeniden görüşülmeden önceki sayısı.",
+    )
+    first_penalty_type = models.CharField(
+        "ilk kararın cezası",
+        max_length=24,
+        choices=PenaltyType.choices,
+        blank=True,
+        default="",
+        help_text="md. 197: kurula iade edilen kararın, yeniden görüşülmeden önceki cezası.",
+    )
+    first_suspension_days = models.PositiveSmallIntegerField(
+        "ilk kararın uzaklaştırma süresi (gün)",
+        null=True,
+        blank=True,
+        help_text="İlk karar kısa süreli uzaklaştırmaysa gün sayısı.",
+    )
+    first_statute_ref = models.CharField(
+        "ilk kararın madde atfı",
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="md. 197: kurula iade edilen kararın, yeniden görüşülmeden önceki madde atfı.",
     )
     notes = models.TextField("açıklama", blank=True, default="")
     md166_override_reason = models.TextField(

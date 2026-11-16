@@ -1624,6 +1624,50 @@ describe("DecisionsSection — 15.11.2026 açık kalemler", () => {
     expect(screen.getByText("Toplantı: 09.03.2026")).toBeInTheDocument();
   });
 
+  it("md. 197: ilk kararın cezası ve sayısı 'İlk görüşme' satırında görünür", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          meeting: 62,
+          meeting_date: "2026-03-09",
+          decision_date: "2026-03-09",
+          first_returned_at: "2026-03-04",
+          first_decision_date: "2026-03-02",
+          first_meeting: 61,
+          first_decision_no: "2026/7",
+          first_penalty_type: "SHORT_TERM_SUSPENSION",
+          first_penalty_type_display: "Okuldan kısa süreli uzaklaştırma",
+          first_suspension_days: 3,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(
+      await screen.findByText(
+        "İlk görüşme: 02.03.2026 · Okuldan kısa süreli uzaklaştırma — 3 gün · karar no 2026/7",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("md. 197: ilk kararın sayısı ve gün sayısı yoksa satır yalnız tarih ve cezayı yazar", async () => {
+    dapi.listDecisions.mockResolvedValue({
+      decisions: [
+        makeDecision({
+          first_returned_at: "2026-03-04",
+          first_decision_date: "2026-03-02",
+          first_decision_no: "",
+          first_penalty_type: "REPRIMAND",
+          first_penalty_type_display: "Kınama",
+          first_suspension_days: null,
+        }),
+      ],
+      behavior_points: {},
+    });
+    renderSection();
+    expect(await screen.findByText("İlk görüşme: 02.03.2026 · Kınama")).toBeInTheDocument();
+  });
+
   it("K10: ilk görüşme tarihi yoksa satır yoktur", async () => {
     dapi.listDecisions.mockResolvedValue({
       decisions: [makeDecision({ first_decision_date: null, first_meeting: null })],

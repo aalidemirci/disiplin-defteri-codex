@@ -171,6 +171,10 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
         source="get_approval_authority_display", read_only=True
     )
     appeals = AppealSerializer(many=True, read_only=True)
+    # md. 197 (16.11.2026): ilk kararın cezası — iz yoksa "".
+    first_penalty_type_display = serializers.CharField(
+        source="get_first_penalty_type_display", read_only=True
+    )
 
     # S11c: EK-1 "önceki cezalar" özeti güncel durumu yansıtmıyor mu (salt-okur uyarı).
     prior_penalties_stale = serializers.SerializerMethodField()
@@ -239,6 +243,10 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             # K10: md. 197 iadesinden sonra karar başka toplantıya taşındıysa İLK görüşme.
             "first_decision_date",
             "first_meeting",
+            "first_decision_no",
+            "first_penalty_type",
+            "first_penalty_type_display",
+            "first_suspension_days",
             "board_penalty_type",
             "board_suspension_days",
             "notified_at",
@@ -286,6 +294,9 @@ class DecisionSerializer(serializers.ModelSerializer[DisciplineDecision]):
             "first_returned_at",
             "first_decision_date",
             "first_meeting",
+            "first_decision_no",
+            "first_penalty_type",
+            "first_suspension_days",
             "board_penalty_type",
             "board_suspension_days",
             "notified_at",

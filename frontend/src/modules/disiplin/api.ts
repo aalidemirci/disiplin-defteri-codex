@@ -516,6 +516,12 @@ export interface DisciplineDecision extends DecisionNarrative {
   // `null` = karar iade sonrası taşınmadı. Süreler ve diğer belgeler `decision_date` kullanır.
   first_decision_date?: string | null;
   first_meeting?: number | null;
+  // 16.11.2026 — salt okur. Aynı anda yazılan ilk kararın sayısı ve cezası (kurula iade
+  // yazısı bunları basar). `first_penalty_type` "" = iz yok (0019 göçünden önce taşındı).
+  first_decision_no?: string;
+  first_penalty_type?: PenaltyType | "";
+  first_penalty_type_display?: string;
+  first_suspension_days?: number | null;
   // K11 (15.11.2026) — salt okur. Silinmiş karar NEDEN geri yüklenemez (sunucunun geri
   // yükleme reddiyle aynı metin); "" = yüklenebilir. Canlı kararda hep "".
   restore_blocked_reason?: string;

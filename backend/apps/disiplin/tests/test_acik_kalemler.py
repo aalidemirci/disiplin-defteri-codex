@@ -786,6 +786,163 @@ def test_k10_kurula_iade_yazisi_ilk_kararin_tarihini_basar(kurul: _Kurul) -> Non
 
 
 # ---------------------------------------------------------------------------
+# md. 197 — ilk kararın sayısı ve cezası saklanır (kullanıcı kararı, 16.11.2026)
+# ---------------------------------------------------------------------------
+def _return_letter(case: DisciplineCase) -> tuple[dict[str, Any], str]:
+    ctx = doc_engine._build_context(case, DocumentType.RETURN_LETTER, case.students.get(), None, {})
+    doc_engine._apply_md197_dates(ctx, DocumentType.RETURN_LETTER)
+    html = _html(f"{_BASE}return_letter.html", {**ctx, "generated_at": timezone.now()})
+    return ctx, html
+
+
+def _returned_suspension(
+    kurul: _Kurul,
+) -> tuple[DisciplineCase, DisciplineDecision, DisciplineMeeting]:
+    """T1'de 3 gün uzaklaştırma (karar no 2026/7); müdür iade etti; karar beklemede."""
+    case = kurul.case()
+    first = services.record_meeting(case, meeting_date=T1, attendee_member_ids=_present(kurul))
+    decision = services.record_decision(
+        case,
+        student_id=case.students.get().pk,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        suspension_days=3,
+        enforcement_start_date=date(2026, 6, 8),
+        decision_no="2026/7",
+        meeting=first,
+    )
+    services.record_principal_review(
+        decision, action="RETURN", reason="Ceza ağır bulundu.", decided_on=date(2026, 5, 25)
+    )
+    services.set_decision_approval(decision, approval_status="PENDING")
+    decision.refresh_from_db()
+    return case, decision, first
+
+
+def test_md197_ikinci_gorusmede_ilk_kararin_sayisi_ve_cezasi_saklanir_sonra_ezilmez(
+    kurul: _Kurul,
+) -> None:
+    case, decision, _first = _returned_suspension(kurul)
+    assert decision.first_penalty_type == ""
+    second = services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    services.update_decision(
+        decision, penalty_type=PenaltyType.REPRIMAND, decision_no="2026/9", meeting=second
+    )
+    decision.refresh_from_db()
+    # Yürürlükteki kayıt ikinci görüşmenin kararıdır.
+    assert decision.penalty_type == PenaltyType.REPRIMAND
+    assert decision.decision_no == "2026/9"
+    assert decision.suspension_days is None
+    # İlk karar izi.
+    assert decision.first_decision_no == "2026/7"
+    assert decision.first_penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
+    assert decision.first_suspension_days == 3
+    assert decision.first_decision_date == T1
+
+    # Sonraki taşıma ve düzenlemeler EZMEZ.
+    third = services.record_meeting(case, meeting_date=T3, attendee_member_ids=_present(kurul))
+    services.update_decision(
+        decision, penalty_type=PenaltyType.NO_PENALTY, decision_no="2026/11", meeting=third
+    )
+    services.update_decision(decision, penalty_type=PenaltyType.REPRIMAND, decision_no="2026/12")
+    decision.refresh_from_db()
+    assert decision.first_decision_no == "2026/7"
+    assert decision.first_penalty_type == PenaltyType.SHORT_TERM_SUSPENSION
+    assert decision.first_suspension_days == 3
+
+    (row,) = APIClient().get(_url(case, "decisions/")).json()["decisions"]
+    assert row["first_decision_no"] == "2026/7"
+    assert row["first_penalty_type"] == "SHORT_TERM_SUSPENSION"
+    assert row["first_penalty_type_display"] == "Okuldan kısa süreli uzaklaştırma"
+    assert row["first_suspension_days"] == 3
+    assert row["penalty_type"] == "REPRIMAND"
+
+
+def test_md197_kurula_iade_yazisi_ilk_kararin_sayisini_ve_cezasini_basar(kurul: _Kurul) -> None:
+    case, decision, _first = _returned_suspension(kurul)
+    _ctx, before = _return_letter(case)
+    assert "2026/7 sayılı" in before and "Okuldan kısa süreli uzaklaştırma" in before
+
+    second = services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    services.update_decision(
+        decision, penalty_type=PenaltyType.REPRIMAND, decision_no="2026/9", meeting=second
+    )
+    ctx, html = _return_letter(case)
+    assert "21.05.2026 tarihli ve 2026/7 sayılı" in html
+    assert "<strong>Okuldan kısa süreli uzaklaştırma</strong>" in html
+    assert "(Madde 164/2)" in html
+    assert "2026/9" not in html and "Kınama" not in html and "164/1" not in html
+    assert ctx["decision"].suspension_days == 3
+    assert before == html  # yeniden üretilen yazı ilk nüshayla aynıdır
+
+    # Kayıt DEĞİŞMEZ; öteki belgeler yürürlükteki kararı basar.
+    decision.refresh_from_db()
+    assert decision.penalty_type == PenaltyType.REPRIMAND and decision.decision_no == "2026/9"
+    student = case.students.get()
+    ek1 = doc_engine._build_context(case, DocumentType.COMMITTEE_DECISION, student, None, {})
+    assert ek1["decision"].penalty_type == PenaltyType.REPRIMAND
+    assert ek1["decision"].decision_no == "2026/9"
+    assert ek1["statute_label"] == "Madde 164/1"
+
+
+def test_md197_ilk_kararin_sayisi_bossa_iade_yazisi_ikinci_sayiyi_basmaz(kurul: _Kurul) -> None:
+    """İlk karara sayı girilmemişse İlgi satırı noktalı kalır — ikinci kararın sayısı basılmaz."""
+    case, decision, _first = _returned(kurul)  # kınama
+    # Sayı kayıtta boş olabilir (eski kayıt); yeni kararda kendiliğinden verilir.
+    DisciplineDecision.objects.filter(pk=decision.pk).update(decision_no="")
+    decision.refresh_from_db()
+    second = services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    services.update_decision(
+        decision,
+        penalty_type=PenaltyType.NO_PENALTY,
+        decision_no="2026/9",
+        statute_ref="#madde-191",
+        meeting=second,
+    )
+    decision.refresh_from_db()
+    assert decision.first_penalty_type == PenaltyType.REPRIMAND
+    assert decision.first_decision_no == "" and decision.first_statute_ref == ""
+    _ctx, html = _return_letter(case)
+    assert "21.05.2026 tarihli ve ……… sayılı" in html
+    assert "<strong>Kınama</strong>" in html and "(Madde 164/1)" in html
+    assert "2026/9" not in html and "yer olmadığı" not in html
+
+
+def test_md197_ilk_karar_izi_yoksa_iade_yazisi_yururlukteki_kaydi_basar(kurul: _Kurul) -> None:
+    """0019'dan ÖNCE taşınmış karar: ilk tarih var, ilk sayı / ceza yok — uydurulmaz."""
+    case, decision, _first = _returned(kurul)
+    second = services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    services.update_decision(
+        decision, penalty_type=PenaltyType.NO_PENALTY, decision_no="2026/9", meeting=second
+    )
+    DisciplineDecision.objects.filter(pk=decision.pk).update(
+        first_penalty_type="", first_decision_no="", first_suspension_days=None
+    )
+    _ctx, html = _return_letter(case)
+    assert "21.05.2026 tarihli ve 2026/9 sayılı" in html
+    assert "<strong>Ceza verilmesine yer olmadığı</strong>" in html
+
+
+def test_md197_tarih_degismeyen_duzenlemede_ilk_karar_izi_yazilmaz(kurul: _Kurul) -> None:
+    """İade sonrası aynı toplantıda yapılan düzeltme (sayı / ceza) ikinci görüşme değildir."""
+    case, decision, _first = _returned_suspension(kurul)
+    services.update_decision(
+        decision,
+        penalty_type=PenaltyType.SHORT_TERM_SUSPENSION,
+        suspension_days=2,
+        enforcement_start_date=date(2026, 6, 8),
+        decision_no="2026/8",
+    )
+    decision.refresh_from_db()
+    assert decision.first_penalty_type == "" and decision.first_decision_no == ""
+    # Gerçek ikinci görüşmede iz, o an kayıtlı (düzeltilmiş) ilk karardan yazılır.
+    second = services.record_meeting(case, meeting_date=T2, attendee_member_ids=_present(kurul))
+    services.update_decision(decision, penalty_type=PenaltyType.REPRIMAND, meeting=second)
+    decision.refresh_from_db()
+    assert decision.first_decision_no == "2026/8"
+    assert decision.first_suspension_days == 2
+
+
+# ---------------------------------------------------------------------------
 # K11 — sevk öncesinde kalan eski (bağsız) silinmiş karar geri yüklenmez
 # ---------------------------------------------------------------------------
 def test_k11_sevk_oncesinde_kalan_eski_silinmis_karar_geri_yuklenmez(kurul: _Kurul) -> None:
