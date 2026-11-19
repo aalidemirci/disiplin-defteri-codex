@@ -127,9 +127,10 @@ yazıldığını anlamıyorsan cevap çoğu kez "OYS'de öyleydi ve pariteyi kor
 
 **Durum:** F0-F5 fazlarının hepsi tamamlandı. CI'da Linux `.deb` (debian:11 ve
 debian:12'ye temiz kurulum) ve Windows `setup.exe` + `portable.zip` uçtan uca
-yeşil koştu. Sürüm: `VERSION` → `2026.11.0-beta.3` (CalVer; kasım 2026 yedekleme düzeltmesi + 14.11.2026 saha denemesi kararları S1-S13: vekâlet kaydı, toplantı zorunluluğu, şema göçleri 0014-0018; beta.2: izinli başkanın
+yeşil koştu. Sürüm: `VERSION` → `2026.11.0-beta.4` (CalVer; kasım 2026 yedekleme düzeltmesi + 14.11.2026 saha denemesi kararları S1-S13: vekâlet kaydı, toplantı zorunluluğu, şema göçleri 0014-0019; beta.2: izinli başkanın
 vekâletli dosyasında çağrı ve ek süre evrakı; beta.3: S7/S8 açık kalemleri K1-K11 — dönen başkan,
-ileri tarihli toplantı, tutanak uyarısı, md. 197 ilk görüşme).
+ileri tarihli toplantı, tutanak uyarısı, md. 197 ilk görüşme; beta.4: iade yazısında ilk kararın sayısı
+ve cezası (göç 0019), EK-1 karar defterine sığar, antette ilçe adı büyük harf).
 
 ---
 
@@ -179,9 +180,9 @@ arka plan thread'i → `pywebview` penceresi. Bütünlük denetimi bilinçli ola
 yedekten ÖNCE koşar (bozuk veriyle rotasyon sağlam yedekleri silmesin).
 Her adımın hata yolu ayrı çıkış koduna bağlı (`docs/kurulum.md §7`).
 
-Ölçek duygusu (2026.11.0-beta.3 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
-testlerle): backend ~24.300 satır Python (~46.200) + 1342 test · desktop/packaging ~3.200 satır
-(~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 576 test.
+Ölçek duygusu (2026.11.0-beta.4 itibarıyla, kaba; satır sayıları test ve göç dışı, parantezde
+testlerle): backend ~24.300 satır Python (~46.200) + 1354 test · desktop/packaging ~3.200 satır
+(~5.700) + 169 test · frontend ~27.700 satır TS/TSX (~39.100) + 578 test.
 
 ---
 
