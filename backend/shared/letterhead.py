@@ -20,14 +20,21 @@ from __future__ import annotations
 
 from django.conf import settings
 
+from shared.text import tr_upper
+
 
 def letterhead_authority(district: str | None = None) -> str:
     """Antedin ikinci satırı: '<İLÇE> KAYMAKAMLIĞI' (ilçe yoksa yer-tutucu).
 
+    BİLİNÇLİ SAPMA (kullanıcı kararı, 19.11.2026): ilçe adı kurulumda olağan yazımla
+    ("Sancaktepe") girilse de antette TÜRKÇE büyük harfle basılır ("SANCAKTEPE
+    KAYMAKAMLIĞI") — "Sancaktepe KAYMAKAMLIĞI" karışık görünüyordu. Kayıtlı değer
+    değişmez; yalnız baskı. Büyük harfle girilmiş ilçede çıktı OYS ile aynıdır.
+
     `district` verilmezse ``settings.OYS_DISTRICT_NAME``'e düşer (geriye uyumlu;
     bkz. modül docstring'i — bu proje için ölü yol)."""
     name = district if district is not None else getattr(settings, "OYS_DISTRICT_NAME", "")
-    name = (name or "").strip()
+    name = tr_upper((name or "").strip())
     return f"{name} KAYMAKAMLIĞI" if name else "…………… KAYMAKAMLIĞI"
 
 

@@ -220,7 +220,7 @@ def test_tutanak_pdf_turkce_metin_ve_mevzuat_dayanagi() -> None:
 
     assert "İMHA TUTANAĞI" in text
     assert "Deneme Anadolu Lisesi".upper() in text.upper()
-    assert "Menteşe KAYMAKAMLIĞI" in text  # antet kimliği sihirbazdan
+    assert "MENTEŞE KAYMAKAMLIĞI" in text  # antet: ilçe Türkçe büyük harf (19.11.2026)
     assert "157" in text  # mevzuat dayanağı (md. 157/7-d)
     assert student.full_name in text
     assert case.case_no in text

@@ -78,7 +78,7 @@ class TestLetterheadIdentity:
             district=identity["district"],
             principal_name=identity["principal_name"],
         )
-        assert context["authority"] == "Menteşe KAYMAKAMLIĞI"
+        assert context["authority"] == "MENTEŞE KAYMAKAMLIĞI"
         assert context["principal_name"] == "ALİ ÖRNEK"
 
 
