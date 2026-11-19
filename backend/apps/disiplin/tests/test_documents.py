@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
+from typing import Any
 
 import pytest
 from pypdf import PdfReader
@@ -107,7 +108,7 @@ def test_ek1_pdf_turkce_duman_ve_kutuk() -> None:
     assert "ĞÜŞİÖÇ" in text and "ığüşiöç" in text  # Türkçe glifler kayıpsız
     assert "EMRE CAN YILMAZ" in text
     assert "Deneme Anadolu Lisesi".upper() in text.upper()
-    assert "Menteşe KAYMAKAMLIĞI" in text  # antet kimliği sihirbazdan
+    assert "MENTEŞE KAYMAKAMLIĞI" in text  # antet: ilçe Türkçe büyük harf (19.11.2026)
     assert record is not None
     assert record.document_type == DocumentType.COMMITTEE_DECISION
     assert record.page_count >= 1
@@ -834,6 +835,122 @@ def test_ek1_cezasiz_kararda_md197_iade_kutusu() -> None:
     assert "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA" in text
     assert "gerektirmez (md. 191)" not in text
     assert "UYGUNDUR" not in text
+
+
+# ---------------------------------------------------------------------------
+# EK-1 karar defteri düzeni (kullanıcı kararı 19.11.2026): tek yaprağa sığıyorsa sıkı düzen;
+# sığmıyorsa ferah düzen, en çok iki sayfa (md. 196/1 — deftere yapıştırılır).
+# ---------------------------------------------------------------------------
+_EK1_OZET = (
+    "Öğrenci, teneffüste koridorda arkadaşıyla tartıştığını, sözlü sataşma sonrası "
+    "arkadaşını ittiğini, kasıtlı olarak zarar vermek istemediğini, olaydan dolayı "
+    "pişman olduğunu ve arkadaşından özür dilediğini ifade etmiştir."
+)
+
+
+def _ek1_doldurulmus(tekrar: int) -> tuple[bytes, int]:
+    """6 imzacılı kurul + bütün EK-1 alanları dolu karar; anlatı alanları `tekrar` katı."""
+    case, sid = _committee_case(summary="Arkadaşına fiziksel şiddet uygulamak (itme).")
+    year = SchoolYearFactory()
+    committee = services.create_committee(
+        school_year_id=year.pk, chair_id=PersonnelFactory(first_name="MEHMET").pk
+    )
+    for i, ad in enumerate(["AYŞE", "FATMA", "HASAN", "ZEYNEP"]):
+        p = PersonnelFactory(first_name=ad, last_name="ÖĞRETMEN")
+        services.add_committee_member(committee, member_type="TEACHER", person_id=p.pk, order=i)
+    services.add_committee_member(committee, member_type="PARENT", member_name="ALİ VELİ", order=9)
+    d = decide(
+        case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 22)
+    )
+    metin = " ".join([_EK1_OZET] * tekrar)
+    for alan, deger in {
+        "boarding_status": "Gündüzlü",
+        "academic_standing": "Orta",
+        "health_status": "Sağlıklı",
+        "family_economic_status": "Orta",
+        "lives_with_family": "Evet",
+        "parents_alive": "Sağ",
+        "parents_biological": "Öz",
+        "studies_near_family": "Evet",
+        "upbringing_environment": "İstanbul, kentsel çevre",
+        "family_residence_area": "Sancaktepe, apartman dairesi",
+        "prior_penalties_summary": "Yürürlükte cezası yoktur.",
+        "incident_place": "Okul koridoru",
+        "incident_date": date(2026, 5, 15),
+        "penalty_detail": "Kınama gerektiren davranış",
+        "accused_statement_summary": metin,
+        "witness_statement_summary": metin,
+        "other_evidence": "Nöbetçi öğretmen tutanağı, kamera kaydı.",
+        "mitigating_aggravating": "Kurul, öğrencinin pişmanlık duyduğunu dikkate almıştır.",
+        "committee_opinion": metin,
+    }.items():
+        setattr(d, alan, deger)
+    d.save()
+    pdf_bytes, record = doc_engine.generate_document(
+        case,
+        document_type=DocumentType.COMMITTEE_DECISION,
+        generated_on=date(2026, 5, 22),
+        student_id=sid,
+    )
+    assert record is not None
+    return pdf_bytes, record.page_count
+
+
+def test_ek1_olagan_karar_tek_sayfa() -> None:
+    pdf_bytes, sayfa = _ek1_doldurulmus(tekrar=1)
+    assert sayfa == 1
+    assert len(PdfReader(BytesIO(pdf_bytes)).pages) == 1
+    text = " ".join(_pdf_text(pdf_bytes).split())
+    # Alan listesi EK-1 ile aynı — yerleşim değişti, alan düşmedi.
+    for etiket in (
+        "Paralı veya parasız yatılı ya da gündüzlü olduğu",
+        "Anne-babasının öz olup olmadığı",
+        "Şimdiye kadar aldığı cezalar ve genel durumu",
+        "Okul öğrenci ödül ve disiplin kurulunun kanaati",
+        "OKUL MÜDÜRÜNÜN ONAYI",
+        "YENİDEN GÖRÜŞÜLMESİ HUSUSUNDA",
+        "ALİ ÖRNEK",
+    ):
+        assert etiket in text, etiket
+
+
+@pytest.mark.parametrize(("tekrar", "ferah_mi"), [(3, True), (8, False)])
+def test_ek1_tek_sayfaya_sigmayan_karar_iki_sayfayi_asmaz(
+    tekrar: int, ferah_mi: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sığmayan karar ferah düzende iki sayfa; ferah üçe taşarsa sıkı düzen (yine ≤2)."""
+    gercek = doc_engine.render_pdf_paged
+    secimler: list[tuple[bool, bytes]] = []
+
+    def casus(template: str, context: dict[str, Any]) -> tuple[bytes, int]:
+        sonuc = gercek(template, context)
+        secimler.append((bool(context["ek1_compact"]), sonuc[0]))
+        return sonuc
+
+    monkeypatch.setattr(doc_engine, "render_pdf_paged", casus)
+    pdf_bytes, sayfa = _ek1_doldurulmus(tekrar=tekrar)
+    assert sayfa == 2
+    basilan = next(sik for sik, pdf in secimler if pdf == pdf_bytes)
+    assert basilan is (not ferah_mi)
+
+
+def test_ek1_duzen_secimi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sıkı düzen sığıyorsa o; sığmıyorsa ≤2 sayfalık ferah; o da aşıyorsa az sayfalı olan."""
+    sayfalar: dict[bool, int] = {}
+    cagrilar: list[bool] = []
+
+    def sahte(template: str, context: dict[str, object]) -> tuple[bytes, int]:
+        kip = bool(context["ek1_compact"])
+        cagrilar.append(kip)
+        return (b"sik" if kip else b"ferah"), sayfalar[kip]
+
+    monkeypatch.setattr(doc_engine, "render_pdf_paged", sahte)
+    for sik, ferah, beklenen in [(1, 2, b"sik"), (2, 2, b"ferah"), (2, 3, b"sik"), (3, 4, b"sik")]:
+        sayfalar.update({True: sik, False: ferah})
+        cagrilar.clear()
+        pdf, _n = doc_engine.render_ek1_paged("x.html", {})
+        assert pdf == beklenen, (sik, ferah)
+        assert cagrilar == ([True] if sik == 1 else [True, False])
 
 
 # ---------------------------------------------------------------------------

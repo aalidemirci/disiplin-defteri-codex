@@ -491,6 +491,26 @@ def render_pdf_paged(template_name: str, context: dict[str, Any]) -> tuple[bytes
     return pdf_bytes, len(document.pages)
 
 
+EK1_MAX_WIDE_PAGES = 2
+
+
+def render_ek1_paged(template_name: str, context: dict[str, Any]) -> tuple[bytes, int]:
+    """EK-1 kurul kararını karar defterine yapıştırmaya uygun basar (md. 196/1).
+
+    Kullanıcı kararı (19.11.2026): önce SIKI düzen (`ek1_compact`) denenir; tek yaprağa
+    sığıyorsa o basılır. Sığmıyorsa sıkıştırmanın anlamı yoktur → FERAH düzen basılır,
+    yeter ki iki sayfayı aşmasın. Ferah düzen de ikiyi aşıyorsa (çok uzun metin) daha az
+    sayfa tutan sıkı düzen basılır. Alan listesi iki düzende de aynıdır.
+    """
+    compact = render_pdf_paged(template_name, {**context, "ek1_compact": True})
+    if compact[1] <= 1:
+        return compact
+    wide = render_pdf_paged(template_name, {**context, "ek1_compact": False})
+    if wide[1] <= EK1_MAX_WIDE_PAGES:
+        return wide
+    return compact if compact[1] < wide[1] else wide
+
+
 def render_pdf(template_name: str, context: dict[str, Any]) -> bytes:
     """Bir HTML şablonunu WeasyPrint ile PDF bayt dizisine dönüştürür (sayfa sayısı atılır)."""
     pdf_bytes, _ = render_pdf_paged(template_name, context)
@@ -2148,7 +2168,10 @@ def generate_document(
     # tebligat günü belirsiz, PTT olabilir); şablonda yalnız "5 iş günü" hakkı yazılıdır.
     # Karar snapshot'ı (decision.appeal_deadline) tebliğ kaydında tutulur
     # (services.notify_decision); PDF bağlamına ayrıca işlenmez.
-    pdf_bytes, page_count = render_pdf_paged(template, context)
+    if document_type == DocumentType.COMMITTEE_DECISION:
+        pdf_bytes, page_count = render_ek1_paged(template, context)
+    else:
+        pdf_bytes, page_count = render_pdf_paged(template, context)
 
     # Kütükte öğrenci bağı: öğrenci-özgü belgede student_id; katılımcı belgesinde
     # katılımcı bir öğrenciyse onun id'si (zaman çizelgesinde öğrenciyle ilişkilensin).

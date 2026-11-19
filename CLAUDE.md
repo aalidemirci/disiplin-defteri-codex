@@ -79,6 +79,14 @@
    yedek üyenin görevi "<görev> (Yedek Üye)". Kurula iade yazısı (`return_letter`) kurulun İLK
    kararının tarihini (`first_decision_date`) ve — iz varsa — sayısını, cezasını, maddesini basar
    (`first_decision_no`, `first_penalty_type`, `first_statute_ref`; kullanıcı kararı 16.11.2026).
+   **Kullanıcı kararı 19.11.2026 (karar defteri) — OYS'ye "geri döndürme":**
+   `ek1_committee_decision` md. 196/1 gereği deftere yapıştırıldığı için yeniden YERLEŞTİRİLDİ
+   (alan listesi ve sırası EK-1 ile aynı; kısa cevaplı künye alanları iki sütunda, müdür imzası
+   onay kutusunun yanında). Evrak motoru önce sıkı düzeni (`ek1_compact`) dener; tek yaprağa
+   sığarsa o, sığmazsa ferah düzen (en çok iki sayfa), ferah da ikiyi aşarsa sıkı düzen basılır
+   (`documents.render_ek1_paged`). Stil yalnız şablonun `extra_style` bloğunda — `base.html` /
+   `_design.css` DEĞİŞMEDİ. `shared/letterhead.py::letterhead_authority` ilçe adını Türkçe büyük
+   harfle basar (`shared.text.tr_upper`); büyük harfle girilmiş ilçede çıktı OYS ile aynı.
    `discipline_periods.py::precaution_end_date`: tedbir başlangıcı iş günü
    değilse günler izleyen İLK İŞ GÜNÜNDEN sayılır (başlangıç iş günüyse sonuç OYS ile aynı);
    dosyanın geri kalanı AYNEN.

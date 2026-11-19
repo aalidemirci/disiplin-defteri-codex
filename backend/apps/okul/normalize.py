@@ -18,6 +18,8 @@ import re
 import unicodedata
 from datetime import date, datetime, timedelta
 
+from shared.text import tr_upper
+
 # Türkçe karakter → ASCII (cinsiyet/eşleme karşılaştırmaları için).
 _TR_UPPER_MAP = str.maketrans(
     {
@@ -44,17 +46,13 @@ def _ascii_upper(value: str) -> str:
     return value.translate(_TR_UPPER_MAP).upper()
 
 
-# Türkçe büyük harf için yalnız i/ı özel: çıplak str.upper() "i" → "I" yapar (doğrusu "İ").
-_TR_I_MAP = str.maketrans({"i": "İ", "ı": "I"})
-
-
 def section_upper(value: str) -> str:
     """Şube adını TÜRKÇE büyük harfe çevirir ("ç" → "Ç", "i" → "İ").
 
     ASCII'ye KATLANMAZ (M6): "10/Ç" ile "10/C" ayrı şubelerdir ve şube adı resmî
     evraka basılır. İçe aktarma, elle giriş ve süzgeç aynı dönüşümü kullanır.
     """
-    return value.strip().translate(_TR_I_MAP).upper()
+    return tr_upper(value.strip())
 
 
 def normalize_tckn(value: object) -> str | None:
