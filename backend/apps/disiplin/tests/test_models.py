@@ -148,11 +148,11 @@ def test_event_clean_decided_gecerli() -> None:
     event.clean()  # hata atmamalı
 
 
-def test_event_clean_committee_done_alanlar_zorunlu() -> None:
+def test_event_clean_committee_done_karar_tipi_ve_metni_zorunlu_degil() -> None:
+    """20.11.2026: kurulun kararı öğrenci başına kayıttır; aşama olayı kendiliğinden yazılır."""
     case = DisciplineCaseFactory()
     event = DisciplineEvent(case=case, stage=CaseStage.COMMITTEE_DONE, event_date=date(2026, 5, 21))
-    with pytest.raises(ValidationError):
-        event.clean()
+    event.clean()  # hata atmamalı
 
 
 def test_event_clean_committee_done_gecerli() -> None:

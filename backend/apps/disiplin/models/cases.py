@@ -299,11 +299,10 @@ class DisciplineEvent(BaseModel):
             elif decisions[0] not in valid:
                 errors["principal_decisions"] = "Geçersiz müdür kararı değeri."
 
-        if self.stage == CaseStage.COMMITTEE_DONE:
-            if self.committee_decision_type_id is None:
-                errors["committee_decision_type"] = "Kurul karar tipi zorunludur."
-            if not (self.committee_decision_text or "").strip():
-                errors["committee_decision_text"] = "Kurul karar metni zorunludur."
+        # COMMITTEE_DONE: karar tipi / metni artık ZORUNLU DEĞİL (kullanıcı kararı,
+        # 20.11.2026). Kurulun kararı öğrenci başına `DisciplineDecision` kaydıdır; aşama
+        # olayı bütün kararlar girilince kendiliğinden yazılır
+        # (`services.cases.advance_to_committee_done`). Eski kayıtların alanları korunur.
 
         if self.is_override and not (self.override_reason or "").strip():
             errors["override_reason"] = "Override işleminde gerekçe zorunludur."

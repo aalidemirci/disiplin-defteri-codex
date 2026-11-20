@@ -225,12 +225,15 @@ const ACTIONS = {
     variant: "tonal",
     kind: { type: "stage", stage: "DECIDED" },
   },
+  // Kullanıcı kararı, 20.11.2026: kurul kararı öğrenci başına Kurul sekmesinde girilir;
+  // bütün öğrencilerin kararı girilince dosya kendiliğinden "Kurul kararı" aşamasına geçer
+  // (`services.cases.advance_to_committee_done`). Elle aşama olayı (ikinci karar kaydı) yok.
   enterCommittee: {
     key: "committee",
-    label: "Kurul kararı gir",
+    label: "Kurul kararlarını gir",
     icon: "how_to_vote",
     variant: "tonal",
-    kind: { type: "stage", stage: "COMMITTEE_DONE" },
+    kind: { type: "tab", tab: "kurul" },
   },
   close: {
     key: "close",
@@ -312,7 +315,7 @@ export function nextStepFor(
         return {
           title: "Sıradaki: kurul süreci",
           description:
-            "Kurula sevk edildi. İfade/savunma/toplantı çağrıları ve kurul kararı girilir; tedbir, süre uzatması onayı ve karar gelince onay/iade/itiraz işlemleri yapılır.",
+            "Kurula sevk edildi. İfade/savunma/toplantı çağrıları yapılır ve her öğrenci için kurul kararı girilir; bütün kararlar girilince dosya kendiliğinden “Kurul kararı” aşamasına geçer. Tedbir, süre uzatması onayı ve karar gelince onay/iade/itiraz işlemleri yapılır.",
           ownerNote: chair ? undefined : "Kurul kararını ve evrakı kurul başkanı yürütür.",
           actions: [
             ...(chair ? [ACTIONS.goDocs, ACTIONS.enterCommittee] : []),

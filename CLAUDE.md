@@ -467,6 +467,12 @@ Bunlar testlerle sabitlenmiş; birini bozan bir değişiklik **gerçek** kusurdu
   sonuçlanmış itiraza yeniden itiraz ve sonuç değişikliği yok (md. 169/4).
   `OVERTURNED` → `REJECTED` + puan iadesi. Okul değiştirme cezasında süresinde
   itiraz → uygulama bekletilir.
+- **Kurul kararı aşaması kendiliğinden ilerler** (kullanıcı kararı, 20.11.2026): hakkında
+  işlem yapılan BÜTÜN öğrencilerin canlı kurul kararı girilince (ya da geri yüklenince) açık
+  dosya `DECIDED`'dan `COMMITTEE_DONE`'a geçer (`services.cases.advance_to_committee_done`;
+  olay tarihi en geç karar). Aşama olayı artık karar tipi / metni istemez — kurulun kararı
+  öğrenci başına `DisciplineDecision`'dır; elle "Kurul kararı gir" aşama formu kaldırıldı.
+  Karar silinince aşama geri alınmaz. Takılı eski dosyalar göç 0020 ile ilerletildi.
 - **Kapanış uygunluğu (`close_eligible`):** onaylı karar + md. 197 askısı ve `PENDING` itiraz yok
   + tebliğ yapılmış + itiraz süresi dolmuş + 5 iş günü tampon.
   Kural hem "Kapat" ucunda hem CLOSED aşama olayında uygulanır; uygun değilse
@@ -565,7 +571,8 @@ Etki × yoğunluk sırasıyla:
 - **Yeni Python bağımlılığı eklersen** `packaging/pyinstaller/disiplin_defteri.spec`
   içindeki `hiddenimports`'u da güncelle (borç K7) — yoksa paket açılmaz, testler
   bunu yakalamaz.
-- **Migration:** `okul` 0006'da, `disiplin` 0019'da (0014 dosya numarası sayacı, 0015
+- **Migration:** `okul` 0006'da, `disiplin` 0020'de (0020 veri göçü: kararları tamam olan
+  takılı dosyayı "Kurul kararı" aşamasına geçirir — yalnız düz alan; 0014 dosya numarası sayacı, 0015
   md. 197 özgün ceza + ilk iade tarihi, 0016 önceki cezalar derleme izi, 0017 toplantıda
   başkana vekâlet, 0018 açık kalemler: katılmayan başkanın adı, toplantı anındaki üye tam
   sayısı, md. 197 ilk görüşme tarihi + toplantısı; 0019 md. 197 ilk kararın sayısı + cezası — ikisi de
