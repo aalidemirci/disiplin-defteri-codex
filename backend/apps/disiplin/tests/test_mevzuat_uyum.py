@@ -24,7 +24,6 @@ from apps.disiplin.models import (
     PrincipalDecision,
 )
 from apps.disiplin.tests.factories import (
-    DisciplineDecisionTypeFactory,
     PersonnelFactory,
     SchoolYearFactory,
     StudentFactory,
@@ -363,13 +362,9 @@ def test_kapatildi_olayi_uygunluk_denetimini_atlayamaz() -> None:
     decide(
         case, student_id=sid, penalty_type=PenaltyType.REPRIMAND, decision_date=date(2026, 5, 20)
     )
-    services.add_event(
-        case,
-        CaseStage.COMMITTEE_DONE,
-        date(2026, 5, 20),
-        committee_decision_type=DisciplineDecisionTypeFactory(),
-        committee_decision_text="kınama",
-    )
+    # 20.11.2026: kurul kararı aşaması karar girilince kendiliğinden ilerler.
+    case.refresh_from_db()
+    assert case.current_stage == CaseStage.COMMITTEE_DONE
     with pytest.raises(ValueError, match="kapatılamaz"):
         services.add_event(case, CaseStage.CLOSED, date(2026, 5, 21))
     ev = services.add_event(

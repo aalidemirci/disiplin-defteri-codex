@@ -44,6 +44,13 @@ from apps.okul import selectors as okul_selectors
 _WARNING_BLOCK_MARK = "md. 157/7-e engeli aşıldı: "
 _OVERRIDE_REASON_MAX = 255  # DisciplineEvent.override_reason max_length
 
+# Kullanıcı kararı, 20.11.2026: kurul kararı aşaması kendiliğinden ilerler. Göç 0020 aynı
+# metni yazar (göç uygulama kodunu içe aktarmaz — iki yerde aynı tutulmalı).
+AUTO_COMMITTEE_DONE_NOTE = (
+    "Hakkında işlem yapılan bütün öğrencilerin kurul kararı girildi; aşama kendiliğinden "
+    "ilerledi."
+)
+
 
 @transaction.atomic
 def generate_case_no() -> str:
@@ -281,6 +288,45 @@ def add_event(
         principal_decisions or []
     ):
         _refresh_extension_snapshots(case)
+    return event
+
+
+def advance_to_committee_done(case: DisciplineCase) -> DisciplineEvent | None:
+    """Bütün öğrencilerin kurul kararı girildiyse dosyayı "Kurul kararı" aşamasına geçirir.
+
+    Kullanıcı kararı (20.11.2026): COMMITTEE_DONE aşama olayı OYS'den kalma, dosya
+    düzeyinde ikinci bir karar kaydıydı (karar tipi + metni; hiçbir evrakta, hesapta ya da
+    denetimde kullanılmıyordu). Elle girilmediği için kararları kesinleşmiş dosya
+    "Müdür değerlendirmesi / sevk" aşamasında kalıyor ve "Dosyayı kapat" düğmesi
+    görünmüyordu. Artık karar kaydı (ve geri yüklemesi) bu işlevi çağırır: dosya
+    DECIDED'daysa, açıksa ve hakkında işlem yapılan HER öğrencinin canlı kararı varsa
+    olay kendiliğinden yazılır. Olay tarihi en geç kararın tarihidir (karar tarihi =
+    toplantı tarihi, ileri tarihli olamaz — K7). Kapanış kuralı DEĞİŞMEZ (`close_case`).
+    Karar silinince aşama GERİ ALINMAZ (eski davranış; gerekirse `revert_stage`).
+    """
+    if case.current_stage != CaseStage.DECIDED or case.closed_at is not None:
+        return None
+    accused = set(case.case_students.values_list("student_id", flat=True))
+    rows = list(
+        DisciplineDecision.objects.filter(case=case).values_list("student_id", "decision_date")
+    )
+    decided = {student_id for student_id, _on in rows}
+    if not accused or not accused <= decided:
+        return None
+    event_date = max(on for _sid, on in rows)
+    previous = case.events.filter(stage=CaseStage.DECIDED).order_by("-recorded_at", "-id").first()
+    if previous is not None and event_date < previous.event_date <= timezone.localdate():
+        event_date = previous.event_date  # olay sırası bozulmasın (toplantısız eski karar)
+    event = DisciplineEvent(
+        case=case,
+        stage=CaseStage.COMMITTEE_DONE,
+        event_date=event_date,
+        notes=AUTO_COMMITTEE_DONE_NOTE,
+    )
+    event.full_clean()
+    event.save()
+    case.current_stage = CaseStage.COMMITTEE_DONE
+    case.save(update_fields=["current_stage", "updated_at"])
     return event
 
 

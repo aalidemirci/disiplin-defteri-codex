@@ -27,6 +27,7 @@ from apps.disiplin.models import (
     DisciplineMeeting,
     PenaltyType,
 )
+from apps.disiplin.services.cases import advance_to_committee_done
 from apps.disiplin.services.common import case_has_student
 from apps.okul.services.calendar import is_school_open_day, is_working_day
 
@@ -252,6 +253,7 @@ def _resolve_meeting(case: DisciplineCase, meeting: DisciplineMeeting | None) ->
     return meetings[0]
 
 
+@transaction.atomic
 def record_decision(
     case: DisciplineCase,
     *,
@@ -293,7 +295,7 @@ def record_decision(
             f"Karar tarihi toplantı tarihidir ({meeting.meeting_date:%d.%m.%Y}); ayrı tarih "
             "girilemez."
         )
-    return _create_decision(
+    decision = _create_decision(
         case,
         student_id=student_id,
         penalty_type=penalty_type,
@@ -308,6 +310,10 @@ def record_decision(
         notes=notes,
         md166_override_reason=md166_override_reason,
     )
+    # Kullanıcı kararı, 20.11.2026: son öğrencinin kararı girilince dosya kendiliğinden
+    # "Kurul kararı" aşamasına geçer (elle ikinci bir karar kaydı istenmez).
+    advance_to_committee_done(case)
+    return decision
 
 
 def _create_decision(
@@ -599,6 +605,7 @@ def restore_decision(decision: DisciplineDecision) -> DisciplineDecision:
     """
     _assert_restorable(decision)
     decision.restore()
+    advance_to_committee_done(decision.case)  # eksik karar geri geldiyse aşama ilerler
     return decision
 
 

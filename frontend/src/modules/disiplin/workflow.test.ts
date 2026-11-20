@@ -72,6 +72,16 @@ describe("nextStepFor — rol-duyarlı gövde (OYS paritesi; saf fonksiyon)", ()
     expect(step.ownerNote).toMatch(/kurul başkanı/i);
   });
 
+  it("DECIDED·B: kurul kararı eylemi aşama olayı AÇMAZ, Kurul sekmesine götürür (20.11.2026)", () => {
+    // Aşama, bütün öğrencilerin kararı girilince kendiliğinden ilerler; elle ikinci bir
+    // dosya düzeyi karar kaydı (karar tipi + metni) istenmez.
+    const step = nextStepFor("DECIDED", "B", ALL_CAPABILITIES);
+    const committee = step.actions.find((a) => a.key === "committee");
+    expect(committee?.kind).toEqual({ type: "tab", tab: "kurul" });
+    expect(step.actions.some((a) => a.kind.type === "stage")).toBe(false);
+    expect(step.description).toMatch(/kendiliğinden/);
+  });
+
   it("DECIDED·B başkan: kurul kararı girişi + evrak var, tedbir YOK", () => {
     const step = nextStepFor("DECIDED", "B", caps({ isChair: true }));
     expect(keysOf(step.actions)).toEqual(expect.arrayContaining(["committee", "docs"]));
